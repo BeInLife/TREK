@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { readEnv } from '../../app-config';
 import { FeedsService } from './feeds.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -23,7 +24,8 @@ import { db } from '../../db/database';
 // the link is still absolute and copy-pasteable as webcal:// instead of a dead
 // relative path.
 function resolveFeedBase(req: Request): string {
-  const configured = (process.env.APP_URL || '').replace(/\/$/, '');
+  // Single trailing slash stripped on purpose (legacy parity; notifications strips all).
+  const configured = (readEnv().app.appUrl || '').replace(/\/$/, '');
   if (configured) return configured;
   const host = req.get('host');
   return host ? `${req.protocol}://${host}` : '';

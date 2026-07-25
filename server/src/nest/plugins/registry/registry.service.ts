@@ -1,3 +1,4 @@
+import { readEnv } from '../../../app-config';
 import { db } from '../../../db/database';
 import { discoverPlugins } from '../install/discovery';
 import { hostSatisfies, hostVersion, normalizedHost } from '../install/host-compat';
@@ -24,9 +25,8 @@ import semver from 'semver';
  * (registers INACTIVE). Nothing executes on install; activation is separate.
  */
 
-const REGISTRY_URL =
-  process.env.TREK_PLUGIN_REGISTRY_URL ||
-  'https://raw.githubusercontent.com/liketrek/TREK-Plugins/main/dist/index.json';
+// Frozen at import on purpose (legacy timing) — the registry URL is boot-stable.
+const REGISTRY_URL = readEnv().plugins.registryUrl;
 const CACHE_TTL = 30 * 60 * 1000;
 const MANIFEST_MAX_BYTES = 256 * 1024;
 // Sideload upload ceiling — matches the SDK `pack` limit (50 MB) plus zip overhead.

@@ -1,3 +1,4 @@
+import { readEnv } from '../../../app-config';
 import { db, canAccessTrip } from '../../../db/database';
 import { broadcast, broadcastToUser } from '../../../websocket';
 import { listBudgetItems } from '../../../services/budgetService';
@@ -279,7 +280,7 @@ export function createRealRpcHost(id: string, granted: ReadonlySet<string>, rout
       // bytes to the shared demo instance, even through a plugin's db:write:files.
       // Only resolve the email when demo mode is actually on — keeps the hot path
       // (and the schema surface) untouched for self-hosted installs.
-      if (process.env.DEMO_MODE?.toLowerCase() === 'true') {
+      if (readEnv().demo.enabled) {
         const uploader = db.prepare('SELECT email FROM users WHERE id = ?').get(actingUserId) as { email?: string } | undefined;
         if (isDemoEmail(uploader?.email)) throw new ForbiddenResource('Uploads are disabled in demo mode.');
       }

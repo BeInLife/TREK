@@ -16,6 +16,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { readEnv } from '../../app-config';
 import type { User } from '../../types';
 import { PlacesService } from './places.service';
 import { isUpdateConflict } from '../../services/conflictResult';
@@ -283,7 +284,7 @@ export class PlacesController {
   ) {
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
-    if (process.env.DEMO_MODE?.toLowerCase() === 'true' && isDemoEmail(user.email)) {
+    if (readEnv().demo.enabled && isDemoEmail(user.email)) {
       throw new HttpException({ error: 'Uploads are disabled in demo mode. Self-host TREK for full functionality.' }, 403);
     }
     if (!file) {
