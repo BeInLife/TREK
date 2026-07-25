@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 
+import { readEnv } from '../../app-config';
 import { verifyJwtAndLoadUser } from '../../middleware/auth';
 import { db } from '../../db/database';
 import { mcpHandler } from '../../mcp';
@@ -239,7 +240,8 @@ export function applyPlatformTransport(app: express.Application): void {
  */
 export function applyPlatformSpa(app: express.Application): void {
   applyPlatformStatic(app);
-  if (process.env.NODE_ENV !== 'production') return;
+  // Case-sensitive on purpose (legacy parity).
+  if (readEnv().app.nodeEnv !== 'production') return;
   // /.*/ rather than '*' so the helper is Express-4 and Express-5 safe.
   app.get(/.*/, (_req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -255,7 +257,8 @@ export function applyPlatformSpa(app: express.Application): void {
  * app.get catch-all; Nest: SpaFallbackFilter). No-op outside production.
  */
 export function applyPlatformStatic(app: express.Application): void {
-  if (process.env.NODE_ENV !== 'production') return;
+  // Case-sensitive on purpose (legacy parity).
+  if (readEnv().app.nodeEnv !== 'production') return;
   app.use(
     express.static(PUBLIC_DIR, {
       setHeaders: (res, filePath) => {
