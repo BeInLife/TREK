@@ -167,3 +167,4 @@ try {
 }
 
 export { db, closeDb, reinitialize, getPlaceWithTags, canAccessTrip, isOwner };
+export type { TripAccess, PlaceWithTags };
