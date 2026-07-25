@@ -1,3 +1,4 @@
+import { readEnv } from '../app-config';
 import { db } from '../db/database';
 import { safeFetchFollow, SsrfBlockedError } from '../utils/ssrfGuard';
 import { decrypt_api_key } from './apiKeyCrypto';
@@ -12,7 +13,7 @@ let googleApiCallCount = 0;
 function googleFetch(endpoint: string, label: string, init?: RequestInit): Promise<Response> {
   googleApiCallCount++;
   console.debug(`[Google API] #${googleApiCallCount} ${label} → ${endpoint}`);
-  const referer = process.env.APP_URL ? getAppUrl() : undefined;
+  const referer = readEnv().app.appUrl ? getAppUrl() : undefined;
   return fetch(endpoint, {
     ...init,
     headers: { ...(referer ? { Referer: referer } : {}), ...((init?.headers as Record<string, string>) ?? {}) },
@@ -333,7 +334,7 @@ const DEFAULT_OVERPASS_MIRRORS = [
 // at one or more custom endpoints via OVERPASS_URL (comma-separated). When set it
 // REPLACES the public mirrors, so a firewalled cluster never reaches out to them and a
 // self-hosted instance is used exclusively (see #1309). Non-http(s) entries are dropped.
-export function resolveOverpassEndpoints(raw: string | undefined = process.env.OVERPASS_URL): string[] {
+export function resolveOverpassEndpoints(raw: string | undefined = readEnv().integrations.overpassUrl): string[] {
   const custom = (raw ?? '')
     .split(',')
     .map((s) => s.trim())
@@ -354,7 +355,8 @@ const OVERPASS_MIRRORS = resolveOverpassEndpoints();
 // slow self-hosted endpoint can raise it via OVERPASS_TIMEOUT_MS. A non-positive or
 // non-numeric value falls back to the default — a 0/negative cap would abort every
 // request immediately and 502 the search.
-export function resolveOverpassTimeoutMs(raw: string | undefined = process.env.OVERPASS_TIMEOUT_MS): number {
+export function resolveOverpassTimeoutMs(raw?: string): number {
+  if (raw === undefined) return readEnv().integrations.overpassTimeoutMs;
   const n = Number(raw);
   return Number.isFinite(n) && n > 0 ? n : 12000;
 }
