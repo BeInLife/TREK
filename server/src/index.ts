@@ -1,5 +1,9 @@
 import 'reflect-metadata';
 import 'dotenv/config';
+// Fail-fast env validation — must stay directly after dotenv so a malformed
+// variable aborts before any other module runs its import-time side effects
+// (config.ts key resolution, db/database.ts initDb, ...).
+import './app-config/boot-validate';
 import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';

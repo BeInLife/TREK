@@ -405,6 +405,13 @@ Caddy handles TLS and WebSockets automatically.
 
 ## Environment variables
 
+> [!NOTE]
+> Variables are validated at startup (fail-fast). An unset or blank variable
+> always falls back to its default, but a variable set to a malformed value
+> (e.g. `PORT=abc`, `SESSION_DURATION=bogus`, `DEMO_MODE=maybe`) aborts boot
+> with a report listing every offending variable. Boolean switches accept
+> `true`/`false`, `1`/`0`, `on`/`off` and `yes`/`no` (any casing).
+
 <details>
 <summary><b>Full reference</b></summary>
 
