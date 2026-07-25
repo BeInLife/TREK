@@ -54,7 +54,11 @@ export function deriveApp(raw: RawEnv) {
 
 function resolveDefaultLanguage(raw: string | undefined): string {
   const lang = raw?.toLowerCase() || 'en';
-  return SUPPORTED_LANGUAGE_CODES.includes(lang) ? lang : 'en';
+  // Case-insensitive match resolved to the CANONICAL code (zh-TW, not zh-tw).
+  // The legacy lowercase-only `includes` could never match zh-TW and silently
+  // fell back to English for a supported language — deliberate fix.
+  const canonical = SUPPORTED_LANGUAGE_CODES.find((c) => c.toLowerCase() === lang);
+  return canonical ?? 'en';
 }
 
 export function deriveHttp(raw: RawEnv) {

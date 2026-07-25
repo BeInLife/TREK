@@ -10,6 +10,13 @@
  *
  * Consumption pattern:
  *   constructor(@Inject(httpConfig.KEY) private readonly http: ConfigType<typeof httpConfig>) {}
+ *
+ * NOTE: today only httpConfig has a DI consumer (bootstrap.ts threads it into
+ * the pre-init middleware); the migrated call sites otherwise read through
+ * readEnv() because they live in classes whose unit tests instantiate them
+ * directly. The full token set is provisioned deliberately — it is the
+ * sanctioned pattern for NEW Nest consumers of boot-stable config, not dead
+ * scaffolding to prune.
  */
 import { registerAs } from '@nestjs/config';
 import {

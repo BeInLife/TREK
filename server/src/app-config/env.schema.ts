@@ -62,7 +62,8 @@ export const envSchema = z.object({
   APP_VERSION: anyString,
   APP_URL: url,
   ALLOWED_ORIGINS: anyString,
-  DEFAULT_LANGUAGE: oneOf([...SUPPORTED_LANGUAGE_CODES]),
+  // Candidates lowercased so mixed-case codes (zh-TW) validate case-insensitively.
+  DEFAULT_LANGUAGE: oneOf(SUPPORTED_LANGUAGE_CODES.map((c) => c.toLowerCase())),
 
   // Security / session
   ENCRYPTION_KEY: anyString,

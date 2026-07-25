@@ -39,11 +39,15 @@ describe('deriveApp', () => {
     expect(deriveApp({ APP_URL: 'https://x.example/' }).appUrl).toBe('https://x.example/');
   });
 
-  it('DEFAULT_LANGUAGE resolves: lowercased, validated, en fallback (config.ts semantics)', () => {
+  it('DEFAULT_LANGUAGE resolves: case-insensitive, canonical code, en fallback', () => {
     expect(deriveApp({ DEFAULT_LANGUAGE: 'EN' }).defaultLanguage).toBe('en');
     expect(deriveApp({ DEFAULT_LANGUAGE: 'de' }).defaultLanguage).toBe('de');
     expect(deriveApp({ DEFAULT_LANGUAGE: 'klingon' }).defaultLanguage).toBe('en');
     expect(deriveApp({}).defaultLanguage).toBe('en');
+    // Mixed-case canonical codes resolve to their canonical form (legacy could
+    // never match zh-TW and silently served English).
+    expect(deriveApp({ DEFAULT_LANGUAGE: 'zh-TW' }).defaultLanguage).toBe('zh-TW');
+    expect(deriveApp({ DEFAULT_LANGUAGE: 'zh-tw' }).defaultLanguage).toBe('zh-TW');
   });
 });
 
