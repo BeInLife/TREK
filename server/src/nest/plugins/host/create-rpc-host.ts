@@ -7,7 +7,7 @@ import { listItems as listPackingItemsSvc, createItem as createPackingItemSvc, u
 import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
 import { listCategories } from '../../../services/categoryService';
-import { listTags, createTag, updateTag, deleteTag, getTagByIdAndUser } from '../../../services/tagService';
+import { listTags, createTag, updateTag, deleteTag, getTagByIdAndUser } from '../../tags/tags.bridge';
 import { listItems as listTodosSvc, createItem as createTodoSvc, updateItem as updateTodoSvc, deleteItem as deleteTodoSvc } from '../../../services/todoService';
 import { listFiles, createFile, createFileLink, getFileById, updateFile, softDeleteFile, findForeignLinkTarget, resolveFilePath, BLOCKED_EXTENSIONS, filesDir } from '../../../services/fileService';
 import { createNote as createCollabNoteSvc, createPoll as createCollabPollSvc, votePoll as voteCollabPollSvc, createMessage as createCollabMessageSvc, listNotes as listCollabNotesSvc, listPolls as listCollabPollsSvc, listMessages as listCollabMessagesSvc } from '../../../services/collabService';
