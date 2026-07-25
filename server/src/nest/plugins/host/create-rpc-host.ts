@@ -1,5 +1,6 @@
 import { readEnv } from '../../../app-config';
 import { db, canAccessTrip } from '../../../db/database';
+import { DatabaseService } from '../../database/database.service';
 import { broadcast, broadcastToUser } from '../../../websocket';
 import { listBudgetItems } from '../../../services/budgetService';
 import { listItems as listPackingItemsSvc, createItem as createPackingItemSvc, updateItem as updatePackingItemSvc, deleteItem as deletePackingItemSvc, listBags, createBag as createBagSvc, updateBag as updateBagSvc, deleteBag as deleteBagSvc, setBagMembers } from '../../../services/packingService';
@@ -56,9 +57,11 @@ function canEditTripAs(action: string, tripId: number, userId: number): boolean 
 }
 
 // Reused for costs.create so a plugin write frozen-FX and members/payers logic
-// matches a normal web-app budget write exactly (it has no injected deps).
-const budgetSvc = new BudgetService();
-const reservationsSvc = new ReservationsService();
+// matches a normal web-app budget write exactly. This factory file runs outside
+// the Nest container, so the shared connection is handed over manually.
+const dbs = new DatabaseService(db);
+const budgetSvc = new BudgetService(dbs);
+const reservationsSvc = new ReservationsService(dbs);
 // The booking notification the REST controller sends after a create/update/delete
 // is fire-and-forget, so it never blocks the plugin write.
 function notifyBooking(actingUserId: number, tripId: number, booking: string, type: string): void {
@@ -424,7 +427,7 @@ export function createRealRpcHost(id: string, granted: ReadonlySet<string>, rout
     // The acting user's own decrypted value for one of this plugin's user-scope settings.
     getUserSetting: (pluginId, userId, key) => readUserSettingDecrypted(pluginId, userId, key),
     // A short-lived OAuth access token for the acting user (host-brokered; refreshes).
-    getOAuthToken: (pluginId, userId) => new PluginOAuthService().getAccessToken(pluginId, userId, Date.now()),
+    getOAuthToken: (pluginId, userId) => new PluginOAuthService(dbs).getAccessToken(pluginId, userId, Date.now()),
     // Persistent scheduler (jobs:run). Caps bound the abuse surface: a plugin can't
     // hoard timers, name-bomb, ship a huge payload, or busy-loop a recurring task.
     schedulerSet: (name, dueAt, everyMs, payload) => {

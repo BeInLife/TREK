@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { db } from '../../db/database';
+import { DatabaseService } from '../database/database.service';
 import { broadcast } from '../../websocket';
 import { checkPermission } from '../../services/permissions';
 import type { User } from '../../types';
@@ -19,6 +19,12 @@ type BudgetEntry = { total_price?: number; category?: string } | undefined;
  */
 @Injectable()
 export class ReservationsService {
+  constructor(private readonly dbs: DatabaseService) {}
+
+  private get db() {
+    return this.dbs.connection;
+  }
+
   verifyTripAccess(tripId: string, userId: number) {
     return svc.verifyTripAccess(tripId, userId);
   }
@@ -89,7 +95,7 @@ export class ReservationsService {
     // but only if it still carries the auto-derived category (so a manual pick in
     // the Costs editor is preserved). Runs regardless of create_budget_entry.
     if (type && currentType && type !== currentType) {
-      const linked = db.prepare('SELECT id, category FROM budget_items WHERE trip_id = ? AND reservation_id = ?').get(tripId, id) as { id: number; category: string } | undefined;
+      const linked = this.db.prepare('SELECT id, category FROM budget_items WHERE trip_id = ? AND reservation_id = ?').get(tripId, id) as { id: number; category: string } | undefined;
       if (linked) {
         const oldCat = typeToCostCategory(currentType);
         const newCat = typeToCostCategory(type);
@@ -107,7 +113,7 @@ export class ReservationsService {
 
     if (!(Number(entry.total_price) > 0)) {
       // Explicit clear (total_price 0/empty) — drop the linked item.
-      const linked = db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?').get(tripId, id) as { id: number } | undefined;
+      const linked = this.db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?').get(tripId, id) as { id: number } | undefined;
       if (linked) {
         deleteBudgetItem(linked.id, tripId);
         broadcast(tripId, 'budget:deleted', { itemId: linked.id }, socketId);
@@ -118,13 +124,13 @@ export class ReservationsService {
     try {
       const itemName = title || currentTitle;
       const category = entry.category || type || currentType || 'Other';
-      const existing = db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?').get(tripId, id) as { id: number } | undefined;
+      const existing = this.db.prepare('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?').get(tripId, id) as { id: number } | undefined;
       if (existing) {
         const updated = updateBudgetItem(existing.id, tripId, { name: itemName, category, total_price: entry.total_price });
         broadcast(tripId, 'budget:updated', { item: updated }, socketId);
       } else {
         const item = createBudgetItem(tripId, { name: itemName, category, total_price: entry.total_price });
-        db.prepare('UPDATE budget_items SET reservation_id = ? WHERE id = ?').run(id, item.id);
+        this.db.prepare('UPDATE budget_items SET reservation_id = ? WHERE id = ?').run(id, item.id);
         item.reservation_id = Number(id);
         broadcast(tripId, 'budget:created', { item }, socketId);
       }

@@ -29,6 +29,8 @@ const { testDb } = vi.hoisted(() => {
   return { testDb: db };
 });
 vi.mock('../../../src/db/database', () => ({ db: testDb, canAccessTrip: () => undefined }));
+import { db as dbConn } from '../../../src/db/database';
+import { DatabaseService } from '../../../src/nest/database/database.service';
 
 import { PluginRegistryService, RegistryError, __clearRegistryCacheForTests } from '../../../src/nest/plugins/registry/registry.service';
 
@@ -86,7 +88,7 @@ beforeEach(() => {
   testDb.exec('DELETE FROM plugins; DELETE FROM plugin_settings_fields; DELETE FROM plugin_error_log');
   __clearRegistryCacheForTests();
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => REGISTRY }) as unknown as Response));
-  svc = new PluginRegistryService();
+  svc = new PluginRegistryService(new DatabaseService(dbConn));
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -236,7 +238,7 @@ describe('PluginRegistryService', () => {
   it('fetchRegistry soft-fails to an empty registry on a cold cache', async () => {
     __clearRegistryCacheForTests();
     vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
-    expect((await new PluginRegistryService().fetchRegistry()).plugins).toEqual([]);
+    expect((await new PluginRegistryService(new DatabaseService(dbConn)).fetchRegistry()).plugins).toEqual([]);
   });
 
   it('installs a pinned version end to end (verify -> extract -> register inactive)', async () => {

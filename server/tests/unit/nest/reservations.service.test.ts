@@ -6,6 +6,8 @@ const { dbMock } = vi.hoisted(() => {
   return { dbMock: { prepare: vi.fn(() => stmt), _stmt: stmt } };
 });
 vi.mock('../../../src/db/database', () => ({ db: dbMock, closeDb: () => {}, reinitialize: () => {} }));
+import { db as dbConn } from '../../../src/db/database';
+import { DatabaseService } from '../../../src/nest/database/database.service';
 
 const { broadcast } = vi.hoisted(() => ({ broadcast: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast }));
@@ -31,7 +33,7 @@ vi.mock('../../../src/services/reservationService', () => resv);
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
 
 function svc() {
-  return new ReservationsService();
+  return new ReservationsService(new DatabaseService(dbConn));
 }
 
 beforeEach(() => {
