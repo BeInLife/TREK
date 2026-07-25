@@ -38,6 +38,13 @@ describe('deriveApp', () => {
     expect(deriveApp({}).appVersion).toBeUndefined();
     expect(deriveApp({ APP_URL: 'https://x.example/' }).appUrl).toBe('https://x.example/');
   });
+
+  it('DEFAULT_LANGUAGE resolves: lowercased, validated, en fallback (config.ts semantics)', () => {
+    expect(deriveApp({ DEFAULT_LANGUAGE: 'EN' }).defaultLanguage).toBe('en');
+    expect(deriveApp({ DEFAULT_LANGUAGE: 'de' }).defaultLanguage).toBe('de');
+    expect(deriveApp({ DEFAULT_LANGUAGE: 'klingon' }).defaultLanguage).toBe('en');
+    expect(deriveApp({}).defaultLanguage).toBe('en');
+  });
 });
 
 describe('deriveHttp', () => {

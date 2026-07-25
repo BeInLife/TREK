@@ -14,6 +14,7 @@
  * call, which is what keeps the runtime env-mutation semantics the test suite
  * depends on. Zod validation runs once at boot (env.schema.ts), never here.
  */
+import { SUPPORTED_LANGUAGE_CODES } from '@trek/shared';
 import {
   csvList,
   csvListFiltered,
@@ -46,8 +47,14 @@ export function deriveApp(raw: RawEnv) {
     appUrl: raw.APP_URL,
     tz: raw.TZ,
     logLevel: raw.LOG_LEVEL,
-    defaultLanguage: raw.DEFAULT_LANGUAGE,
+    /** Resolved: lowercased, validated against the supported set, falls back to 'en' (src/config.ts semantics). */
+    defaultLanguage: resolveDefaultLanguage(raw.DEFAULT_LANGUAGE),
   };
+}
+
+function resolveDefaultLanguage(raw: string | undefined): string {
+  const lang = raw?.toLowerCase() || 'en';
+  return SUPPORTED_LANGUAGE_CODES.includes(lang) ? lang : 'en';
 }
 
 export function deriveHttp(raw: RawEnv) {
