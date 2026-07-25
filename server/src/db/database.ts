@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import { readEnv } from '../app-config';
 import { createTables } from './schema';
 import { runMigrations } from './migrations';
 import { runSeeds } from './seeds';
@@ -8,16 +9,16 @@ import { Place, Tag } from '../types';
 
 // In test mode each vitest worker gets an isolated in-memory DB so that
 // parallel forks can't race on the same file or share migration state.
-const isTest = process.env.NODE_ENV === 'test';
+const isTest = readEnv().app.isTest;
 
 let dbPath: string;
 if (isTest) {
   dbPath = ':memory:';
-} else if (process.env.TREK_DB_FILE) {
+} else if (readEnv().db.trekDbFile) {
   // Explicit DB file (used by the Playwright E2E harness to run against an
   // isolated, throwaway database instead of the real data/travel.db). Purely
   // additive — when unset the default path below is used exactly as before.
-  dbPath = process.env.TREK_DB_FILE;
+  dbPath = readEnv().db.trekDbFile!;
   const dir = path.dirname(dbPath);
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 } else {
@@ -62,7 +63,7 @@ const db = new Proxy({} as Database.Database, {
   },
 });
 
-if (process.env.DEMO_MODE?.toLowerCase() === 'true') {
+if (readEnv().demo.enabled) {
   try {
     const { seedDemoData } = require('../demo/demo-seed');
     seedDemoData(_db);
