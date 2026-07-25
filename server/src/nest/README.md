@@ -33,6 +33,12 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
   client's `X-Idempotency-Key` on mutations, mirroring the legacy
   `applyIdempotency` middleware so retried writes don't double-apply.
 - `strangler.ts` — supports both static prefixes and `:param` pattern prefixes.
+- `app-config/` — the `@nestjs/config` binding (`AppConfigModule`, global). Never
+  read `process.env` in a module (ESLint enforces this): inject a boot-stable
+  namespace via its `registerAs` token (`@Inject(mcpConfig.KEY) … ConfigType<…>`)
+  or read runtime-toggled values live through `RuntimeEnvService` / `readEnv()`
+  from `src/app-config`. The classification and invariants live in
+  `src/app-config/README.md`.
 
 ## Parity gotchas worth remembering
 

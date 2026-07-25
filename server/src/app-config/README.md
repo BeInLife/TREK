@@ -74,3 +74,19 @@ ADMIN_PASSWORD, IDEMPOTENCY_TTL_SECONDS, MCP_RATE_LIMIT (request-path check).
 - `src/config.ts` ENCRYPTION_KEY/JWT_SECRET resolution — key material with file
   persistence and runtime rotation, not env config.
 - Standalone scripts (`reset-admin.js`, `scripts/*`) and `tests/**`.
+
+The exemption list is enforced by the `no-restricted-syntax` ban on
+`process.env` in `eslint.config.mjs` — keep the two lists in sync.
+
+## Follow-up candidates (quirks pinned during the migration, deliberately NOT fixed)
+
+- `numberOr` (`Number(x) || d`) treats `"0"` and negative-invalid values oddly:
+  `PORT=0` silently becomes 3001, `TREK_PLUGIN_RPC_BURST=-5` stays -5.
+- `TRUST_PROXY=0` resolves to 1 hop (`parseInt || 1`).
+- APP_URL trailing-slash stripping differs per site (feeds strips one slash,
+  notifications strips all).
+- `DEMO_ADMIN_EMAIL` defaults differ (demo-seed: admin@trek.app, demo-reset:
+  admin@nomad.app).
+- NODE_ENV comparisons are case-sensitive at some sites (HSTS activation,
+  platform statics, spa-fallback, authService dev_mode, oidcService
+  frontendUrl) and case-insensitive at others.
