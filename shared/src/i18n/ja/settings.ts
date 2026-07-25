@@ -275,8 +275,8 @@ const settings: TranslationStrings = {
   'settings.oauth.modal.machineClientUsage':
     'トークンを取得するには、grant_type=client_credentials、client_id、client_secret を指定して POST /oauth/token を呼び出します。ブラウザもリフレッシュトークンも不要です。',
   'settings.oauth.badge.machine': 'マシン',
-  'settings.currency': 'Currency',
-  'settings.currencyHint': 'All amounts in Costs are converted to and shown in this currency.',
+  'settings.currency': '表示通貨',
+  'settings.currencyHint': '費用の金額は表示のためだけにこの通貨に換算されます。元の金額は変更されません。',
   'settings.currencyTrip': '旅行の通貨',
   'settings.passkey.title': 'パスキー',
   'settings.passkey.description':

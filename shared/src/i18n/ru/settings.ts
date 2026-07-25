@@ -299,8 +299,8 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
-  'settings.currency': 'Валюта',
-  'settings.currencyHint': 'Все расходы будут конвертированы и показаны в этой валюте.',
+  'settings.currency': 'Валюта отображения',
+  'settings.currencyHint': 'Суммы в разделе «Расходы» отображаются в этой валюте только для просмотра — исходные суммы не изменяются.',
   'settings.currencyTrip': 'Валюта поездки',
   'settings.passkey.title': 'Passkeys',
   'settings.passkey.description':

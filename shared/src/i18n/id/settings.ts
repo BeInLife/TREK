@@ -298,8 +298,8 @@ const settings: TranslationStrings = {
   'settings.mfa.demoBlocked': 'Tidak tersedia dalam mode demo',
   'settings.bookingLabels': 'Label rute pemesanan',
   'settings.bookingLabelsHint': 'Menampilkan nama stasiun / bandara di peta. Jika mati, hanya ikon ditampilkan.',
-  'settings.currency': 'Currency',
-  'settings.currencyHint': 'All amounts in Costs are converted to and shown in this currency.',
+  'settings.currency': 'Mata uang tampilan',
+  'settings.currencyHint': 'Jumlah di Biaya ditampilkan dalam mata uang ini hanya untuk tampilan — jumlah aslinya tidak berubah.',
   'settings.currencyTrip': 'Mata uang perjalanan',
   'settings.passkey.title': 'Passkey',
   'settings.passkey.description':

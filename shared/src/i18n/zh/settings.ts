@@ -280,8 +280,8 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.email': '电子邮件',
   'settings.notificationPreferences.ntfy': 'Ntfy',
-  'settings.currency': '货币',
-  'settings.currencyHint': '费用中的所有金额都会换算并以此货币显示。',
+  'settings.currency': '显示货币',
+  'settings.currencyHint': '“费用”中的金额仅在显示时换算为该货币，原始金额保持不变。',
   'settings.currencyTrip': '行程货币',
   'settings.passkey.title': '通行密钥',
   'settings.passkey.description':

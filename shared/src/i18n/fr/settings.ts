@@ -305,8 +305,8 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.webhook': 'Webhook',
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
-  'settings.currency': 'Currency',
-  'settings.currencyHint': 'All amounts in Costs are converted to and shown in this currency.',
+  'settings.currency': 'Devise d\'affichage',
+  'settings.currencyHint': 'Les montants dans Coûts sont convertis dans cette devise uniquement pour l\'affichage — les montants d\'origine restent inchangés.',
   'settings.currencyTrip': 'Devise du voyage',
   'settings.passkey.title': 'Passkeys',
   'settings.passkey.description':

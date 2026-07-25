@@ -282,8 +282,8 @@ const settings: TranslationStrings = {
   'settings.avatarError': '上傳失敗',
   'settings.bookingLabels': '預訂路線標籤',
   'settings.bookingLabelsHint': '在地圖上顯示車站 / 機場名稱。關閉時僅顯示圖示。',
-  'settings.currency': 'Currency',
-  'settings.currencyHint': 'All amounts in Costs are converted to and shown in this currency.',
+  'settings.currency': '顯示貨幣',
+  'settings.currencyHint': '「費用」中的金額僅在顯示時換算為該貨幣，原始金額保持不變。',
   'settings.currencyTrip': '行程貨幣',
   'settings.passkey.title': 'Passkey',
   'settings.passkey.description':

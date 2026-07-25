@@ -299,8 +299,8 @@ const settings: TranslationStrings = {
   'settings.oauth.modal.machineClientUsage':
     'Отримати токен: POST /oauth/token з grant_type=client_credentials, client_id і client_secret. Без браузера, без токена оновлення.',
   'settings.oauth.badge.machine': 'машина',
-  'settings.currency': 'Currency',
-  'settings.currencyHint': 'All amounts in Costs are converted to and shown in this currency.',
+  'settings.currency': 'Валюта відображення',
+  'settings.currencyHint': 'Суми в розділі «Витрати» відображаються в цій валюті лише для перегляду — початкові суми не змінюються.',
   'settings.currencyTrip': 'Валюта подорожі',
   'settings.passkey.title': 'Passkeys',
   'settings.passkey.description':
