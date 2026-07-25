@@ -13,6 +13,8 @@ const { rows, pluginsEnabled } = vi.hoisted(() => ({
   pluginsEnabled: vi.fn(() => true),
 }));
 vi.mock('../../../src/db/database', () => ({ db: { prepare: () => ({ all: () => rows.value }) } }));
+import { db as dbConn } from '../../../src/db/database';
+import { DatabaseService } from '../../../src/nest/database/database.service';
 vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
 
 import { PluginsFeedController } from '../../../src/nest/plugins/plugins-feed.controller';
@@ -24,7 +26,7 @@ const row = (over: Record<string, unknown> = {}) => ({
 });
 
 describe('PluginsFeedController', () => {
-  const c = new PluginsFeedController();
+  const c = new PluginsFeedController(new DatabaseService(dbConn));
   beforeEach(() => { pluginsEnabled.mockReturnValue(true); rows.value = []; });
 
   it('returns an empty feed when the runtime is disabled', () => {

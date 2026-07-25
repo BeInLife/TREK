@@ -1,5 +1,5 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
-import { db } from '../../db/database';
+import { DatabaseService } from '../database/database.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { pluginsEnabled } from './kill-switch';
 
@@ -30,10 +30,12 @@ interface ActivePlugin {
 @Controller('api/plugins')
 @UseGuards(JwtAuthGuard)
 export class PluginsFeedController {
+  constructor(private readonly dbs: DatabaseService) {}
+
   @Get()
   list(): { plugins: ActivePlugin[] } {
     if (!pluginsEnabled()) return { plugins: [] };
-    const rows = db
+    const rows = this.dbs.connection
       .prepare("SELECT id, name, type, icon, capabilities, granted_permissions FROM plugins WHERE status = 'active' ORDER BY sort_order, name")
       .all() as Array<Omit<ActivePlugin, 'slot' | 'tripPage'> & { capabilities: string; granted_permissions: string }>;
     const plugins = rows.map(({ capabilities, granted_permissions, ...p }) => {

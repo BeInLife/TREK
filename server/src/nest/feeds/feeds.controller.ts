@@ -16,7 +16,7 @@ import { FeedsService } from './feeds.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { User } from '../../types';
-import { db } from '../../db/database';
+import { DatabaseService } from '../database/database.service';
 
 // Resolve the public origin used to build feed URLs. APP_URL wins — it is the
 // canonical externally-reachable URL behind a reverse proxy. When it is unset
@@ -77,10 +77,13 @@ export class FeedsPublicController {
 @Controller('api/trips/:tripId/feed')
 @UseGuards(JwtAuthGuard)
 export class TripFeedTokenController {
-  constructor(private readonly feeds: FeedsService) {}
+  constructor(
+    private readonly feeds: FeedsService,
+    private readonly dbs: DatabaseService,
+  ) {}
 
   private assertAccess(tripId: string, userId: number): void {
-    const row = db
+    const row = this.dbs.connection
       .prepare(
         'SELECT id FROM trips WHERE id = ? AND (user_id = ? OR id IN (SELECT trip_id FROM trip_members WHERE user_id = ?))',
       )

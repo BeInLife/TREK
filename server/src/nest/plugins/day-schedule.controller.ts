@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import { canAccessTrip, db } from '../../db/database';
+import { DatabaseService } from '../database/database.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { pluginsEnabled } from './kill-switch';
 import { PluginRuntimeService } from './plugin-runtime.service';
@@ -78,7 +78,10 @@ function normalize(pluginId: string, tripDayIds: ReadonlySet<number>, raw: unkno
 @Controller('api/day-schedule')
 @UseGuards(JwtAuthGuard)
 export class DayScheduleController {
-  constructor(private readonly runtime: PluginRuntimeService) {}
+  constructor(
+    private readonly runtime: PluginRuntimeService,
+    private readonly dbs: DatabaseService,
+  ) {}
 
   @Get(':tripId')
   async get(
@@ -88,11 +91,11 @@ export class DayScheduleController {
     if (!pluginsEnabled()) return { items: [] };
     const tripId = Number(tripIdRaw);
     const userId = req.user?.id;
-    if (!Number.isFinite(tripId) || userId == null || !canAccessTrip(tripId, userId)) return { items: [] };
+    if (!Number.isFinite(tripId) || userId == null || !this.dbs.canAccessTrip(tripId, userId)) return { items: [] };
 
     const ids = this.runtime.providersOf('dayScheduleProvider');
     if (ids.length === 0) return { items: [] };
-    const dayRows = db.prepare('SELECT id FROM days WHERE trip_id = ?').all(tripId) as Array<{ id: number }>;
+    const dayRows = this.dbs.connection.prepare('SELECT id FROM days WHERE trip_id = ?').all(tripId) as Array<{ id: number }>;
     const tripDayIds: ReadonlySet<number> = new Set(dayRows.map((d) => d.id));
 
     const perProvider = await Promise.all(

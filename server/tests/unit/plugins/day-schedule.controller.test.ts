@@ -16,6 +16,8 @@ vi.mock('../../../src/db/database', () => ({
   db: { prepare: () => ({ all: () => tripDays.value }) },
   canAccessTrip,
 }));
+import { db as dbConn } from '../../../src/db/database';
+import { DatabaseService } from '../../../src/nest/database/database.service';
 vi.mock('../../../src/nest/plugins/kill-switch', () => ({ pluginsEnabled }));
 
 import { DayScheduleController } from '../../../src/nest/plugins/day-schedule.controller';
@@ -28,7 +30,7 @@ function controller(invoke: (id: string) => unknown, providers = ['p1']) {
     providersOf: vi.fn(() => providers),
     invokeHook: vi.fn(async (id: string) => invoke(id)),
   } as unknown as PluginRuntimeService;
-  return { c: new DayScheduleController(runtime), runtime };
+  return { c: new DayScheduleController(runtime, new DatabaseService(dbConn)), runtime };
 }
 const item = (over: Record<string, unknown> = {}) => ({ id: 's1', dayId: 10, label: 'Charging', ...over });
 

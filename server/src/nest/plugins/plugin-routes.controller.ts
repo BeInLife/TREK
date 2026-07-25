@@ -1,6 +1,7 @@
 import { Body, Controller, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
-import { canAccessTrip, db } from '../../db/database';
+import type Database from 'better-sqlite3';
+import { DatabaseService } from '../database/database.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { pluginsEnabled } from './kill-switch';
 import { PluginRuntimeService } from './plugin-runtime.service';
@@ -148,7 +149,10 @@ function normalize(pluginId: string, profile: string, waypointCount: number, raw
 @Controller('api/plugin-routes')
 @UseGuards(JwtAuthGuard)
 export class PluginRoutesController {
-  constructor(private readonly runtime: PluginRuntimeService) {}
+  constructor(
+    private readonly runtime: PluginRuntimeService,
+    private readonly dbs: DatabaseService,
+  ) {}
 
   @Post(':pluginId/:profileId')
   async route(
@@ -160,7 +164,7 @@ export class PluginRoutesController {
     if (!pluginsEnabled()) return { route: null };
     const userId = req.user?.id;
     const tripId = Number(body?.tripId);
-    if (userId == null || !Number.isFinite(tripId) || !canAccessTrip(tripId, userId)) return { route: null };
+    if (userId == null || !Number.isFinite(tripId) || !this.dbs.canAccessTrip(tripId, userId)) return { route: null };
     if (!PROFILE_RE.test(profileId)) return { route: null };
     const waypoints = readWaypoints(body?.waypoints);
     if (!waypoints) return { route: null };
@@ -171,7 +175,7 @@ export class PluginRoutesController {
     // one the manifest declared — re-validated from the DB row like the plugins feed,
     // so a hand-edited capabilities blob can't invent profiles.
     if (!this.runtime.providersOf('routeProvider').includes(pluginId)) return { route: null };
-    if (!declaredProfiles(pluginId).includes(profileId)) return { route: null };
+    if (!declaredProfiles(this.dbs.connection, pluginId).includes(profileId)) return { route: null };
 
     try {
       const raw = await this.runtime.invokeHook(
@@ -189,9 +193,9 @@ export class PluginRoutesController {
   }
 }
 
-function declaredProfiles(pluginId: string): string[] {
+function declaredProfiles(conn: Database.Database, pluginId: string): string[] {
   try {
-    const row = db.prepare('SELECT capabilities FROM plugins WHERE id = ?').get(pluginId) as { capabilities?: string } | undefined;
+    const row = conn.prepare('SELECT capabilities FROM plugins WHERE id = ?').get(pluginId) as { capabilities?: string } | undefined;
     const c = JSON.parse(row?.capabilities || '{}') as { routeProfiles?: Array<{ id?: unknown }> };
     if (!Array.isArray(c.routeProfiles)) return [];
     return c.routeProfiles
