@@ -105,11 +105,14 @@ describe('API-DOCS (#1412) — flag-gated OpenAPI surface', () => {
 
   it('DOCS-004 — Zod request bodies are lifted into the spec (no double annotation)', async () => {
     const res = await request(instance).get('/api/docs-json');
-    // collections create validates with collectionCreateRequestSchema via
-    // ZodValidationPipe — the enricher must surface its object schema.
+    // collections create validates with CollectionCreateDto (createZodDto over
+    // collectionCreateRequestSchema) via the global ZodValidationPipe — the DTO
+    // metatype must surface as a $ref to a component object schema.
     const create = res.body.paths['/api/addons/collections']?.post;
     expect(create).toBeDefined();
-    const schema = create.requestBody?.content?.['application/json']?.schema;
+    const ref = create.requestBody?.content?.['application/json']?.schema?.$ref as string | undefined;
+    expect(ref).toMatch(/^#\/components\/schemas\//);
+    const schema = res.body.components.schemas[ref!.split('/').pop()!];
     expect(schema?.type).toBe('object');
     expect(schema?.properties?.name).toBeDefined();
   });

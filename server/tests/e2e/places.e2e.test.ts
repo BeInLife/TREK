@@ -43,6 +43,7 @@ vi.mock('../../src/services/placeService', () => pl);
 
 import { PlacesModule } from '../../src/nest/places/places.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
+import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 
 describe('Places e2e (real auth guard + temp SQLite)', () => {
   let server: Server;
@@ -53,6 +54,9 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());
+    // Mirror the production APP_PIPE (app.module.ts): DTO-typed bodies validate
+    // by metatype, exactly as they do under buildApp().
+    nest.useGlobalPipes(new ZodValidationPipe());
     await nest.init();
     return nest;
   }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
+import { ZodValidationPipe } from './common/zod-validation.pipe';
 import { AppConfigModule } from './app-config/app-config.module';
 import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
@@ -69,6 +70,12 @@ import { IdempotencyInterceptor } from './common/idempotency.interceptor';
     // Replays the X-Idempotency-Key the client sends on every write, matching
     // the legacy applyIdempotency middleware so retried mutations don't double-apply.
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+    // Global Zod validation: any parameter typed with a createZodDto class
+    // (the <domain>.dto.ts wrappers over @trek/shared schemas) is validated;
+    // everything else passes through untouched. Paired with the boot gate in
+    // common/validate-body-contracts.ts so unvalidated mutation bodies refuse
+    // to boot instead of shipping silently.
+    { provide: APP_PIPE, useClass: ZodValidationPipe },
   ],
 })
 export class AppModule {}

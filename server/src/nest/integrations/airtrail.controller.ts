@@ -3,10 +3,9 @@ import type { Request } from 'express';
 import type { User } from '../../types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { AirtrailAddonGuard } from './airtrail-addon.guard';
+import { AirtrailSettingsDto } from './airtrail.dto';
 import { getClientIp } from '../../services/auditLog';
-import { airtrailSettingsSchema, type AirtrailSettings } from '@trek/shared';
 import {
   getConnectionSettings,
   getConnectionStatus,
@@ -35,7 +34,7 @@ export class AirtrailController {
   @Put('settings')
   async putSettings(
     @CurrentUser() user: User,
-    @Body(new ZodValidationPipe(airtrailSettingsSchema)) body: AirtrailSettings,
+    @Body() body: AirtrailSettingsDto,
     @Req() req: Request,
   ) {
     const result = await saveSettings(
@@ -77,7 +76,7 @@ export class AirtrailController {
   @HttpCode(200)
   test(
     @CurrentUser() user: User,
-    @Body(new ZodValidationPipe(airtrailSettingsSchema)) body: AirtrailSettings,
+    @Body() body: AirtrailSettingsDto,
   ) {
     return testConnection(user.id, body.url, body.apiKey, !!body.allowInsecureTls);
   }

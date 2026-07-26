@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { cleanupOpenApiDoc } from 'nestjs-zod';
 import { readEnv } from '../../app-config';
-import { attachZodBodySchemas } from '../common/api-zod';
 
 /**
  * Swagger UI + OpenAPI spec for the REST API (#1412), gated behind
@@ -29,10 +29,12 @@ export function setupApiDocs(app: INestApplication): void {
     .addCookieAuth('trek_session')
     .addSecurityRequirements('session')
     .build();
-  const document = SwaggerModule.createDocument(app, config);
-  // Lift the Zod schemas the routes already validate with into the document —
-  // no double annotation, every ZodValidationPipe body is documented.
-  attachZodBodySchemas(app, document);
+  const rawDocument = SwaggerModule.createDocument(app, config);
+  // The createZodDto classes on @Body() params carry their @trek/shared Zod
+  // schemas into the document; cleanupOpenApiDoc (nestjs-zod) normalizes the
+  // zod-generated JSON Schema output — no double annotation, every validated
+  // body is documented.
+  const document = cleanupOpenApiDoc(rawDocument);
   SwaggerModule.setup('api/docs', app, document, {
     jsonDocumentUrl: 'api/docs-json',
     yamlDocumentUrl: 'api/docs-yaml',

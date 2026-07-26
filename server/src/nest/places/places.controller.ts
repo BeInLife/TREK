@@ -25,8 +25,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { PLACE_IMAGE_UPLOAD } from '../common/place-image-upload';
 import { placeImageUrl } from '../../services/placeImage';
 import { isDemoEmail } from '../../services/demo';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { placeRatingRequestSchema, type PlaceRatingRequest } from '@trek/shared';
+import { PlaceRatingDto } from './places.dto';
 
 const STRING_LIMITS: Record<string, number> = { name: 200, description: 2000, address: 500, notes: 2000 };
 const UPLOAD = { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } };
@@ -307,7 +306,7 @@ export class PlacesController {
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Param('id') id: string,
-    @Body(new ZodValidationPipe(placeRatingRequestSchema)) body: PlaceRatingRequest,
+    @Body() body: PlaceRatingDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
     // Deliberately no place_edit check: every trip member may cast their own

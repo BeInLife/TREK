@@ -2,9 +2,9 @@ import { Body, Controller, Headers, HttpException, Param, Post, UseGuards } from
 import type { User } from '../../types';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { AirtrailAddonGuard } from './airtrail-addon.guard';
-import { airtrailImportSchema, type AirtrailImport, type AirtrailImportResult } from '@trek/shared';
+import { AirtrailImportDto } from './airtrail.dto';
+import type { AirtrailImportResult } from '@trek/shared';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { checkPermission } from '../../services/permissions';
 import { importAirtrailFlights } from '../../services/airtrail/airtrailImport';
@@ -29,7 +29,7 @@ export class AirtrailImportController {
   async importAirtrail(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
-    @Body(new ZodValidationPipe(airtrailImportSchema)) body: AirtrailImport,
+    @Body() body: AirtrailImportDto,
     @Headers('x-socket-id') socketId?: string,
   ): Promise<AirtrailImportResult> {
     this.requireEdit(tripId, user);

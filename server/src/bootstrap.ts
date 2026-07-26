@@ -10,6 +10,7 @@ import { apiDocsEnabled } from './nest/common/api-docs.kill-switch';
 import { setupApiDocs } from './nest/platform/api-docs';
 import { McpRegistryService } from '@trek/nest-mcp';
 import { setMcpRegistry } from './mcp/registry-handoff';
+import { validateBodyContracts } from './nest/common/validate-body-contracts';
 
 /**
  * Builds the unified TREK NestJS application that serves the ENTIRE surface — the
@@ -61,5 +62,9 @@ export async function buildApp(): Promise<INestApplication> {
   // The /mcp handler is mounted pre-init (step 3) and has no DI access — hand
   // it the boot-discovered registry now that the container is fully built.
   setMcpRegistry(app.get(McpRegistryService));
+  // Fail closed on unvalidated mutation bodies: every POST/PUT/PATCH @Body()
+  // must carry a createZodDto class (validated by the global ZodValidationPipe)
+  // or sit on the ratchet-only legacy allow-list — otherwise refuse to boot.
+  validateBodyContracts(app);
   return app;
 }

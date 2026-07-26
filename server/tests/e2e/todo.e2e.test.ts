@@ -69,6 +69,7 @@ vi.mock('../../src/services/permissions', () => ({ checkPermission }));
 import { TodoModule } from '../../src/nest/todo/todo.module';
 import { DatabaseModule } from '../../src/nest/database/database.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
+import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 
 function insertItem(tripId: number, name: string, extra: Partial<{ sort_order: number; due_date: string }> = {}): number {
   const res = db
@@ -87,6 +88,9 @@ describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());
+    // Mirror the production APP_PIPE (app.module.ts): the DTO-typed bodies
+    // validate by metatype, exactly as they do under buildApp().
+    nest.useGlobalPipes(new ZodValidationPipe());
     await nest.init();
     return nest;
   }
@@ -138,10 +142,23 @@ describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
     expect(db.prepare('SELECT name FROM todo_items WHERE id = ?').get(res.body.item.id)).toEqual({ name: 'Book hotel' });
   });
 
-  it('400 on create without a name', async () => {
+  it('400 from the Zod pipe on create without a name', async () => {
     const res = await request(server).post(`/api/trips/${tripId}/todo`).set('Cookie', sessionCookie(1)).send({});
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ error: 'Item name is required' });
+    expect(res.body.error).toContain('name');
+  });
+
+  it('400 from the Zod pipe on reorder without orderedIds', async () => {
+    const res = await request(server).put(`/api/trips/${tripId}/todo/reorder`).set('Cookie', sessionCookie(1)).send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('orderedIds');
+  });
+
+  it('accepts the legacy numeric checked form through the pipe', async () => {
+    const id = insertItem(tripId, 'Toggle me');
+    const res = await request(server).put(`/api/trips/${tripId}/todo/${id}`).set('Cookie', sessionCookie(1)).send({ checked: 1 });
+    expect(res.status).toBe(200);
+    expect(res.body.item.checked).toBe(1);
   });
 
   it('403 on create without permission, writing nothing', async () => {

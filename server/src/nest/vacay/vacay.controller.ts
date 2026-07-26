@@ -12,17 +12,11 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import {
-  vacayShareUpdateRequestSchema,
-  vacayYearSettingsRequestSchema,
-  type VacayShareUpdateRequest,
-  type VacayYearSettingsRequest,
-} from '@trek/shared';
 import type { User } from '../../types';
 import { VacayService } from './vacay.service';
+import { VacayShareUpdateDto, VacayYearSettingsDto } from './vacay.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { ZodValidationPipe } from '../common/zod-validation.pipe';
 
 /**
  * /api/addons/vacay — shared vacation-day planner.
@@ -188,7 +182,7 @@ export class VacayController {
   @Put('year-settings')
   updateYearSettings(
     @CurrentUser() user: User,
-    @Body(new ZodValidationPipe(vacayYearSettingsRequestSchema)) body: VacayYearSettingsRequest,
+    @Body() body: VacayYearSettingsDto,
   ) {
     return { settings: this.vacay.updateYearSettings(user.id, body) };
   }
@@ -294,7 +288,7 @@ export class VacayController {
   updateShare(
     @CurrentUser() user: User,
     @Param('id') idParam: string,
-    @Body(new ZodValidationPipe(vacayShareUpdateRequestSchema)) body: VacayShareUpdateRequest,
+    @Body() body: VacayShareUpdateDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
     if (!this.vacay.setShareHidden(parseInt(idParam), user.id, body.hidden, socketId)) {
