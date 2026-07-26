@@ -17,7 +17,7 @@ import { ADDON_IDS } from '../../addons';
 import { countMessages, listPolls } from '../../services/collabService';
 import {
   listItems as listTodoItems,
-} from '../../services/todoService';
+} from '../../nest/todo/todo.bridge';
 import { rebaseTripCurrency } from '../../services/budgetService';
 import {
   safeBroadcast, MAX_MCP_TRIP_DAYS,

@@ -20,6 +20,11 @@ const { db } = vi.hoisted(() => {
   tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0);`);
   tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT);');
+  // bundle()'s todoItems now runs TodoService's real SQL (DI-injected, no mock).
+  tmp.exec(`CREATE TABLE todo_items (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
+    name TEXT NOT NULL, checked INTEGER NOT NULL DEFAULT 0, category TEXT, sort_order INTEGER NOT NULL DEFAULT 0,
+    due_date TEXT, description TEXT, assigned_user_id INTEGER, priority INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
   return { db: tmp };
 });
 
@@ -47,7 +52,6 @@ vi.mock('../../src/services/tripService', () => tripSvc);
 vi.mock('../../src/services/dayService', () => ({ listDays: () => ({ days: [] }), listAccommodations: () => [] }));
 vi.mock('../../src/services/placeService', () => ({ listPlaces: () => [] }));
 vi.mock('../../src/services/packingService', () => ({ listItems: () => [] }));
-vi.mock('../../src/services/todoService', () => ({ listItems: () => [] }));
 vi.mock('../../src/services/budgetService', () => ({ listBudgetItems: () => [] }));
 vi.mock('../../src/services/reservationService', () => ({ listReservations: () => [] }));
 vi.mock('../../src/services/fileService', () => ({ listFiles: () => [] }));

@@ -7,7 +7,7 @@ import * as tripSvc from '../../services/tripService';
 import { listDays, listAccommodations } from '../../services/dayService';
 import { listPlaces } from '../../services/placeService';
 import { listItems as listPackingItems } from '../../services/packingService';
-import { listItems as listTodoItems } from '../../services/todoService';
+import { TodoService } from '../todo/todo.service';
 import { listBudgetItems, rebaseTripCurrency } from '../../services/budgetService';
 import { listReservations } from '../../services/reservationService';
 import { listFiles } from '../../services/fileService';
@@ -22,7 +22,10 @@ import { searchUnsplashPhotos, getUnsplashKey } from '../../services/unsplashSer
  */
 @Injectable()
 export class TripsService {
-  constructor(private readonly dbs: DatabaseService) {}
+  constructor(
+    private readonly dbs: DatabaseService,
+    private readonly todo: TodoService,
+  ) {}
 
   private get db() {
     return this.dbs.connection;
@@ -134,7 +137,7 @@ export class TripsService {
       days,
       places: listPlaces(String(tripId), {}),
       packingItems: listPackingItems(tripId),
-      todoItems: listTodoItems(tripId),
+      todoItems: this.todo.listItems(tripId),
       budgetItems: listBudgetItems(tripId),
       reservations: listReservations(tripId),
       files: listFiles(tripId, false),

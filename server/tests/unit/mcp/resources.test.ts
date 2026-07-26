@@ -1,8 +1,9 @@
 /**
  * Unit tests for MCP resources (resources.ts).
- * Tests all 13 legacy-registrar resources via InMemoryTransport + Client
+ * Tests all 12 legacy-registrar resources via InMemoryTransport + Client
  * (trek://categories moved to the DI-discovered CategoriesMcp — see
- * tools-categories.test.ts).
+ * tools-categories.test.ts; trek://trips/{tripId}/todos moved to TodoMcp —
+ * see tools-todos.test.ts).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 

@@ -6,6 +6,8 @@ import { CategoriesService } from '../../src/nest/categories/categories.service'
 import { DatabaseService } from '../../src/nest/database/database.service';
 import { TagsMcp } from '../../src/nest/tags/tags.mcp';
 import { TagsService } from '../../src/nest/tags/tags.service';
+import { TodoMcp } from '../../src/nest/todo/todo.mcp';
+import { TodoService } from '../../src/nest/todo/todo.service';
 
 /**
  * Hand-wired counterpart of the boot-time discovery in McpRegistryService,
@@ -20,6 +22,7 @@ export function createMcpTestRegistry(): McpRegistry {
     [
       new TagsMcp(new TagsService(dbService)),
       new CategoriesMcp(new CategoriesService(dbService)),
+      new TodoMcp(new TodoService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy },
   );

@@ -1,6 +1,8 @@
 /**
- * Unit tests for todoService — TODO-SVC-001 through TODO-SVC-020.
- * Uses a real in-memory SQLite DB so SQL logic is exercised faithfully.
+ * Unit tests for the DI-native TodoService — TODO-SVC-001 through TODO-SVC-024
+ * (001–020 moved 1:1 from the legacy tests/unit/services/todoService.test.ts;
+ * 021–024 pin the todo.bridge delegation). Uses a real in-memory SQLite DB so
+ * SQL logic is exercised faithfully.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -35,21 +37,17 @@ vi.mock('../../../src/config', () => ({
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
   updateJwtSecret: () => {},
 }));
+vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, addTripMember } from '../../helpers/factories';
-import {
-  verifyTripAccess,
-  listItems,
-  createItem,
-  updateItem,
-  deleteItem,
-  getCategoryAssignees,
-  updateCategoryAssignees,
-  reorderItems,
-} from '../../../src/services/todoService';
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { TodoService } from '../../../src/nest/todo/todo.service';
+import { listItems, createItem, updateItem, deleteItem } from '../../../src/nest/todo/todo.bridge';
+
+const svc = new TodoService(new DatabaseService(testDb));
 
 beforeAll(() => {
   createTables(testDb);
@@ -70,16 +68,16 @@ describe('verifyTripAccess', () => {
   it('TODO-SVC-001: returns trip for owner', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const result = verifyTripAccess(trip.id, user.id);
+    const result = svc.verifyTripAccess(trip.id, user.id);
     expect(result).toBeDefined();
-    expect((result as any).id).toBe(trip.id);
+    expect(result?.id).toBe(trip.id);
   });
 
   it('TODO-SVC-002: returns null for non-member', () => {
     const { user: owner } = createUser(testDb);
     const { user: stranger } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
-    expect(verifyTripAccess(trip.id, stranger.id)).toBeFalsy();
+    expect(svc.verifyTripAccess(trip.id, stranger.id)).toBeFalsy();
   });
 
   it('TODO-SVC-003: returns trip for member', () => {
@@ -87,7 +85,7 @@ describe('verifyTripAccess', () => {
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
-    const result = verifyTripAccess(trip.id, member.id);
+    const result = svc.verifyTripAccess(trip.id, member.id);
     expect(result).toBeDefined();
   });
 });
@@ -98,13 +96,13 @@ describe('listItems and createItem', () => {
   it('TODO-SVC-004: listItems returns empty array for new trip', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    expect(listItems(trip.id)).toEqual([]);
+    expect(svc.listItems(trip.id)).toEqual([]);
   });
 
   it('TODO-SVC-005: createItem inserts a todo with name only', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createItem(trip.id, { name: 'Buy snacks' }) as any;
+    const item = svc.createItem(trip.id, { name: 'Buy snacks' }) as any;
     expect(item).toBeDefined();
     expect(item.name).toBe('Buy snacks');
     expect(item.checked).toBe(0);
@@ -115,15 +113,15 @@ describe('listItems and createItem', () => {
   it('TODO-SVC-006: createItem assigns incrementing sort_order', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const a = createItem(trip.id, { name: 'A' }) as any;
-    const b = createItem(trip.id, { name: 'B' }) as any;
+    const a = svc.createItem(trip.id, { name: 'A' }) as any;
+    const b = svc.createItem(trip.id, { name: 'B' }) as any;
     expect(b.sort_order).toBe(a.sort_order + 1);
   });
 
   it('TODO-SVC-007: createItem stores optional fields', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createItem(trip.id, {
+    const item = svc.createItem(trip.id, {
       name: 'Pack bag',
       category: 'Prep',
       description: 'All the gear',
@@ -137,10 +135,10 @@ describe('listItems and createItem', () => {
   it('TODO-SVC-008: listItems returns items ordered by sort_order', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    createItem(trip.id, { name: 'First' });
-    createItem(trip.id, { name: 'Second' });
-    createItem(trip.id, { name: 'Third' });
-    const items = listItems(trip.id) as any[];
+    svc.createItem(trip.id, { name: 'First' });
+    svc.createItem(trip.id, { name: 'Second' });
+    svc.createItem(trip.id, { name: 'Third' });
+    const items = svc.listItems(trip.id) as any[];
     expect(items).toHaveLength(3);
     expect(items[0].sort_order).toBeLessThanOrEqual(items[1].sort_order);
     expect(items[1].sort_order).toBeLessThanOrEqual(items[2].sort_order);
@@ -153,24 +151,24 @@ describe('updateItem', () => {
   it('TODO-SVC-009: returns null for non-existent item', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    expect(updateItem(trip.id, 99999, { name: 'Ghost' }, ['name'])).toBeNull();
+    expect(svc.updateItem(trip.id, 99999, { name: 'Ghost' }, ['name'])).toBeNull();
   });
 
   it('TODO-SVC-010: toggles checked status', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createItem(trip.id, { name: 'Visit museum' }) as any;
-    const updated = updateItem(trip.id, item.id, { checked: 1 }, ['checked']) as any;
+    const item = svc.createItem(trip.id, { name: 'Visit museum' }) as any;
+    const updated = svc.updateItem(trip.id, item.id, { checked: 1 }, ['checked']) as any;
     expect(updated.checked).toBe(1);
-    const back = updateItem(trip.id, item.id, { checked: 0 }, ['checked']) as any;
+    const back = svc.updateItem(trip.id, item.id, { checked: 0 }, ['checked']) as any;
     expect(back.checked).toBe(0);
   });
 
   it('TODO-SVC-011: updates name and category', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createItem(trip.id, { name: 'Old' }) as any;
-    const updated = updateItem(trip.id, item.id, { name: 'New', category: 'Misc' }, ['name', 'category']) as any;
+    const item = svc.createItem(trip.id, { name: 'Old' }) as any;
+    const updated = svc.updateItem(trip.id, item.id, { name: 'New', category: 'Misc' }, ['name', 'category']) as any;
     expect(updated.name).toBe('New');
     expect(updated.category).toBe('Misc');
   });
@@ -178,8 +176,8 @@ describe('updateItem', () => {
   it('TODO-SVC-012: clears due_date when key is present with null value', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createItem(trip.id, { name: 'Task', due_date: '2026-06-01' }) as any;
-    const updated = updateItem(trip.id, item.id, { due_date: null }, ['due_date']) as any;
+    const item = svc.createItem(trip.id, { name: 'Task', due_date: '2026-06-01' }) as any;
+    const updated = svc.updateItem(trip.id, item.id, { due_date: null }, ['due_date']) as any;
     expect(updated.due_date).toBeNull();
   });
 });
@@ -190,15 +188,15 @@ describe('deleteItem', () => {
   it('TODO-SVC-013: returns false for non-existent item', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    expect(deleteItem(trip.id, 99999)).toBe(false);
+    expect(svc.deleteItem(trip.id, 99999)).toBe(false);
   });
 
   it('TODO-SVC-014: deletes item and returns true', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createItem(trip.id, { name: 'Gone' }) as any;
-    expect(deleteItem(trip.id, item.id)).toBe(true);
-    expect(listItems(trip.id)).toHaveLength(0);
+    const item = svc.createItem(trip.id, { name: 'Gone' }) as any;
+    expect(svc.deleteItem(trip.id, item.id)).toBe(true);
+    expect(svc.listItems(trip.id)).toHaveLength(0);
   });
 });
 
@@ -208,11 +206,11 @@ describe('reorderItems', () => {
   it('TODO-SVC-015: assigns sort_order matching orderedIds array position', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const a = createItem(trip.id, { name: 'A' }) as any;
-    const b = createItem(trip.id, { name: 'B' }) as any;
-    const c = createItem(trip.id, { name: 'C' }) as any;
+    const a = svc.createItem(trip.id, { name: 'A' }) as any;
+    const b = svc.createItem(trip.id, { name: 'B' }) as any;
+    const c = svc.createItem(trip.id, { name: 'C' }) as any;
 
-    reorderItems(trip.id, [c.id, a.id, b.id]);
+    svc.reorderItems(trip.id, [c.id, a.id, b.id]);
 
     const rows = testDb.prepare('SELECT id, sort_order FROM todo_items WHERE trip_id = ? ORDER BY sort_order').all(trip.id) as any[];
     expect(rows[0].id).toBe(c.id);
@@ -227,7 +225,7 @@ describe('getCategoryAssignees / updateCategoryAssignees', () => {
   it('TODO-SVC-016: returns empty object for new trip', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    expect(getCategoryAssignees(trip.id)).toEqual({});
+    expect(svc.getCategoryAssignees(trip.id)).toEqual({});
   });
 
   it('TODO-SVC-017: updateCategoryAssignees sets assignees for a category', () => {
@@ -236,10 +234,10 @@ describe('getCategoryAssignees / updateCategoryAssignees', () => {
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
 
-    const rows = updateCategoryAssignees(trip.id, 'Packing', [owner.id, member.id]) as any[];
+    const rows = svc.updateCategoryAssignees(trip.id, 'Packing', [owner.id, member.id]);
     expect(rows).toHaveLength(2);
 
-    const assignees = getCategoryAssignees(trip.id) as any;
+    const assignees = svc.getCategoryAssignees(trip.id);
     expect(assignees['Packing']).toHaveLength(2);
   });
 
@@ -247,11 +245,11 @@ describe('getCategoryAssignees / updateCategoryAssignees', () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
 
-    updateCategoryAssignees(trip.id, 'Packing', [owner.id]);
-    const cleared = updateCategoryAssignees(trip.id, 'Packing', []) as any[];
+    svc.updateCategoryAssignees(trip.id, 'Packing', [owner.id]);
+    const cleared = svc.updateCategoryAssignees(trip.id, 'Packing', []);
     expect(cleared).toHaveLength(0);
 
-    const assignees = getCategoryAssignees(trip.id) as any;
+    const assignees = svc.getCategoryAssignees(trip.id);
     expect(assignees['Packing']).toBeUndefined();
   });
 
@@ -261,10 +259,10 @@ describe('getCategoryAssignees / updateCategoryAssignees', () => {
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
 
-    updateCategoryAssignees(trip.id, 'Shopping', [owner.id]);
-    updateCategoryAssignees(trip.id, 'Logistics', [member.id]);
+    svc.updateCategoryAssignees(trip.id, 'Shopping', [owner.id]);
+    svc.updateCategoryAssignees(trip.id, 'Logistics', [member.id]);
 
-    const assignees = getCategoryAssignees(trip.id) as any;
+    const assignees = svc.getCategoryAssignees(trip.id);
     expect(Object.keys(assignees)).toHaveLength(2);
     expect(assignees['Shopping']).toHaveLength(1);
     expect(assignees['Logistics']).toHaveLength(1);
@@ -276,12 +274,53 @@ describe('getCategoryAssignees / updateCategoryAssignees', () => {
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
 
-    updateCategoryAssignees(trip.id, 'Food', [owner.id, member.id]);
+    svc.updateCategoryAssignees(trip.id, 'Food', [owner.id, member.id]);
     // Replace with just owner
-    updateCategoryAssignees(trip.id, 'Food', [owner.id]);
+    svc.updateCategoryAssignees(trip.id, 'Food', [owner.id]);
 
-    const assignees = getCategoryAssignees(trip.id) as any;
+    const assignees = svc.getCategoryAssignees(trip.id);
     expect(assignees['Food']).toHaveLength(1);
     expect(assignees['Food'][0].user_id).toBe(owner.id);
+  });
+});
+
+// ── todo.bridge (delegation to the service — inside the src/nest coverage gate)
+
+describe('todo.bridge', () => {
+  it('TODO-SVC-021 — listItems delegates to the service', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    svc.createItem(trip.id, { name: 'Bridged' });
+    const items = listItems(trip.id) as any[];
+    expect(items).toHaveLength(1);
+    expect(items[0].name).toBe('Bridged');
+  });
+
+  it('TODO-SVC-022 — createItem delegates with the legacy defaults', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const item = createItem(trip.id, { name: 'Via bridge' }) as any;
+    expect(item.checked).toBe(0);
+    expect(item.priority).toBe(0);
+    expect(item.sort_order).toBe(0);
+  });
+
+  it('TODO-SVC-023 — updateItem delegates and keeps the bodyKeys sentinel protocol', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const item = createItem(trip.id, { name: 'Task', due_date: '2026-06-01' }) as any;
+    const untouched = updateItem(trip.id, item.id, { name: 'Renamed' }, []) as any;
+    expect(untouched.due_date).toBe('2026-06-01');
+    const cleared = updateItem(trip.id, item.id, { due_date: null }, ['due_date']) as any;
+    expect(cleared.due_date).toBeNull();
+  });
+
+  it('TODO-SVC-024 — deleteItem delegates to the service', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const item = createItem(trip.id, { name: 'Gone' }) as any;
+    expect(deleteItem(trip.id, item.id)).toBe(true);
+    expect(deleteItem(trip.id, item.id)).toBe(false);
+    expect(svc.listItems(trip.id)).toHaveLength(0);
   });
 });

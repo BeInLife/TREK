@@ -144,7 +144,7 @@ vi.mock('../../../src/nest/tags/tags.bridge', () => ({
   updateTag: vi.fn((tagId: number, name?: string) => ({ id: Number(tagId), name })),
   deleteTag: vi.fn(),
 }));
-vi.mock('../../../src/services/todoService', () => ({
+vi.mock('../../../src/nest/todo/todo.bridge', () => ({
   listItems: vi.fn((tid: number) => [{ id: 1, trip_id: Number(tid), name: 'Pack' }]),
   createItem: vi.fn((tid: number, data: { name: string }) => ({ id: 90, trip_id: Number(tid), name: data.name })),
   updateItem: vi.fn((_tid: number, id: string) => (Number(id) === 404 ? null : { id: Number(id), name: 'Done' })),

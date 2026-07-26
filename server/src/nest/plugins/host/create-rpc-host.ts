@@ -8,7 +8,7 @@ import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
 import { listCategories } from '../../categories/categories.bridge';
 import { listTags, createTag, updateTag, deleteTag, getTagByIdAndUser } from '../../tags/tags.bridge';
-import { listItems as listTodosSvc, createItem as createTodoSvc, updateItem as updateTodoSvc, deleteItem as deleteTodoSvc } from '../../../services/todoService';
+import { listItems as listTodosSvc, createItem as createTodoSvc, updateItem as updateTodoSvc, deleteItem as deleteTodoSvc } from '../../todo/todo.bridge';
 import { listFiles, createFile, createFileLink, getFileById, updateFile, softDeleteFile, findForeignLinkTarget, resolveFilePath, BLOCKED_EXTENSIONS, filesDir } from '../../../services/fileService';
 import { createNote as createCollabNoteSvc, createPoll as createCollabPollSvc, votePoll as voteCollabPollSvc, createMessage as createCollabMessageSvc, listNotes as listCollabNotesSvc, listPolls as listCollabPollsSvc, listMessages as listCollabMessagesSvc } from '../../../services/collabService';
 import { getRates as getExchangeRates } from '../../../services/exchangeRateService';

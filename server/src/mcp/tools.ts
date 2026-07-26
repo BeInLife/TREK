@@ -1,5 +1,4 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
-import { registerTodoTools } from './tools/todos';
 import { registerAssignmentTools } from './tools/assignments';
 import { registerJourneyTools } from './tools/journey';
 import { registerReservationTools } from './tools/reservations';
@@ -52,7 +51,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
 
   registerVacayTools(server, userId, scopes);
 
-  registerTodoTools(server, userId, scopes);
+  // The todo tools moved to the DI-discovered src/nest/todo/todo.mcp.ts
+  // (@McpController, attached via the nest-mcp registry below).
 
   registerMcpPrompts(server, userId, isStaticToken);
 

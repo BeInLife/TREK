@@ -8,7 +8,6 @@ import { listItems as listPackingItems, listBags } from '../services/packingServ
 import { listReservations } from '../services/reservationService';
 import { listNotes as listDayNotes } from '../services/dayNoteService';
 import { listNotes as listCollabNotes, listPolls, listMessages } from '../services/collabService';
-import { listItems as listTodoItems } from '../services/todoService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
 import { getActivePlanId, getActivePlan, getPlanData, getEntries as getVacayEntries, getHolidays } from '../services/vacayService';
@@ -201,18 +200,9 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // Trip to-do list
-  if (isAddonEnabled(ADDON_IDS.PACKING) && canRead(scopes, 'todos')) server.registerResource(
-    'trip-todos',
-    new ResourceTemplate('trek://trips/{tripId}/todos', { list: undefined }),
-    { description: 'To-do items for a trip, ordered by position', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const items = listTodoItems(id);
-      return jsonContent(uri.href, items);
-    }
-  );
+  // The trek://trips/{tripId}/todos resource moved to the DI-discovered
+  // src/nest/todo/todo.mcp.ts (@ResourceTemplate, attached via the nest-mcp
+  // registry in registerTools).
 
   // The trek://categories resource moved to the DI-discovered
   // src/nest/categories/categories.mcp.ts (@Resource, attached via the
