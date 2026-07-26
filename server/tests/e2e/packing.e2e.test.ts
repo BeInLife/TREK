@@ -195,8 +195,8 @@ describe('Packing e2e (real auth guard + real SQL over temp SQLite)', () => {
     insertItem(tripId, 'Existing', { sort_order: 4 });
     const res = await request(server).post(`/api/trips/${tripId}/packing`).set('Cookie', sessionCookie(1)).send({ name: 'Socks' });
     expect(res.status).toBe(201);
-    // 'Allgemein' is the legacy createItem category default; quantity clamps to 1.
-    expect(res.body.item).toMatchObject({ name: 'Socks', checked: 0, category: 'Allgemein', quantity: 1, sort_order: 5, owner_id: 1 });
+    // 'Other' is the unified category default (shared with bulkImport/saveAsTemplate).
+    expect(res.body.item).toMatchObject({ name: 'Socks', checked: 0, category: 'Other', quantity: 1, sort_order: 5, owner_id: 1 });
     expect(db.prepare('SELECT name FROM packing_items WHERE id = ?').get(res.body.item.id)).toEqual({ name: 'Socks' });
   });
 
@@ -320,6 +320,14 @@ describe('Packing e2e (real auth guard + real SQL over temp SQLite)', () => {
     const updated = await request(server).put(`/api/trips/${tripId}/packing/bags/${bagId}`).set('Cookie', sessionCookie(1)).send({ color: '#ff0000' });
     expect(updated.status).toBe(200);
     expect(updated.body.bag).toMatchObject({ name: 'Duffel', color: '#ff0000' });
+
+    // weight_limit_grams follows the bodyKeys protocol: set, keep when omitted, clear with null.
+    const limited = await request(server).put(`/api/trips/${tripId}/packing/bags/${bagId}`).set('Cookie', sessionCookie(1)).send({ weight_limit_grams: 8000 });
+    expect(limited.body.bag.weight_limit_grams).toBe(8000);
+    const kept = await request(server).put(`/api/trips/${tripId}/packing/bags/${bagId}`).set('Cookie', sessionCookie(1)).send({ name: 'Duffel XL' });
+    expect(kept.body.bag.weight_limit_grams).toBe(8000);
+    const cleared = await request(server).put(`/api/trips/${tripId}/packing/bags/${bagId}`).set('Cookie', sessionCookie(1)).send({ weight_limit_grams: null });
+    expect(cleared.body.bag.weight_limit_grams).toBeNull();
 
     const deleted = await request(server).delete(`/api/trips/${tripId}/packing/bags/${bagId}`).set('Cookie', sessionCookie(1));
     expect(deleted.status).toBe(200);

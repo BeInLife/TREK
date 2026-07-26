@@ -20,11 +20,12 @@ function parseId(value: string | string[]): number | null {
 }
 
 /**
- * Packing MCP surface — ported 1:1 from the legacy registrars: the seventeen
+ * Packing MCP surface — ported from the legacy registrars: the seventeen
  * tools from src/mcp/tools/packing.ts and the trek://trips/{tripId}/packing +
  * trek://trips/{tripId}/packing/bags resources from src/mcp/resources.ts
- * (identical names, descriptions, schemas, annotations, error/payload shapes
- * and broadcasts). The registration-time gates map to `when` (the
+ * (identical names, descriptions, schemas, annotations and error/payload
+ * shapes; the one deviation is the packing:bag-deleted payload, aligned with
+ * the REST route). The registration-time gates map to `when` (the
  * whole-registrar packing-addon early return) plus the declarative packing
  * read/write access markers (the legacy `if (R)` / `if (W)` checks, resolved
  * by trekMcpAccessPolicy). The two template-management tools keep their inline
@@ -232,7 +233,9 @@ export class PackingMcp {
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     this.packing.deleteBag(tripId, bagId);
-    safeBroadcast(tripId, 'packing:bag-deleted', { id: bagId });
+    // { bagId } matches the REST route and the plugin host (the legacy
+    // registrar's { id } was the odd one out).
+    safeBroadcast(tripId, 'packing:bag-deleted', { bagId });
     return ok({ success: true });
   }
 

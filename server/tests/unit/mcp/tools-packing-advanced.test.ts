@@ -235,7 +235,8 @@ describe('Tool: delete_packing_bag', () => {
       });
       const data = parseToolResult(result) as any;
       expect(data.success).toBe(true);
-      expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'packing:bag-deleted', expect.any(Object));
+      // { bagId } — aligned with the REST route and the plugin host.
+      expect(broadcastMock).toHaveBeenCalledWith(trip.id, 'packing:bag-deleted', expect.objectContaining({ bagId }));
       expect(testDb.prepare('SELECT id FROM packing_bags WHERE id = ?').get(bagId)).toBeUndefined();
     });
   });

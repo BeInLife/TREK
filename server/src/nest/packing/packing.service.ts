@@ -27,13 +27,15 @@ interface ImportItem {
 const BAG_COLORS = ['#6366f1', '#ec4899', '#f97316', '#10b981', '#06b6d4', '#8b5cf6', '#ef4444', '#f59e0b', '#3b82f6', '#84cc16', '#d946ef', '#14b8a6', '#f43f5e', '#a855f7', '#eab308', '#64748b'];
 
 /**
- * Packing domain service — owns the packing SQL (moved 1:1 from the legacy
- * services/packingService.ts: identical statements, the `||` falsy-coercion
- * defaults, the bodyKeys sentinel protocol on the updates, the #858 three-tier
- * sharing model and the post-write re-selects). Trip access, the
- * 'packing_edit' permission and the WebSocket broadcast keep their legacy call
- * paths. The remaining non-Nest consumer (the legacy MCP prompts registrar)
- * goes through packing.bridge.ts instead of importing this class directly.
+ * Packing domain service — owns the packing SQL (moved from the legacy
+ * services/packingService.ts: the bodyKeys sentinel protocol on the updates,
+ * the #858 three-tier sharing model and the post-write re-selects). Trip
+ * access, the 'packing_edit' permission and the WebSocket broadcast keep their
+ * legacy call paths. Post-migration fixes over the legacy code: a single
+ * 'Other' category default, bodyKeys-gated weight_limit_grams (explicit null
+ * clears it), and transactions around every multi-statement write. The
+ * remaining non-Nest consumer (the legacy MCP prompts registrar) goes through
+ * packing.bridge.ts instead of importing this class directly.
  */
 @Injectable()
 export class PackingService {
@@ -126,8 +128,10 @@ export class PackingService {
   listItems(tripId: string | number, userId?: number) {
     // Three-tier visibility (#858): Common (is_private=0) is visible to everyone;
     // Personal/Shared (is_private=1) only to the owner (bringer) and the recipients
-    // it was explicitly shared with. Without a userId (internal callers such as
-    // trip export) the unfiltered list is returned for back-compat.
+    // it was explicitly shared with. Without a userId the unfiltered list is
+    // returned — every current caller (trip summary, offline bundle, prompts,
+    // resources, plugin host) passes the viewer; omit it only for genuinely
+    // viewer-less internal reads.
     let rows: any[];
     if (userId == null) {
       rows = this.db.all(
@@ -172,7 +176,7 @@ export class PackingService {
     const itemId = this.db.transaction(() => {
       const result = this.db.run(
         'INSERT INTO packing_items (trip_id, name, checked, category, sort_order, quantity, is_private, owner_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-        tripId, data.name, data.checked ? 1 : 0, data.category || 'Allgemein', sortOrder, qty, isPrivate, ownerId ?? null
+        tripId, data.name, data.checked ? 1 : 0, data.category || 'Other', sortOrder, qty, isPrivate, ownerId ?? null
       );
       const id = Number(result.lastInsertRowid);
       // "Shared with specific people" — record the recipients it covers.
@@ -229,7 +233,7 @@ export class PackingService {
       bodyKeys.includes('bag_id') ? 1 : 0,
       data.bag_id ?? null,
       bodyKeys.includes('quantity') ? 1 : 0,
-      data.quantity ? Math.max(1, Math.min(999, Number(data.quantity))) : 1,
+      Math.max(1, Math.min(999, Number(data.quantity) || 1)),
       bodyKeys.includes('is_private') ? 1 : 0,
       data.is_private ? 1 : 0,
       claimOwner ? 1 : 0,
@@ -382,11 +386,13 @@ export class PackingService {
   setBagMembers(tripId: string | number, bagId: string | number, userIds: number[]) {
     const bag = this.db.get('SELECT * FROM packing_bags WHERE id = ? AND trip_id = ?', bagId, tripId);
     if (!bag) return null;
-    this.db.run('DELETE FROM packing_bag_members WHERE bag_id = ?', bagId);
-    const ins = this.db.prepare('INSERT OR IGNORE INTO packing_bag_members (bag_id, user_id) VALUES (?, ?)');
-    // Only real trip members may be bag members — never write an arbitrary account id.
-    const roster = this.tripRosterIds(tripId);
-    for (const uid of userIds) if (roster.has(uid)) ins.run(bagId, uid);
+    this.db.transaction(() => {
+      this.db.run('DELETE FROM packing_bag_members WHERE bag_id = ?', bagId);
+      const ins = this.db.prepare('INSERT OR IGNORE INTO packing_bag_members (bag_id, user_id) VALUES (?, ?)');
+      // Only real trip members may be bag members — never write an arbitrary account id.
+      const roster = this.tripRosterIds(tripId);
+      for (const uid of userIds) if (roster.has(uid)) ins.run(bagId, uid);
+    });
     const rows = this.db.all<{ user_id: number; username: string; avatar: string | null }>(`
     SELECT bm.user_id, COALESCE(u.display_name, u.username) AS username, u.avatar
     FROM packing_bag_members bm JOIN users u ON bm.user_id = u.id
@@ -414,15 +420,18 @@ export class PackingService {
 
     // A bag may only be assigned to a real trip member; an off-roster id becomes unassigned.
     const assignUser = data.user_id != null && this.tripRosterIds(tripId).has(data.user_id) ? data.user_id : null;
+    // weight_limit_grams follows the bodyKeys presence protocol like user_id:
+    // an omitted key leaves the limit unchanged, an explicit null clears it.
     this.db.run(`UPDATE packing_bags SET
     name = COALESCE(?, name),
     color = COALESCE(?, color),
-    weight_limit_grams = ?,
+    weight_limit_grams = CASE WHEN ? THEN ? ELSE weight_limit_grams END,
     user_id = CASE WHEN ? THEN ? ELSE user_id END
     WHERE id = ?`,
       data.name?.trim() || null,
       data.color || null,
-      data.weight_limit_grams ?? (bag as any).weight_limit_grams ?? null,
+      bodyKeys?.includes('weight_limit_grams') ? 1 : 0,
+      data.weight_limit_grams ?? null,
       bodyKeys?.includes('user_id') ? 1 : 0,
       assignUser,
       bagId
@@ -479,11 +488,13 @@ export class PackingService {
 
     const insert = this.db.prepare('INSERT INTO packing_items (trip_id, name, checked, category, sort_order, is_private, owner_id, updated_at) VALUES (?, ?, 0, ?, ?, ?, ?, CURRENT_TIMESTAMP)');
     const added: any[] = [];
-    for (const ti of templateItems) {
-      const result = insert.run(tripId, ti.name, ti.category, sortOrder++, isPrivate, owner);
-      const item = this.db.get('SELECT * FROM packing_items WHERE id = ?', result.lastInsertRowid);
-      added.push(item);
-    }
+    this.db.transaction(() => {
+      for (const ti of templateItems) {
+        const result = insert.run(tripId, ti.name, ti.category, sortOrder++, isPrivate, owner);
+        const item = this.db.get('SELECT * FROM packing_items WHERE id = ?', result.lastInsertRowid);
+        added.push(item);
+      }
+    });
 
     return added;
   }
@@ -497,24 +508,27 @@ export class PackingService {
 
     if (items.length === 0) return null;
 
-    const result = this.db.run('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)', templateName, userId);
-    const templateId = result.lastInsertRowid;
-
     const categories = [...new Set(items.map(i => i.category || 'Other'))];
-    const catIdMap = new Map<string, number | bigint>();
 
-    for (let i = 0; i < categories.length; i++) {
-      const catResult = this.db.run('INSERT INTO packing_template_categories (template_id, name, sort_order) VALUES (?, ?, ?)', templateId, categories[i], i);
-      catIdMap.set(categories[i], catResult.lastInsertRowid);
-    }
+    const templateId = this.db.transaction(() => {
+      const result = this.db.run('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)', templateName, userId);
+      const id = result.lastInsertRowid;
 
-    const itemsByCategory = new Map<string, number>();
-    for (const item of items) {
-      const catId = catIdMap.get(item.category || 'Other')!;
-      const order = itemsByCategory.get(item.category || 'Other') || 0;
-      this.db.run('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)', catId, item.name, order);
-      itemsByCategory.set(item.category || 'Other', order + 1);
-    }
+      const catIdMap = new Map<string, number | bigint>();
+      for (let i = 0; i < categories.length; i++) {
+        const catResult = this.db.run('INSERT INTO packing_template_categories (template_id, name, sort_order) VALUES (?, ?, ?)', id, categories[i], i);
+        catIdMap.set(categories[i], catResult.lastInsertRowid);
+      }
+
+      const itemsByCategory = new Map<string, number>();
+      for (const item of items) {
+        const catId = catIdMap.get(item.category || 'Other')!;
+        const order = itemsByCategory.get(item.category || 'Other') || 0;
+        this.db.run('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)', catId, item.name, order);
+        itemsByCategory.set(item.category || 'Other', order + 1);
+      }
+      return id;
+    });
 
     return { id: Number(templateId), name: templateName, categoryCount: categories.length, itemCount: items.length };
   }
@@ -540,12 +554,14 @@ export class PackingService {
   }
 
   updateCategoryAssignees(tripId: string | number, categoryName: string, userIds: number[] | undefined) {
-    this.db.run('DELETE FROM packing_category_assignees WHERE trip_id = ? AND category_name = ?', tripId, categoryName);
+    this.db.transaction(() => {
+      this.db.run('DELETE FROM packing_category_assignees WHERE trip_id = ? AND category_name = ?', tripId, categoryName);
 
-    if (Array.isArray(userIds) && userIds.length > 0) {
-      const insert = this.db.prepare('INSERT OR IGNORE INTO packing_category_assignees (trip_id, category_name, user_id) VALUES (?, ?, ?)');
-      for (const uid of userIds) insert.run(tripId, categoryName, uid);
-    }
+      if (Array.isArray(userIds) && userIds.length > 0) {
+        const insert = this.db.prepare('INSERT OR IGNORE INTO packing_category_assignees (trip_id, category_name, user_id) VALUES (?, ?, ?)');
+        for (const uid of userIds) insert.run(tripId, categoryName, uid);
+      }
+    });
 
     const updated = this.db.all<{ user_id: number; username: string; avatar: string | null }>(`
     SELECT pca.user_id, COALESCE(u.display_name, u.username) AS username, u.avatar

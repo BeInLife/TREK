@@ -1,10 +1,12 @@
 /**
  * Unit tests for the DI-native PackingService — PACK-SVC-001 through
- * PACK-SVC-049 moved 1:1 from the legacy tests/unit/services/packingService.test.ts
+ * PACK-SVC-049 moved from the legacy tests/unit/services/packingService.test.ts
  * (real in-memory SQLite so the SQL logic is exercised faithfully), plus the
  * wrapper-helper cases (canEdit, the #858 broadcast scoping, getItemPrivacy,
  * notifyTagged) carried over from the old delegation suite — now running
- * against real SQL — and PACK-SVC-050 pinning the packing.bridge delegation.
+ * against real SQL — PACK-SVC-050 pinning the packing.bridge delegation, and
+ * PACK-SVC-051..053 pinning the post-migration fixes over the legacy quirks
+ * ('Other' category default, bodyKeys-gated weight_limit_grams, quantity clamp).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -573,6 +575,45 @@ describe('three-tier packing sharing (#858)', () => {
     // The clone is the cloner's alone.
     expect(names(svc.listItems(trip.id, owner.id) as any[])).toEqual(['Travel adapter']);     // owner sees only the common one
     expect(names(svc.listItems(trip.id, cloner.id) as any[])).toEqual(['Travel adapter', 'Travel adapter']); // common + own clone
+  });
+});
+
+// ── Post-migration fixes over the legacy quirks ───────────────────────────────
+
+describe('legacy-quirk fixes', () => {
+  it('PACK-SVC-051: createItem defaults the category to "Other" (unified with bulkImport)', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const item = svc.createItem(trip.id, { name: 'Socks' }, user.id) as any;
+    expect(item.category).toBe('Other');
+  });
+
+  it('PACK-SVC-052: updateBag gates weight_limit_grams on bodyKeys — omitted keeps, explicit null clears', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const bag = svc.createBag(trip.id, { name: 'Duffel' }) as any;
+
+    const limited = svc.updateBag(trip.id, bag.id, { weight_limit_grams: 8000 }, ['weight_limit_grams']) as any;
+    expect(limited.weight_limit_grams).toBe(8000);
+
+    // A rename without the key must not touch the limit.
+    const kept = svc.updateBag(trip.id, bag.id, { name: 'Duffel XL' }, ['name']) as any;
+    expect(kept.weight_limit_grams).toBe(8000);
+
+    // An explicit null clears it.
+    const cleared = svc.updateBag(trip.id, bag.id, { weight_limit_grams: null }, ['weight_limit_grams']) as any;
+    expect(cleared.weight_limit_grams).toBeNull();
+  });
+
+  it('PACK-SVC-053: updateItem clamps a provided quantity into 1..999', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const item = svc.createItem(trip.id, { name: 'Socks', quantity: 5 }, user.id) as any;
+
+    expect((svc.updateItem(trip.id, item.id, { quantity: 0 }, ['quantity']) as any).quantity).toBe(1);
+    expect((svc.updateItem(trip.id, item.id, { quantity: 9999 }, ['quantity']) as any).quantity).toBe(999);
+    // Omitted key leaves the quantity unchanged.
+    expect((svc.updateItem(trip.id, item.id, { name: 'Wool socks' }, ['name']) as any).quantity).toBe(999);
   });
 });
 
