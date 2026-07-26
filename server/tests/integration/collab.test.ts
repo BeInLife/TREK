@@ -662,7 +662,9 @@ describe('Collab validation', () => {
       .send({ question: 'Only one option?', options: ['Option A'] });
 
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/2 options/i);
+    // The Zod pipe's standard envelope replaced the bespoke 'At least 2 options
+    // are required' string when the collab bodies adopted DTOs.
+    expect(res.body.error).toMatch(/options/i);
   });
 });
 

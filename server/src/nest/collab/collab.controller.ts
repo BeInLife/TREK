@@ -21,6 +21,14 @@ import fs from 'fs';
 import { v4 as uuidv4 } from 'uuid';
 import type { User } from '../../types';
 import { CollabService } from './collab.service';
+import {
+  CollabNoteCreateDto,
+  CollabNoteUpdateDto,
+  CollabPollCreateDto,
+  CollabPollVoteDto,
+  CollabMessageCreateDto,
+  CollabReactionDto,
+} from './collab.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { BLOCKED_EXTENSIONS } from '../files/files.constants';
@@ -53,7 +61,12 @@ const NOTE_UPLOAD = {
  * access (404), 'collab_edit' (403) on mutations + 'file_upload' on note files,
  * create 201 / rest 200 (vote + react POST stay 200), the bespoke 400/403/404
  * bodies, the chat/note notifications, and all WebSocket broadcasts with the
- * forwarded X-Socket-Id.
+ * forwarded X-Socket-Id. Bodies validate against the @trek/shared collab
+ * schemas via the DTO classes in collab.dto.ts + the global ZodValidationPipe
+ * (400 with the standard `{ error }` envelope on mismatch — this replaced the
+ * legacy bespoke 'Title is required' / 'Question is required' / '... 2 options
+ * ...' / 5000-char / 'Emoji is required' checks; the whitespace-only 'Message
+ * text is required' check stays, since min(1) doesn't trim).
  */
 @Controller('api/trips/:tripId/collab')
 @UseGuards(JwtAuthGuard)
@@ -82,12 +95,9 @@ export class CollabController {
   }
 
   @Post('notes')
-  createNote(@CurrentUser() user: User, @Param('tripId') tripId: string, @Body() body: { title?: string; content?: string; category?: string; color?: string; website?: string }, @Headers('x-socket-id') socketId?: string) {
+  createNote(@CurrentUser() user: User, @Param('tripId') tripId: string, @Body() body: CollabNoteCreateDto, @Headers('x-socket-id') socketId?: string) {
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
-    if (!body.title) {
-      throw new HttpException({ error: 'Title is required' }, 400);
-    }
     const note = this.collab.createNote(tripId, user.id, {
       title: body.title,
       content: body.content,
@@ -101,7 +111,7 @@ export class CollabController {
   }
 
   @Put('notes/:id')
-  updateNote(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body() body: { title?: string; content?: string; category?: string; color?: string; pinned?: number | boolean; website?: string }, @Headers('x-socket-id') socketId?: string) {
+  updateNote(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body() body: CollabNoteUpdateDto, @Headers('x-socket-id') socketId?: string) {
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
     const note = this.collab.updateNote(tripId, id, {
@@ -167,15 +177,9 @@ export class CollabController {
   }
 
   @Post('polls')
-  createPoll(@CurrentUser() user: User, @Param('tripId') tripId: string, @Body() body: { question?: string; options?: unknown[]; multiple?: boolean; multiple_choice?: boolean; deadline?: string }, @Headers('x-socket-id') socketId?: string) {
+  createPoll(@CurrentUser() user: User, @Param('tripId') tripId: string, @Body() body: CollabPollCreateDto, @Headers('x-socket-id') socketId?: string) {
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
-    if (!body.question) {
-      throw new HttpException({ error: 'Question is required' }, 400);
-    }
-    if (!Array.isArray(body.options) || body.options.length < 2) {
-      throw new HttpException({ error: 'At least 2 options are required' }, 400);
-    }
     const poll = this.collab.createPoll(tripId, user.id, {
       question: body.question,
       options: body.options,
@@ -189,10 +193,10 @@ export class CollabController {
 
   @Post('polls/:id/vote')
   @HttpCode(200)
-  votePoll(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body('option_index') optionIndex: number, @Headers('x-socket-id') socketId?: string) {
+  votePoll(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body() body: CollabPollVoteDto, @Headers('x-socket-id') socketId?: string) {
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
-    const result = this.collab.votePoll(tripId, id, user.id, optionIndex);
+    const result = this.collab.votePoll(tripId, id, user.id, body.option_index);
     if (result.error === 'not_found') throw new HttpException({ error: 'Poll not found' }, 404);
     if (result.error === 'closed') throw new HttpException({ error: 'Poll is closed' }, 400);
     if (result.error === 'invalid_index') throw new HttpException({ error: 'Invalid option index' }, 400);
@@ -231,13 +235,13 @@ export class CollabController {
   }
 
   @Post('messages')
-  createMessage(@CurrentUser() user: User, @Param('tripId') tripId: string, @Body() body: { text?: string; reply_to?: number | null }, @Headers('x-socket-id') socketId?: string) {
-    if (body.text && body.text.length > 5000) {
-      throw new HttpException({ error: 'text must be 5000 characters or less' }, 400);
-    }
+  createMessage(@CurrentUser() user: User, @Param('tripId') tripId: string, @Body() body: CollabMessageCreateDto, @Headers('x-socket-id') socketId?: string) {
+    // The pipe's min(1)/max(5000) replaced the bespoke length checks (and still
+    // rejects before the trip-access check, like the legacy pre-access check
+    // did); min(1) doesn't trim, so whitespace-only text keeps its bespoke 400.
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
-    if (!body.text || !body.text.trim()) {
+    if (!body.text.trim()) {
       throw new HttpException({ error: 'Message text is required' }, 400);
     }
     const result = this.collab.createMessage(tripId, user.id, body.text, body.reply_to);
@@ -252,13 +256,10 @@ export class CollabController {
 
   @Post('messages/:id/react')
   @HttpCode(200)
-  react(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body('emoji') emoji: string, @Headers('x-socket-id') socketId?: string) {
+  react(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body() body: CollabReactionDto, @Headers('x-socket-id') socketId?: string) {
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
-    if (!emoji) {
-      throw new HttpException({ error: 'Emoji is required' }, 400);
-    }
-    const result = this.collab.reactMessage(id, tripId, user.id, emoji);
+    const result = this.collab.reactMessage(id, tripId, user.id, body.emoji);
     if (!result.found) {
       throw new HttpException({ error: 'Message not found' }, 404);
     }
