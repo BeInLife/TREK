@@ -40,7 +40,7 @@ export class TodoService {
   }
 
   createItem(tripId: string | number, data: {
-    name: string; category?: string; due_date?: string; description?: string; assigned_user_id?: number; priority?: number;
+    name: string; category?: string | null; due_date?: string | null; description?: string | null; assigned_user_id?: number | null; priority?: number;
   }) {
     const maxOrder = this.db.get<{ max: number | null }>('SELECT MAX(sort_order) as max FROM todo_items WHERE trip_id = ?', tripId)!;
     const sortOrder = (maxOrder.max !== null ? maxOrder.max : -1) + 1;
@@ -57,7 +57,7 @@ export class TodoService {
   updateItem(
     tripId: string | number,
     id: string | number,
-    data: { name?: string; checked?: number; category?: string; due_date?: string | null; description?: string | null; assigned_user_id?: number | null; priority?: number | null },
+    data: { name?: string; checked?: number; category?: string | null; due_date?: string | null; description?: string | null; assigned_user_id?: number | null; priority?: number | null },
     bodyKeys: string[]
   ) {
     const item = this.db.get('SELECT * FROM todo_items WHERE id = ? AND trip_id = ?', id, tripId);
@@ -127,12 +127,14 @@ export class TodoService {
   }
 
   updateCategoryAssignees(tripId: string | number, categoryName: string, userIds: number[] | undefined) {
-    this.db.run('DELETE FROM todo_category_assignees WHERE trip_id = ? AND category_name = ?', tripId, categoryName);
+    this.db.transaction(() => {
+      this.db.run('DELETE FROM todo_category_assignees WHERE trip_id = ? AND category_name = ?', tripId, categoryName);
 
-    if (Array.isArray(userIds) && userIds.length > 0) {
-      const insert = this.db.prepare('INSERT OR IGNORE INTO todo_category_assignees (trip_id, category_name, user_id) VALUES (?, ?, ?)');
-      for (const uid of userIds) insert.run(tripId, categoryName, uid);
-    }
+      if (Array.isArray(userIds) && userIds.length > 0) {
+        const insert = this.db.prepare('INSERT OR IGNORE INTO todo_category_assignees (trip_id, category_name, user_id) VALUES (?, ?, ?)');
+        for (const uid of userIds) insert.run(tripId, categoryName, uid);
+      }
+    });
 
     return this.db.all(`
     SELECT tca.user_id, u.username, u.avatar
