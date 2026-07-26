@@ -100,9 +100,12 @@ first `@ResourceTemplate` plus the `when` addon gate in `todo.mcp.ts`, and the
 first in-container consumer wiring: `TripsService` injects `TodoService` via
 `exports: [TodoService]` instead of using the bridge). Repeat these steps per
 service (next up: packingService). This is a **pure relocation** — byte-identical
-SQL, statuses, bodies, and error strings. The long-run plan for the last
-non-Nest consumer (the plugin RPC host, today served via the bridges) is in
-`src/nest/plugins/DI-MIGRATION.md`.
+SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
+bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it
+injects domain services via `PluginHostDepsFactory`, so a migrated domain adds
+`exports: [XService]` + a `PluginsModule` import instead of a bridge entry.
+Only legacy `src/mcp` registrars (and scheduler/websocket code) still need
+bridges.
 
 1. **Move the SQL** into `<domain>.service.ts` as methods over an injected
    `DatabaseService` (`this.db.all<T>/get<T>/run/prepare/transaction`; strict
@@ -112,10 +115,11 @@ non-Nest consumer (the plugin RPC host, today served via the bridges) is in
    functions, do not change the service's method surface. The module needs no
    `imports: [DatabaseModule]` — it's `@Global`.
 2. **Add `<domain>.bridge.ts`** next to the service **only if non-Nest consumers
-   exist** (MCP tools, plugin RPC host, scheduler, websocket). It builds a
-   module-level instance over the shared connection Proxy —
-   `new XService(new DatabaseService(db))`, reinitialize-proof, same pattern as
-   `plugins/host/create-rpc-host.ts` — and exports the legacy function names 1:1.
+   exist** (legacy MCP tool registrars, scheduler, websocket — the plugin RPC
+   host now injects instead, see above). It builds a module-level instance over
+   the shared connection Proxy — `new XService(new DatabaseService(db))`,
+   reinitialize-proof, same pattern as `nest/todo/todo.bridge.ts` — and exports
+   the legacy function names 1:1.
    Container code injects the service; only outside-container code imports the
    bridge. *(Design decision, settled with the tags pilot: MCP tools stay outside
    the container and use the bridge. The alternative — handing the Nest app to the
@@ -139,7 +143,9 @@ non-Nest consumer (the plugin RPC host, today served via the bridges) is in
      the `vi.mock('../../src/db/database', …)` — the auth guard still reads users
      through the singleton, and `DatabaseModule`'s factory picks up the same
      mocked db. Drop the legacy-service mock entirely.
-   - Suites that mocked the legacy module (e.g. `create-rpc-host.test.ts`) mock
-     the bridge path instead — same factory shape, path-only change.
+   - Suites that mocked the legacy module mock the bridge path instead — same
+     factory shape, path-only change. (For the plugin host suite,
+     `plugin-host-deps.factory.test.ts`, the domain becomes a constructor stub
+     instead of a path mock.)
 6. **Verify** (from `server/`): `npm run typecheck`, `test:unit`,
    `test:integration`, `test:e2e`, `lint:check`, `test:coverage`.
