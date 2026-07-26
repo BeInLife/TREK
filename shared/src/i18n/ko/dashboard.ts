@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': '새 여행',
   'dashboard.newTripSub': '새 여행을 처음부터 계획하기',
   'dashboard.subscribeAllTrips': '모든 여행 구독',
-  'dashboard.subscribeAllTripsDesc': '활성 여행 전체를 하나의 캘린더 피드로 묶어 자동으로 동기화합니다. 보관된 여행과 종료된 지 90일이 지난 여행은 제외됩니다.',
+  'dashboard.subscribeAllTripsDesc':
+    '활성 여행 전체를 하나의 캘린더 피드로 묶어 자동으로 동기화합니다. 보관된 여행과 종료된 지 90일이 지난 여행은 제외됩니다.',
   'dashboard.gridView': '격자 보기',
   'dashboard.listView': '목록 보기',
   'dashboard.currency': '통화',
@@ -104,7 +105,8 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftTitle': '새 시작일',
   'dashboard.dateShiftIntro': '여행 시작일이 변경되었습니다. 계획을 새 날짜에 어떻게 맞출까요?',
   'dashboard.dateShiftKeepBookings': '예약은 원래 날짜에 유지',
-  'dashboard.dateShiftKeepBookingsDesc': '일별 계획은 새 날짜로 이동하고, 예약과 숙박은 여행 기간에 포함되어 있는 한 원래 날짜에 그대로 유지됩니다.',
+  'dashboard.dateShiftKeepBookingsDesc':
+    '일별 계획은 새 날짜로 이동하고, 예약과 숙박은 여행 기간에 포함되어 있는 한 원래 날짜에 그대로 유지됩니다.',
   'dashboard.dateShiftAll': '모두 이동',
   'dashboard.dateShiftAllDesc': '예약과 숙박을 포함한 전체 일정이 새 날짜로 이동합니다.',
   'dashboard.dateShiftHint': '팁: 일정의 일부만 이동하려면 플래너의 "날짜 추가" 기능을 사용하세요.',

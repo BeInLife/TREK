@@ -28,9 +28,11 @@ const oauth: TranslationStrings = {
   'oauth.scope.places:write.label': 'Manage places',
   'oauth.scope.places:write.description': 'Create, update, and delete places, assignments, and tags',
   'oauth.scope.collections:read.label': 'View collections',
-  'oauth.scope.collections:read.description': 'Read saved-place collections, their places, ratings, labels, and members',
+  'oauth.scope.collections:read.description':
+    'Read saved-place collections, their places, ratings, labels, and members',
   'oauth.scope.collections:write.label': 'Manage collections',
-  'oauth.scope.collections:write.description': 'Create/edit collections, save, rate, label and copy places, and share lists',
+  'oauth.scope.collections:write.description':
+    'Create/edit collections, save, rate, label and copy places, and share lists',
   'oauth.scope.atlas:read.label': 'View Atlas',
   'oauth.scope.atlas:read.description': 'Read visited countries, regions, and bucket list',
   'oauth.scope.atlas:write.label': 'Manage Atlas',

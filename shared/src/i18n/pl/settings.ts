@@ -299,7 +299,8 @@ const settings: TranslationStrings = {
   'settings.notificationsManagedByAdmin': 'Zdarzenia konfigurowane przez administratora.',
   'settings.mustChangePassword': 'Musisz zmienić hasło przed kontynuowaniem.',
   'settings.currency': 'Waluta wyświetlania',
-  'settings.currencyHint': 'Kwoty w Kosztach są przeliczane na tę walutę wyłącznie na potrzeby wyświetlania — oryginalne kwoty pozostają bez zmian.',
+  'settings.currencyHint':
+    'Kwoty w Kosztach są przeliczane na tę walutę wyłącznie na potrzeby wyświetlania — oryginalne kwoty pozostają bez zmian.',
   'settings.currencyTrip': 'Waluta wyjazdu',
   'settings.passkey.title': 'Klucze dostępu',
   'settings.passkey.description':

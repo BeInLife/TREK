@@ -324,7 +324,8 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:table-contributor': '向行程檢視（預訂、地點、日期）新增欄位與操作',
   'admin.plugins.perm.hook:map-marker-provider': '向行程地圖新增標記（例如顯示預訂或興趣點）',
   'admin.plugins.perm.hook:map-layer-provider': '在行程地圖上繪製路線、廊道與區域',
-  'admin.plugins.perm.hook:route-provider': '提供路線規劃設定檔，供規劃工具計算每日路線（例如含充電停靠站的電動車路線規劃）',
+  'admin.plugins.perm.hook:route-provider':
+    '提供路線規劃設定檔，供規劃工具計算每日路線（例如含充電停靠站的電動車路線規劃）',
   'admin.plugins.perm.hook:day-schedule-provider': '向每日行程附加時間項目（充電停靠站、緩衝時間）',
   'admin.plugins.perm.geolocation:read': '在其任一檢視開啟時查詢你的即時位置（你的瀏覽器仍會先詢問）',
   'admin.plugins.perm.hook:pdf-section-provider': '向行程 PDF 匯出附加文字段落',

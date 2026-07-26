@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Nowa podróż',
   'dashboard.newTripSub': 'Zaplanuj nową podróż od zera',
   'dashboard.subscribeAllTrips': 'Subskrybuj wszystkie podróże',
-  'dashboard.subscribeAllTripsDesc': 'Jeden kanał kalendarza dla wszystkich Twoich aktywnych podróży, automatycznie synchronizowany. Nie obejmuje zarchiwizowanych podróży ani podróży zakończonych ponad 90 dni temu.',
+  'dashboard.subscribeAllTripsDesc':
+    'Jeden kanał kalendarza dla wszystkich Twoich aktywnych podróży, automatycznie synchronizowany. Nie obejmuje zarchiwizowanych podróży ani podróży zakończonych ponad 90 dni temu.',
   'dashboard.gridView': 'Widok siatki',
   'dashboard.listView': 'Widok listy',
   'dashboard.currency': 'Waluta',
@@ -89,10 +90,8 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftKeepBookingsDesc':
     'Plany dnia przesuną się wraz z nowymi datami, a rezerwacje i noclegi pozostaną w swoich pierwotnych terminach, o ile nadal mieszczą się one w ramach podróży.',
   'dashboard.dateShiftAll': 'Przesuń wszystko',
-  'dashboard.dateShiftAllDesc':
-    'Cały plan podróży przesunie się wraz z nowymi datami, w tym rezerwacje i noclegi.',
-  'dashboard.dateShiftHint':
-    'Wskazówka: aby przesunąć tylko część planu podróży, użyj opcji "Dodaj dzień" w planerze.',
+  'dashboard.dateShiftAllDesc': 'Cały plan podróży przesunie się wraz z nowymi datami, w tym rezerwacje i noclegi.',
+  'dashboard.dateShiftHint': 'Wskazówka: aby przesunąć tylko część planu podróży, użyj opcji "Dodaj dzień" w planerze.',
   'dashboard.members': 'Współpodróżnicy',
   'dashboard.copyTrip': 'Kopiuj',
   'dashboard.copySuffix': 'kopia',

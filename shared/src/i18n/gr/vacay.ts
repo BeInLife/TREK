@@ -68,7 +68,8 @@ const vacay: TranslationStrings = {
   'vacay.carriedOverPrevPeriod': 'από την προηγούμενη περίοδο',
   'vacay.compUsedCount': '{count} ρεπό',
   'vacay.yearType': 'Έτος διακοπών',
-  'vacay.yearTypeHint': 'Πότε ξεκινά το έτος διακοπών σας — βάσει αυτού υπολογίζονται το δικαίωμα, η χρήση και η μεταφορά',
+  'vacay.yearTypeHint':
+    'Πότε ξεκινά το έτος διακοπών σας — βάσει αυτού υπολογίζονται το δικαίωμα, η χρήση και η μεταφορά',
   'vacay.yearTypeCalendar': 'Ημερολογιακό',
   'vacay.yearTypeFiscal': 'Οικονομικό',
   'vacay.yearTypeAnniversary': 'Ημ. πρόσληψης',

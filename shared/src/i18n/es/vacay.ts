@@ -50,7 +50,7 @@ const vacay: TranslationStrings = {
   'vacay.sun': 'Dom',
   'vacay.publicHolidays': 'Festivos',
   'vacay.publicHolidaysHint': 'Mark public holidays in the calendar',
-    'vacay.schoolHolidays': 'School Holidays',
+  'vacay.schoolHolidays': 'School Holidays',
   'vacay.schoolHolidaysHint': 'Mark school holidays as a visual calendar layer',
   'vacay.selectCountry': 'Seleccionar país',
   'vacay.selectRegion': 'Seleccionar región (opcional)',
@@ -64,7 +64,8 @@ const vacay: TranslationStrings = {
   'vacay.carriedOverPrevPeriod': 'del periodo anterior',
   'vacay.compUsedCount': '{count} compensación',
   'vacay.yearType': 'Año de vacaciones',
-  'vacay.yearTypeHint': 'Cuándo empieza tu año de vacaciones — el derecho, los días usados y el arrastre se rigen por esa fecha',
+  'vacay.yearTypeHint':
+    'Cuándo empieza tu año de vacaciones — el derecho, los días usados y el arrastre se rigen por esa fecha',
   'vacay.yearTypeCalendar': 'Año natural',
   'vacay.yearTypeFiscal': 'Año fiscal',
   'vacay.yearTypeAnniversary': 'Fecha de alta',
@@ -124,7 +125,7 @@ const vacay: TranslationStrings = {
   'vacay.addCalendar': 'Añadir calendario',
   'vacay.calendarColor': 'Color del calendario',
   'vacay.calendarLabel': 'Etiqueta',
-      'vacay.noCalendars': 'No holiday calendars added yet',
-'vacay.noSchoolCalendars': 'No school holiday calendars added yet',
+  'vacay.noCalendars': 'No holiday calendars added yet',
+  'vacay.noSchoolCalendars': 'No school holiday calendars added yet',
 };
 export default vacay;

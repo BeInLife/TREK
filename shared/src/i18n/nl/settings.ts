@@ -302,7 +302,8 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
   'settings.currency': 'Weergavevaluta',
-  'settings.currencyHint': 'Bedragen onder Onkosten worden alleen ter weergave naar deze valuta omgerekend — de oorspronkelijke bedragen blijven ongewijzigd.',
+  'settings.currencyHint':
+    'Bedragen onder Onkosten worden alleen ter weergave naar deze valuta omgerekend — de oorspronkelijke bedragen blijven ongewijzigd.',
   'settings.currencyTrip': 'Valuta van de reis',
   'settings.passkey.title': 'Passkeys',
   'settings.passkey.description':

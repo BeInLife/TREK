@@ -295,7 +295,8 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
   'settings.currency': 'Zobrazovaná měna',
-  'settings.currencyHint': 'Částky v Nákladech se do této měny přepočítávají pouze pro zobrazení – původní částky zůstávají beze změny.',
+  'settings.currencyHint':
+    'Částky v Nákladech se do této měny přepočítávají pouze pro zobrazení – původní částky zůstávají beze změny.',
   'settings.currencyTrip': 'Měna cesty',
   'settings.passkey.title': 'Přístupové klíče',
   'settings.passkey.description':

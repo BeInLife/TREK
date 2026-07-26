@@ -6,7 +6,7 @@ const packing: TranslationStrings = {
   'packing.personalEmptyHint': 'Votre liste personnelle est vide — copiez des éléments partagés ou ajoutez les vôtres.',
   'packing.assignMembers': 'Attribuer des membres',
   'packing.categoryOptions': 'Options de la liste',
-  'packing.editItem': 'Modifier l\'élément',
+  'packing.editItem': "Modifier l'élément",
   'packing.itemName': 'Nom',
   'packing.itemQuantity': 'Quantité',
   'packing.itemWeight': 'Poids (g)',

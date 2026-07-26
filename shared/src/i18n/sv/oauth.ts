@@ -28,9 +28,11 @@ const oauth: TranslationStrings = {
   'oauth.scope.places:write.label': 'Hantera platser',
   'oauth.scope.places:write.description': 'Skapa, uppdatera och ta bort platser, uppdrag och taggar',
   'oauth.scope.collections:read.label': 'Visa samlingar',
-  'oauth.scope.collections:read.description': 'Läs samlingar med sparade platser, deras platser, betyg, etiketter och medlemmar',
+  'oauth.scope.collections:read.description':
+    'Läs samlingar med sparade platser, deras platser, betyg, etiketter och medlemmar',
   'oauth.scope.collections:write.label': 'Hantera samlingar',
-  'oauth.scope.collections:write.description': 'Skapa/redigera samlingar, spara, betygsätt, etikettera och kopiera platser samt dela listor',
+  'oauth.scope.collections:write.description':
+    'Skapa/redigera samlingar, spara, betygsätt, etikettera och kopiera platser samt dela listor',
   'oauth.scope.atlas:read.label': 'Visa Atlas',
   'oauth.scope.atlas:read.description': 'Läs om besökta länder, regioner och bucketlist',
   'oauth.scope.atlas:write.label': 'Hantera Atlas',

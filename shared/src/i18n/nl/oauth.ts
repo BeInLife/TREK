@@ -28,9 +28,11 @@ const oauth: TranslationStrings = {
   'oauth.scope.places:write.label': 'Plaatsen beheren',
   'oauth.scope.places:write.description': 'Plaatsen, toewijzingen en tags aanmaken, bijwerken en verwijderen',
   'oauth.scope.collections:read.label': 'Collecties bekijken',
-  'oauth.scope.collections:read.description': 'Collecties met opgeslagen plekken lezen, inclusief hun plekken, beoordelingen, labels en leden',
+  'oauth.scope.collections:read.description':
+    'Collecties met opgeslagen plekken lezen, inclusief hun plekken, beoordelingen, labels en leden',
   'oauth.scope.collections:write.label': 'Collecties beheren',
-  'oauth.scope.collections:write.description': 'Collecties maken/bewerken, plekken opslaan, beoordelen, labelen en kopiëren, en lijsten delen',
+  'oauth.scope.collections:write.description':
+    'Collecties maken/bewerken, plekken opslaan, beoordelen, labelen en kopiëren, en lijsten delen',
   'oauth.scope.atlas:read.label': 'Atlas bekijken',
   'oauth.scope.atlas:read.description': "Bezochte landen, regio's en bucketlist lezen",
   'oauth.scope.atlas:write.label': 'Atlas beheren',

@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Nuovo Viaggio',
   'dashboard.newTripSub': 'Pianifica un nuovo viaggio da zero',
   'dashboard.subscribeAllTrips': 'Iscriviti a tutti i viaggi',
-  'dashboard.subscribeAllTripsDesc': 'Un unico feed di calendario per tutti i tuoi viaggi attivi, mantenuto sincronizzato automaticamente. Esclude i viaggi archiviati e quelli terminati più di 90 giorni fa.',
+  'dashboard.subscribeAllTripsDesc':
+    'Un unico feed di calendario per tutti i tuoi viaggi attivi, mantenuto sincronizzato automaticamente. Esclude i viaggi archiviati e quelli terminati più di 90 giorni fa.',
   'dashboard.gridView': 'Vista a griglia',
   'dashboard.listView': 'Vista a lista',
   'dashboard.currency': 'Valuta',

@@ -63,7 +63,9 @@ describe('vacayYearSettingsRequestSchema', () => {
 
   it('takes a null hire_date but not a malformed one', () => {
     expect(vacayYearSettingsRequestSchema.safeParse({ year_type: 'anniversary', hire_date: null }).success).toBe(true);
-    expect(vacayYearSettingsRequestSchema.safeParse({ year_type: 'anniversary', hire_date: '16.09.2019' }).success).toBe(false);
+    expect(
+      vacayYearSettingsRequestSchema.safeParse({ year_type: 'anniversary', hire_date: '16.09.2019' }).success,
+    ).toBe(false);
   });
 });
 

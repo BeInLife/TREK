@@ -288,7 +288,8 @@ const settings: TranslationStrings = {
   'settings.about.supporter.tier.budgetTraveller': 'Budget Traveller', // en-fallback
   'settings.about.supporter.tier.hostelBunkmate': 'Hostel Bunkmate', // en-fallback
   'settings.currency': 'عملة العرض',
-  'settings.currencyHint': 'تُعرض المبالغ في التكاليف محوّلة إلى هذه العملة للعرض فقط — تبقى المبالغ الأصلية دون تغيير.',
+  'settings.currencyHint':
+    'تُعرض المبالغ في التكاليف محوّلة إلى هذه العملة للعرض فقط — تبقى المبالغ الأصلية دون تغيير.',
   'settings.currencyTrip': 'عملة الرحلة',
   'settings.passkey.title': 'مفاتيح المرور',
   'settings.passkey.description':

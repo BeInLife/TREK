@@ -3,7 +3,8 @@ import type { TranslationStrings } from '../types';
 const packing: TranslationStrings = {
   'packing.actions': 'Műveletek',
   'packing.editDone': 'Kész',
-  'packing.personalEmptyHint': 'A személyes listád üres — másold át a megosztott elemeket, vagy add hozzá a sajátjaidat.',
+  'packing.personalEmptyHint':
+    'A személyes listád üres — másold át a megosztott elemeket, vagy add hozzá a sajátjaidat.',
   'packing.assignMembers': 'Tagok hozzárendelése',
   'packing.categoryOptions': 'Lista beállításai',
   'packing.editItem': 'Elem szerkesztése',

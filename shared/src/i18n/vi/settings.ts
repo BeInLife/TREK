@@ -306,7 +306,8 @@ const settings: TranslationStrings = {
   'settings.mfa.toastDisabled': 'Xác thực hai yếu tố bị vô hiệu hóa',
   'settings.mfa.demoBlocked': 'Không có sẵn ở chế độ demo',
   'settings.currency': 'Tiền tệ hiển thị',
-  'settings.currencyHint': 'Số tiền trong Chi phí chỉ được quy đổi sang loại tiền tệ này để hiển thị — số tiền gốc không thay đổi.',
+  'settings.currencyHint':
+    'Số tiền trong Chi phí chỉ được quy đổi sang loại tiền tệ này để hiển thị — số tiền gốc không thay đổi.',
   'settings.currencyTrip': 'Tiền tệ của chuyến đi',
   'settings.passkey.title': 'Mật mã',
   'settings.passkey.description':

@@ -355,8 +355,10 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:table-contributor': 'Add columns and actions to trip views (reservations, places, days)',
   'admin.plugins.perm.hook:map-marker-provider': 'Add markers to the trip map (e.g. show bookings or POIs)',
   'admin.plugins.perm.hook:map-layer-provider': 'Draw routes, corridors and zones on the trip map',
-  'admin.plugins.perm.hook:route-provider': 'Offer routing profiles the planner can route days with (e.g. EV routing with charging stops)',
-  'admin.plugins.perm.hook:day-schedule-provider': 'Attach time entries to the day plan (charging stops, security buffers)',
+  'admin.plugins.perm.hook:route-provider':
+    'Offer routing profiles the planner can route days with (e.g. EV routing with charging stops)',
+  'admin.plugins.perm.hook:day-schedule-provider':
+    'Attach time entries to the day plan (charging stops, security buffers)',
   'admin.plugins.perm.geolocation:read':
     'Ask for your live position while one of its views is open (your browser will still ask first)',
   'admin.plugins.perm.hook:pdf-section-provider': 'Append text sections to the trip PDF export',

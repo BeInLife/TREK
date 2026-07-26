@@ -29,9 +29,11 @@ const oauth: TranslationStrings = {
   'oauth.scope.places:write.label': 'Yerleri yönet',
   'oauth.scope.places:write.description': 'Yerleri, atamaları ve etiketleri oluştur, güncelle ve sil',
   'oauth.scope.collections:read.label': 'Koleksiyonları görüntüle',
-  'oauth.scope.collections:read.description': 'Kayıtlı yer koleksiyonlarını, içindeki yerleri, puanları, etiketleri ve üyeleri okuma',
+  'oauth.scope.collections:read.description':
+    'Kayıtlı yer koleksiyonlarını, içindeki yerleri, puanları, etiketleri ve üyeleri okuma',
   'oauth.scope.collections:write.label': 'Koleksiyonları yönet',
-  'oauth.scope.collections:write.description': 'Koleksiyon oluşturma/düzenleme, yerleri kaydetme, puanlama, etiketleme ve kopyalama, listeleri paylaşma',
+  'oauth.scope.collections:write.description':
+    'Koleksiyon oluşturma/düzenleme, yerleri kaydetme, puanlama, etiketleme ve kopyalama, listeleri paylaşma',
   'oauth.scope.atlas:read.label': "Atlas'ı Görüntüle",
   'oauth.scope.atlas:read.description': 'Ziyaret edilen ülkeleri, bölgeleri ve yapılacaklar listesini oku',
   'oauth.scope.atlas:write.label': "Atlas'ı Yönet",

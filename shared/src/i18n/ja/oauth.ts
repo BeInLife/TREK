@@ -28,9 +28,11 @@ const oauth: TranslationStrings = {
   'oauth.scope.places:write.label': '場所を管理',
   'oauth.scope.places:write.description': '場所、割り当て、タグの作成・更新・削除',
   'oauth.scope.collections:read.label': 'コレクションを表示',
-  'oauth.scope.collections:read.description': '保存した場所のコレクションと、その中の場所、評価、ラベル、メンバーを読み取る',
+  'oauth.scope.collections:read.description':
+    '保存した場所のコレクションと、その中の場所、評価、ラベル、メンバーを読み取る',
   'oauth.scope.collections:write.label': 'コレクションを管理',
-  'oauth.scope.collections:write.description': 'コレクションの作成・編集、場所の保存・評価・ラベル付け・コピー、リストの共有',
+  'oauth.scope.collections:write.description':
+    'コレクションの作成・編集、場所の保存・評価・ラベル付け・コピー、リストの共有',
   'oauth.scope.atlas:read.label': '地図を表示',
   'oauth.scope.atlas:read.description': '訪問した国・地域、バケットリストを閲覧',
   'oauth.scope.atlas:write.label': '地図を管理',

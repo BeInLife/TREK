@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Новая поездка',
   'dashboard.newTripSub': 'Спланируйте новую поездку с нуля',
   'dashboard.subscribeAllTrips': 'Подписаться на все поездки',
-  'dashboard.subscribeAllTripsDesc': 'Единый календарь для всех ваших активных поездок, автоматически синхронизируемый. Архивные поездки и поездки, завершившиеся более 90 дней назад, не включаются.',
+  'dashboard.subscribeAllTripsDesc':
+    'Единый календарь для всех ваших активных поездок, автоматически синхронизируемый. Архивные поездки и поездки, завершившиеся более 90 дней назад, не включаются.',
   'dashboard.gridView': 'Плитка',
   'dashboard.listView': 'Список',
   'dashboard.currency': 'Валюта',
@@ -89,10 +90,12 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftTitle': 'Новая дата начала',
   'dashboard.dateShiftIntro': 'Вы изменили дату начала поездки. Как перенести ваши планы на новые даты?',
   'dashboard.dateShiftKeepBookings': 'Оставить бронирования на своих датах',
-  'dashboard.dateShiftKeepBookingsDesc': 'Планы дней переносятся на новые даты, а бронирования и жильё остаются на исходных датах, пока те входят в поездку.',
+  'dashboard.dateShiftKeepBookingsDesc':
+    'Планы дней переносятся на новые даты, а бронирования и жильё остаются на исходных датах, пока те входят в поездку.',
   'dashboard.dateShiftAll': 'Перенести всё',
   'dashboard.dateShiftAllDesc': 'Весь маршрут переносится на новые даты, включая бронирования и жильё.',
-  'dashboard.dateShiftHint': 'Совет: чтобы перенести только часть маршрута, используйте «Добавить день» в планировщике.',
+  'dashboard.dateShiftHint':
+    'Совет: чтобы перенести только часть маршрута, используйте «Добавить день» в планировщике.',
   'dashboard.greeting.morning': 'Доброе утро,',
   'dashboard.greeting.afternoon': 'Добрый день,',
   'dashboard.greeting.evening': 'Добрый вечер,',

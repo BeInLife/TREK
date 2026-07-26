@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Perjalanan Baru',
   'dashboard.newTripSub': 'Rencanakan perjalanan baru dari awal',
   'dashboard.subscribeAllTrips': 'Berlangganan semua perjalanan',
-  'dashboard.subscribeAllTripsDesc': 'Satu umpan kalender untuk semua perjalanan aktifmu, tetap tersinkron secara otomatis. Tidak termasuk perjalanan yang diarsipkan dan perjalanan yang berakhir lebih dari 90 hari lalu.',
+  'dashboard.subscribeAllTripsDesc':
+    'Satu umpan kalender untuk semua perjalanan aktifmu, tetap tersinkron secara otomatis. Tidak termasuk perjalanan yang diarsipkan dan perjalanan yang berakhir lebih dari 90 hari lalu.',
   'dashboard.gridView': 'Tampilan grid',
   'dashboard.listView': 'Tampilan daftar',
   'dashboard.currency': 'Mata uang',

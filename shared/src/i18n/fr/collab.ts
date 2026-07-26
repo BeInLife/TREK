@@ -8,7 +8,7 @@ const collab: TranslationStrings = {
   'collab.polls.countdownDaysHours': 'Reste {d} j {h} h',
   'collab.polls.countdownHoursMinutes': 'Reste {h} h {m} min',
   'collab.polls.countdownMinutes': 'Reste {m} min',
-  'collab.polls.clearDeadline': 'Effacer l\'échéance',
+  'collab.polls.clearDeadline': "Effacer l'échéance",
   'collab.tabs.chat': 'Discussion',
   'collab.tabs.notes': 'Notes',
   'collab.tabs.polls': 'Sondages',

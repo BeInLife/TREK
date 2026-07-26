@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'New Trip',
   'dashboard.newTripSub': 'Plan a new trip from scratch',
   'dashboard.subscribeAllTrips': 'Subscribe to all trips',
-  'dashboard.subscribeAllTripsDesc': 'One calendar feed for all your active trips, kept in sync automatically. Excludes archived trips and trips that ended more than 90 days ago.',
+  'dashboard.subscribeAllTripsDesc':
+    'One calendar feed for all your active trips, kept in sync automatically. Excludes archived trips and trips that ended more than 90 days ago.',
   'dashboard.gridView': 'Grid view',
   'dashboard.listView': 'List view',
   'dashboard.currency': 'Currency',
@@ -103,9 +104,11 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftTitle': 'New start date',
   'dashboard.dateShiftIntro': 'You changed when this trip starts. How should your plans follow the new dates?',
   'dashboard.dateShiftKeepBookings': 'Keep bookings on their dates',
-  'dashboard.dateShiftKeepBookingsDesc': 'Day plans move with the new dates, while reservations and accommodations stay on their original dates as long as those are still part of the trip.',
+  'dashboard.dateShiftKeepBookingsDesc':
+    'Day plans move with the new dates, while reservations and accommodations stay on their original dates as long as those are still part of the trip.',
   'dashboard.dateShiftAll': 'Shift everything',
-  'dashboard.dateShiftAllDesc': 'The entire itinerary moves with the new dates, including reservations and accommodations.',
+  'dashboard.dateShiftAllDesc':
+    'The entire itinerary moves with the new dates, including reservations and accommodations.',
   'dashboard.dateShiftHint': 'Tip: to shift only part of your itinerary, use "Add day" in the planner instead.',
   'dashboard.greeting.morning': 'Good morning,',
   'dashboard.greeting.afternoon': 'Good afternoon,',

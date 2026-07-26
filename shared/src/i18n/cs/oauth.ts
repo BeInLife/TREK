@@ -30,7 +30,8 @@ const oauth: TranslationStrings = {
   'oauth.scope.collections:read.label': 'Zobrazit kolekce',
   'oauth.scope.collections:read.description': 'Číst kolekce uložených míst, jejich místa, hodnocení, štítky a členy',
   'oauth.scope.collections:write.label': 'Spravovat kolekce',
-  'oauth.scope.collections:write.description': 'Vytvářet a upravovat kolekce, ukládat, hodnotit, označovat a kopírovat místa a sdílet seznamy',
+  'oauth.scope.collections:write.description':
+    'Vytvářet a upravovat kolekce, ukládat, hodnotit, označovat a kopírovat místa a sdílet seznamy',
   'oauth.scope.atlas:read.label': 'Zobrazit Atlas',
   'oauth.scope.atlas:read.description': 'Číst navštívené země, regiony a seznam přání',
   'oauth.scope.atlas:write.label': 'Spravovat Atlas',

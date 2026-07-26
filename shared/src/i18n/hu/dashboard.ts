@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Új utazás',
   'dashboard.newTripSub': 'Tervezz egy új utazást a nulláról',
   'dashboard.subscribeAllTrips': 'Feliratkozás az összes utazásra',
-  'dashboard.subscribeAllTripsDesc': 'Egy naptár-feed az összes aktív utazásodhoz, automatikusan szinkronban tartva. Az archivált utazások és a több mint 90 napja véget ért utazások nem szerepelnek benne.',
+  'dashboard.subscribeAllTripsDesc':
+    'Egy naptár-feed az összes aktív utazásodhoz, automatikusan szinkronban tartva. Az archivált utazások és a több mint 90 napja véget ért utazások nem szerepelnek benne.',
   'dashboard.gridView': 'Rácsnézet',
   'dashboard.listView': 'Listanézet',
   'dashboard.currency': 'Pénznem',

@@ -304,7 +304,8 @@ const settings: TranslationStrings = {
   'settings.mfa.toastDisabled': 'Tvåfaktorsautentisering är inaktiverad',
   'settings.mfa.demoBlocked': 'Finns inte i demoläge',
   'settings.currency': 'Visningsvaluta',
-  'settings.currencyHint': 'Belopp under Kostnader visas omräknade till denna valuta endast för visning – de ursprungliga beloppen ändras inte.',
+  'settings.currencyHint':
+    'Belopp under Kostnader visas omräknade till denna valuta endast för visning – de ursprungliga beloppen ändras inte.',
   'settings.currencyTrip': 'Resans valuta',
   'settings.passkey.title': 'Inloggningsnycklar',
   'settings.passkey.description':

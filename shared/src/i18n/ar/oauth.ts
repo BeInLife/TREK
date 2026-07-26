@@ -28,7 +28,8 @@ const oauth: TranslationStrings = {
   'oauth.scope.collections:read.label': 'عرض المجموعات',
   'oauth.scope.collections:read.description': 'قراءة مجموعات الأماكن المحفوظة وأماكنها وتقييماتها وتسمياتها وأعضائها',
   'oauth.scope.collections:write.label': 'إدارة المجموعات',
-  'oauth.scope.collections:write.description': 'إنشاء وتعديل المجموعات، وحفظ الأماكن وتقييمها وتسميتها ونسخها، ومشاركة القوائم',
+  'oauth.scope.collections:write.description':
+    'إنشاء وتعديل المجموعات، وحفظ الأماكن وتقييمها وتسميتها ونسخها، ومشاركة القوائم',
   'oauth.scope.atlas:read.label': 'عرض Atlas',
   'oauth.scope.atlas:read.description': 'قراءة الدول والمناطق المزارة وقائمة الأمنيات',
   'oauth.scope.atlas:write.label': 'إدارة Atlas',

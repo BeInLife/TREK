@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Nuevo viaje',
   'dashboard.newTripSub': 'Planifica un nuevo viaje desde cero',
   'dashboard.subscribeAllTrips': 'Suscribirse a todos los viajes',
-  'dashboard.subscribeAllTripsDesc': 'Un feed de calendario para todos tus viajes activos, sincronizado automáticamente. Excluye los viajes archivados y los que terminaron hace más de 90 días.',
+  'dashboard.subscribeAllTripsDesc':
+    'Un feed de calendario para todos tus viajes activos, sincronizado automáticamente. Excluye los viajes archivados y los que terminaron hace más de 90 días.',
   'dashboard.gridView': 'Vista de cuadrícula',
   'dashboard.listView': 'Vista de lista',
   'dashboard.currency': 'Divisa',
@@ -87,11 +88,14 @@ const dashboard: TranslationStrings = {
   'dashboard.titleRequired': 'El título es obligatorio',
   'dashboard.endDateError': 'La fecha de fin debe ser posterior a la de inicio',
   'dashboard.dateShiftTitle': 'Nueva fecha de inicio',
-  'dashboard.dateShiftIntro': 'Has cambiado cuándo empieza este viaje. ¿Cómo deben seguir tus planes las nuevas fechas?',
+  'dashboard.dateShiftIntro':
+    'Has cambiado cuándo empieza este viaje. ¿Cómo deben seguir tus planes las nuevas fechas?',
   'dashboard.dateShiftKeepBookings': 'Mantener las reservas en sus fechas',
-  'dashboard.dateShiftKeepBookingsDesc': 'Los planes de cada día se mueven con las nuevas fechas, mientras que las reservas y los alojamientos permanecen en sus fechas originales siempre que sigan formando parte del viaje.',
+  'dashboard.dateShiftKeepBookingsDesc':
+    'Los planes de cada día se mueven con las nuevas fechas, mientras que las reservas y los alojamientos permanecen en sus fechas originales siempre que sigan formando parte del viaje.',
   'dashboard.dateShiftAll': 'Mover todo',
-  'dashboard.dateShiftAllDesc': 'Todo el itinerario se mueve con las nuevas fechas, incluidas las reservas y los alojamientos.',
+  'dashboard.dateShiftAllDesc':
+    'Todo el itinerario se mueve con las nuevas fechas, incluidas las reservas y los alojamientos.',
   'dashboard.dateShiftHint': 'Consejo: para mover solo una parte del itinerario, usa "Añadir día" en el planificador.',
   'dashboard.greeting.morning': 'Buenos días,',
   'dashboard.greeting.afternoon': 'Buenas tardes,',

@@ -299,7 +299,8 @@ const settings: TranslationStrings = {
   'settings.bookingLabels': 'Label rute pemesanan',
   'settings.bookingLabelsHint': 'Menampilkan nama stasiun / bandara di peta. Jika mati, hanya ikon ditampilkan.',
   'settings.currency': 'Mata uang tampilan',
-  'settings.currencyHint': 'Jumlah di Biaya ditampilkan dalam mata uang ini hanya untuk tampilan — jumlah aslinya tidak berubah.',
+  'settings.currencyHint':
+    'Jumlah di Biaya ditampilkan dalam mata uang ini hanya untuk tampilan — jumlah aslinya tidak berubah.',
   'settings.currencyTrip': 'Mata uang perjalanan',
   'settings.passkey.title': 'Passkey',
   'settings.passkey.description':

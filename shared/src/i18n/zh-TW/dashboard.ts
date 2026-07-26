@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': '新建旅行',
   'dashboard.newTripSub': '從零開始規劃新旅行',
   'dashboard.subscribeAllTrips': '訂閱所有旅行',
-  'dashboard.subscribeAllTripsDesc': '一個涵蓋你所有進行中旅行的行事曆訂閱源，會自動保持同步。不包含已歸檔的旅行，以及結束超過 90 天的旅行。',
+  'dashboard.subscribeAllTripsDesc':
+    '一個涵蓋你所有進行中旅行的行事曆訂閱源，會自動保持同步。不包含已歸檔的旅行，以及結束超過 90 天的旅行。',
   'dashboard.gridView': '網格檢視',
   'dashboard.listView': '列表檢視',
   'dashboard.currency': '貨幣',
@@ -89,7 +90,8 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftTitle': '新的開始日期',
   'dashboard.dateShiftIntro': '你變更了旅行的開始時間。你的計劃要如何配合新日期？',
   'dashboard.dateShiftKeepBookings': '預訂保留在原日期',
-  'dashboard.dateShiftKeepBookingsDesc': '每日計劃會隨新日期移動，而預訂和住宿只要仍在旅行期間內，就會保留在原本的日期。',
+  'dashboard.dateShiftKeepBookingsDesc':
+    '每日計劃會隨新日期移動，而預訂和住宿只要仍在旅行期間內，就會保留在原本的日期。',
   'dashboard.dateShiftAll': '全部移動',
   'dashboard.dateShiftAllDesc': '整個行程都會隨新日期移動，包括預訂和住宿。',
   'dashboard.dateShiftHint': '提示：若只想移動部分行程，請改用規劃頁面中的「新增日期」。',

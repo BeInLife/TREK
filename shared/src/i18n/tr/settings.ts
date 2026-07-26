@@ -298,7 +298,8 @@ const settings: TranslationStrings = {
     'Bir jeton alın: grant_type=client_credentials, client_id ve client_secret ile POST /oauth/token. Tarayıcı yok, yenileme belirteci yok.',
   'settings.oauth.badge.machine': 'makine',
   'settings.currency': 'Görüntüleme para birimi',
-  'settings.currencyHint': 'Maliyetler bölümündeki tutarlar yalnızca görüntüleme amacıyla bu para birimine çevrilerek gösterilir — orijinal tutarlar değişmez.',
+  'settings.currencyHint':
+    'Maliyetler bölümündeki tutarlar yalnızca görüntüleme amacıyla bu para birimine çevrilerek gösterilir — orijinal tutarlar değişmez.',
   'settings.currencyTrip': 'Gezi para birimi',
   'settings.passkey.title': 'Passkey’ler',
   'settings.passkey.description':

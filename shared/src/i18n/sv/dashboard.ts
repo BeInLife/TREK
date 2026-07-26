@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Ny resa',
   'dashboard.newTripSub': 'Planera en ny resa från grunden',
   'dashboard.subscribeAllTrips': 'Prenumerera på alla resor',
-  'dashboard.subscribeAllTripsDesc': 'En kalenderfeed för alla dina aktiva resor, som hålls synkroniserad automatiskt. Arkiverade resor och resor som avslutades för mer än 90 dagar sedan är undantagna.',
+  'dashboard.subscribeAllTripsDesc':
+    'En kalenderfeed för alla dina aktiva resor, som hålls synkroniserad automatiskt. Arkiverade resor och resor som avslutades för mer än 90 dagar sedan är undantagna.',
   'dashboard.gridView': 'Rutnätsvy',
   'dashboard.listView': 'Listvy',
   'dashboard.currency': 'Valuta',
@@ -101,14 +102,12 @@ const dashboard: TranslationStrings = {
   'dashboard.titleRequired': 'Titel är obligatoriskt',
   'dashboard.endDateError': 'Slutdatumet måste ligga efter startdatumet',
   'dashboard.dateShiftTitle': 'Nytt startdatum',
-  'dashboard.dateShiftIntro':
-    'Du har ändrat när resan börjar. Hur ska dina planer följa de nya datumen?',
+  'dashboard.dateShiftIntro': 'Du har ändrat när resan börjar. Hur ska dina planer följa de nya datumen?',
   'dashboard.dateShiftKeepBookings': 'Behåll bokningar på sina datum',
   'dashboard.dateShiftKeepBookingsDesc':
     'Dagsplanerna flyttas med de nya datumen, medan bokningar och boenden ligger kvar på sina ursprungliga datum så länge dessa fortfarande ingår i resan.',
   'dashboard.dateShiftAll': 'Flytta allt',
-  'dashboard.dateShiftAllDesc':
-    'Hela resplanen flyttas med de nya datumen, inklusive bokningar och boenden.',
+  'dashboard.dateShiftAllDesc': 'Hela resplanen flyttas med de nya datumen, inklusive bokningar och boenden.',
   'dashboard.dateShiftHint':
     'Tips: om du bara vill flytta en del av resplanen kan du använda "Lägg till dag" i planeraren istället.',
   'dashboard.greeting.morning': 'God morgon,',

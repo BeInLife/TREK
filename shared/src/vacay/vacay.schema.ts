@@ -64,7 +64,11 @@ export const vacayYearSettingsRequestSchema = z.object({
   year_type: z.enum(['calendar', 'fiscal', 'anniversary']),
   year_start_month: z.number().int().min(1).max(12).optional(),
   year_start_day: z.number().int().min(1).max(31).optional(),
-  hire_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  hire_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullable()
+    .optional(),
 });
 export type VacayYearSettingsRequest = z.infer<typeof vacayYearSettingsRequestSchema>;
 

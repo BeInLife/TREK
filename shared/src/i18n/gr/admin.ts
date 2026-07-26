@@ -369,8 +369,7 @@ const admin: TranslationStrings = {
     'Προσθήκη στηλών και ενεργειών στις προβολές του ταξιδιού (κρατήσεις, τοποθεσίες, ημέρες)',
   'admin.plugins.perm.hook:map-marker-provider':
     'Προσθήκη δεικτών στον χάρτη του ταξιδιού (π.χ. εμφάνιση κρατήσεων ή POI)',
-  'admin.plugins.perm.hook:map-layer-provider':
-    'Σχεδίαση διαδρομών, διαδρόμων και ζωνών στον χάρτη του ταξιδιού',
+  'admin.plugins.perm.hook:map-layer-provider': 'Σχεδίαση διαδρομών, διαδρόμων και ζωνών στον χάρτη του ταξιδιού',
   'admin.plugins.perm.hook:route-provider':
     'Παροχή προφίλ δρομολόγησης με τα οποία ο σχεδιαστής υπολογίζει τις διαδρομές των ημερών (π.χ. δρομολόγηση ηλεκτρικού οχήματος με στάσεις φόρτισης)',
   'admin.plugins.perm.hook:day-schedule-provider':

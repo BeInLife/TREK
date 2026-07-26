@@ -337,9 +337,11 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.hook:table-contributor': '여행 보기(예약, 장소, 일자)에 열과 작업 추가',
   'admin.plugins.perm.hook:map-marker-provider': '여행 지도에 마커 추가(예: 예약 또는 POI 표시)',
   'admin.plugins.perm.hook:map-layer-provider': '여행 지도에 경로, 회랑, 구역 그리기',
-  'admin.plugins.perm.hook:route-provider': '플래너가 일자 경로 계산에 사용할 라우팅 프로필 제공(예: 충전소 경유 전기차 라우팅)',
+  'admin.plugins.perm.hook:route-provider':
+    '플래너가 일자 경로 계산에 사용할 라우팅 프로필 제공(예: 충전소 경유 전기차 라우팅)',
   'admin.plugins.perm.hook:day-schedule-provider': '일자 계획에 시간 항목 추가(충전 정차, 보안 검색 여유 시간)',
-  'admin.plugins.perm.geolocation:read': '해당 플러그인 화면이 열려 있는 동안 실시간 위치 요청 (브라우저에서 추가로 확인함)',
+  'admin.plugins.perm.geolocation:read':
+    '해당 플러그인 화면이 열려 있는 동안 실시간 위치 요청 (브라우저에서 추가로 확인함)',
   'admin.plugins.perm.hook:pdf-section-provider': '여행 PDF 내보내기에 텍스트 섹션 추가',
   'admin.plugins.perm.hook:atlas-layer-provider': 'Atlas 세계 지도에서 국가 강조 표시(예: 위시리스트 또는 여행 경보)',
   'admin.plugins.perm.hook:journal-entry-provider': '저널 항목에 추가 행(링크, 통계) 제공',

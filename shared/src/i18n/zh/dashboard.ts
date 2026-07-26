@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': '新建旅行',
   'dashboard.newTripSub': '从零开始规划新旅行',
   'dashboard.subscribeAllTrips': '订阅所有旅行',
-  'dashboard.subscribeAllTripsDesc': '一个日历订阅源，涵盖你所有进行中的旅行，并自动保持同步。不含已归档的旅行以及结束超过 90 天的旅行。',
+  'dashboard.subscribeAllTripsDesc':
+    '一个日历订阅源，涵盖你所有进行中的旅行，并自动保持同步。不含已归档的旅行以及结束超过 90 天的旅行。',
   'dashboard.gridView': '网格视图',
   'dashboard.listView': '列表视图',
   'dashboard.currency': '货币',

@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'رحلة جديدة',
   'dashboard.newTripSub': 'خطّط لرحلة جديدة من الصفر',
   'dashboard.subscribeAllTrips': 'الاشتراك في جميع الرحلات',
-  'dashboard.subscribeAllTripsDesc': 'خلاصة تقويم واحدة لكل رحلاتك النشطة، تبقى متزامنة تلقائيًا. لا تشمل الرحلات المؤرشفة ولا الرحلات التي انتهت قبل أكثر من 90 يومًا.',
+  'dashboard.subscribeAllTripsDesc':
+    'خلاصة تقويم واحدة لكل رحلاتك النشطة، تبقى متزامنة تلقائيًا. لا تشمل الرحلات المؤرشفة ولا الرحلات التي انتهت قبل أكثر من 90 يومًا.',
   'dashboard.gridView': 'عرض شبكي',
   'dashboard.listView': 'عرض قائمة',
   'dashboard.currency': 'العملة',
@@ -89,7 +90,8 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftTitle': 'تاريخ بداية جديد',
   'dashboard.dateShiftIntro': 'لقد غيّرت موعد بداية هذه الرحلة. كيف تريد أن تتبع خططك التواريخ الجديدة؟',
   'dashboard.dateShiftKeepBookings': 'إبقاء الحجوزات في تواريخها',
-  'dashboard.dateShiftKeepBookingsDesc': 'تنتقل خطط الأيام مع التواريخ الجديدة، بينما تبقى الحجوزات وأماكن الإقامة في تواريخها الأصلية ما دامت تلك التواريخ لا تزال ضمن الرحلة.',
+  'dashboard.dateShiftKeepBookingsDesc':
+    'تنتقل خطط الأيام مع التواريخ الجديدة، بينما تبقى الحجوزات وأماكن الإقامة في تواريخها الأصلية ما دامت تلك التواريخ لا تزال ضمن الرحلة.',
   'dashboard.dateShiftAll': 'نقل كل شيء',
   'dashboard.dateShiftAllDesc': 'ينتقل خط سير الرحلة بالكامل مع التواريخ الجديدة، بما في ذلك الحجوزات وأماكن الإقامة.',
   'dashboard.dateShiftHint': 'نصيحة: لنقل جزء من خط سير الرحلة فقط، استخدم "إضافة يوم" في مخطط الرحلة بدلاً من ذلك.',

@@ -4,7 +4,7 @@ const mobileJourney: TranslationStrings = {
   'mobileJourney.latestJourney': 'Laatste reis',
   'mobileJourney.otherJourneys': 'Andere reizen',
   'mobileJourney.entriesCount': '{count} items',
-  'mobileJourney.photosCount': '{count} foto\'s',
+  'mobileJourney.photosCount': "{count} foto's",
   'mobileJourney.placesCount': '{count} plaatsen',
   'mobileJourney.daysCount': '{count} dagen',
   'mobileJourney.time': 'Tijd',

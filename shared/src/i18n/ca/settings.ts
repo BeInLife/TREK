@@ -311,7 +311,8 @@ const settings: TranslationStrings = {
   'settings.aiAlwaysRetryHint':
     'Quan el lector estàndard no pugui llegir un fitxer, reintenta-ho automàticament amb IA.',
   'settings.currency': 'Divisa de visualització',
-  'settings.currencyHint': 'Els imports a Despeses es mostren convertits a aquesta divisa només per a la visualització — els imports originals no es modifiquen.',
+  'settings.currencyHint':
+    'Els imports a Despeses es mostren convertits a aquesta divisa només per a la visualització — els imports originals no es modifiquen.',
   'settings.airtrail.title': 'AirTrail',
   'settings.airtrail.hint': "Connecta't a la teva instància d'AirTrail per importar vols automàticament.",
   'settings.airtrail.url': 'URL de la instància',

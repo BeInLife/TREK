@@ -50,7 +50,7 @@ const vacay: TranslationStrings = {
   'vacay.sun': 'Zo',
   'vacay.publicHolidays': 'Feestdagen',
   'vacay.publicHolidaysHint': 'Mark public holidays in the calendar',
-    'vacay.schoolHolidays': 'School Holidays',
+  'vacay.schoolHolidays': 'School Holidays',
   'vacay.schoolHolidaysHint': 'Mark school holidays as a visual calendar layer',
   'vacay.selectCountry': 'Selecteer land',
   'vacay.selectRegion': 'Selecteer regio (optioneel)',
@@ -123,7 +123,7 @@ const vacay: TranslationStrings = {
   'vacay.addCalendar': 'Kalender toevoegen',
   'vacay.calendarColor': 'Kleur',
   'vacay.calendarLabel': 'Label',
-      'vacay.noCalendars': 'No holiday calendars added yet',
-'vacay.noSchoolCalendars': 'No school holiday calendars added yet',
+  'vacay.noCalendars': 'No holiday calendars added yet',
+  'vacay.noSchoolCalendars': 'No school holiday calendars added yet',
 };
 export default vacay;

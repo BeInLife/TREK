@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': '新しい旅行',
   'dashboard.newTripSub': '新しい旅行をゼロから計画',
   'dashboard.subscribeAllTrips': 'すべての旅行を購読',
-  'dashboard.subscribeAllTripsDesc': '進行中のすべての旅行をまとめた1つのカレンダーフィードで、自動的に同期されます。アーカイブ済みの旅行や、終了から90日以上経過した旅行は含まれません。',
+  'dashboard.subscribeAllTripsDesc':
+    '進行中のすべての旅行をまとめた1つのカレンダーフィードで、自動的に同期されます。アーカイブ済みの旅行や、終了から90日以上経過した旅行は含まれません。',
   'dashboard.gridView': 'グリッド表示',
   'dashboard.listView': 'リスト表示',
   'dashboard.currency': '通貨',
@@ -104,7 +105,8 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftTitle': '新しい開始日',
   'dashboard.dateShiftIntro': '旅行の開始日が変更されました。予定を新しい日程にどのように合わせますか？',
   'dashboard.dateShiftKeepBookings': '予約を元の日付のままにする',
-  'dashboard.dateShiftKeepBookingsDesc': '日別計画は新しい日程に合わせて移動しますが、予約と宿泊先は旅行期間内にある限り元の日付のままになります。',
+  'dashboard.dateShiftKeepBookingsDesc':
+    '日別計画は新しい日程に合わせて移動しますが、予約と宿泊先は旅行期間内にある限り元の日付のままになります。',
   'dashboard.dateShiftAll': 'すべてを移動する',
   'dashboard.dateShiftAllDesc': '予約や宿泊先を含む旅程全体が新しい日程に合わせて移動します。',
   'dashboard.dateShiftHint': 'ヒント：旅程の一部だけを移動したい場合は、プランナーの「日付を追加」を使用してください。',

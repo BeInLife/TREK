@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Yeni Seyahat',
   'dashboard.newTripSub': 'Sıfırdan yeni bir seyahat planla',
   'dashboard.subscribeAllTrips': 'Tüm seyahatlere abone ol',
-  'dashboard.subscribeAllTripsDesc': 'Tüm etkin seyahatlerin için tek bir takvim akışı, otomatik olarak senkronize tutulur. Arşivlenmiş seyahatler ve 90 günden fazla önce sona ermiş seyahatler hariç tutulur.',
+  'dashboard.subscribeAllTripsDesc':
+    'Tüm etkin seyahatlerin için tek bir takvim akışı, otomatik olarak senkronize tutulur. Arşivlenmiş seyahatler ve 90 günden fazla önce sona ermiş seyahatler hariç tutulur.',
   'dashboard.gridView': 'Izgara görünümü',
   'dashboard.listView': 'Liste görünümü',
   'dashboard.currency': 'Para birimi',
@@ -101,12 +102,15 @@ const dashboard: TranslationStrings = {
   'dashboard.titleRequired': 'Başlık gerekli',
   'dashboard.endDateError': 'Bitiş tarihi başlangıçtan sonra olmalı',
   'dashboard.dateShiftTitle': 'Yeni başlangıç tarihi',
-  'dashboard.dateShiftIntro': 'Bu seyahatin başlangıç tarihini değiştirdiniz. Planlarınız yeni tarihlere nasıl uyum sağlasın?',
+  'dashboard.dateShiftIntro':
+    'Bu seyahatin başlangıç tarihini değiştirdiniz. Planlarınız yeni tarihlere nasıl uyum sağlasın?',
   'dashboard.dateShiftKeepBookings': 'Rezervasyonları kendi tarihlerinde tut',
-  'dashboard.dateShiftKeepBookingsDesc': 'Gün planları yeni tarihlerle birlikte taşınır; rezervasyonlar ve konaklamalar ise seyahatin kapsamında kaldıkları sürece orijinal tarihlerinde kalır.',
+  'dashboard.dateShiftKeepBookingsDesc':
+    'Gün planları yeni tarihlerle birlikte taşınır; rezervasyonlar ve konaklamalar ise seyahatin kapsamında kaldıkları sürece orijinal tarihlerinde kalır.',
   'dashboard.dateShiftAll': 'Her şeyi kaydır',
   'dashboard.dateShiftAllDesc': 'Rezervasyonlar ve konaklamalar dahil tüm plan yeni tarihlerle birlikte taşınır.',
-  'dashboard.dateShiftHint': 'İpucu: planın yalnızca bir kısmını kaydırmak için planlayıcıdaki "Gün ekle" özelliğini kullanın.',
+  'dashboard.dateShiftHint':
+    'İpucu: planın yalnızca bir kısmını kaydırmak için planlayıcıdaki "Gün ekle" özelliğini kullanın.',
   'dashboard.greeting.morning': 'Günaydın,',
   'dashboard.greeting.afternoon': 'İyi günler,',
   'dashboard.greeting.evening': 'İyi akşamlar,',

@@ -11,9 +11,9 @@ const mobileVacay: TranslationStrings = {
   'mobileVacay.modeCompany': 'Entreprise',
   'mobileVacay.decreaseAllowance': 'Diminuer le quota',
   'mobileVacay.increaseAllowance': 'Augmenter le quota',
-  'mobileVacay.companyLegend': 'Congés d\'entreprise',
+  'mobileVacay.companyLegend': "Congés d'entreprise",
   'mobileVacay.editCalendar': 'Modifier le calendrier',
-  'mobileVacay.viewYear': 'Voir l\'année',
+  'mobileVacay.viewYear': "Voir l'année",
 };
 
 export default mobileVacay;

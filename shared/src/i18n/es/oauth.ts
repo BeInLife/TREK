@@ -28,9 +28,11 @@ const oauth: TranslationStrings = {
   'oauth.scope.places:write.label': 'Gestionar lugares',
   'oauth.scope.places:write.description': 'Crear, actualizar y eliminar lugares, asignaciones y etiquetas',
   'oauth.scope.collections:read.label': 'Ver colecciones',
-  'oauth.scope.collections:read.description': 'Leer las colecciones de lugares guardados, sus lugares, valoraciones, etiquetas y miembros',
+  'oauth.scope.collections:read.description':
+    'Leer las colecciones de lugares guardados, sus lugares, valoraciones, etiquetas y miembros',
   'oauth.scope.collections:write.label': 'Gestionar colecciones',
-  'oauth.scope.collections:write.description': 'Crear/editar colecciones, guardar, valorar, etiquetar y copiar lugares, y compartir listas',
+  'oauth.scope.collections:write.description':
+    'Crear/editar colecciones, guardar, valorar, etiquetar y copiar lugares, y compartir listas',
   'oauth.scope.atlas:read.label': 'Ver Atlas',
   'oauth.scope.atlas:read.description': 'Leer países visitados, regiones y lista de deseos',
   'oauth.scope.atlas:write.label': 'Gestionar Atlas',

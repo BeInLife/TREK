@@ -303,7 +303,8 @@ const settings: TranslationStrings = {
   'settings.notificationPreferences.email': 'Email',
   'settings.notificationPreferences.ntfy': 'Ntfy',
   'settings.currency': 'Moneda de visualización',
-  'settings.currencyHint': 'Los importes en Costes se muestran convertidos a esta moneda solo a efectos de visualización — los importes originales no se modifican.',
+  'settings.currencyHint':
+    'Los importes en Costes se muestran convertidos a esta moneda solo a efectos de visualización — los importes originales no se modifican.',
   'settings.currencyTrip': 'Moneda del viaje',
   'settings.passkey.title': 'Passkeys',
   'settings.passkey.description':

@@ -310,7 +310,8 @@ const settings: TranslationStrings = {
   'settings.mfa.toastDisabled': 'Ο έλεγχος ταυτότητας δύο παραγόντων απενεργοποιήθηκε',
   'settings.mfa.demoBlocked': 'Δεν είναι διαθέσιμο σε λειτουργία demo',
   'settings.currency': 'Νόμισμα εμφάνισης',
-  'settings.currencyHint': 'Τα ποσά στα Κόστη εμφανίζονται σε αυτό το νόμισμα μόνο για λόγους προβολής — τα αρχικά ποσά δεν αλλάζουν.',
+  'settings.currencyHint':
+    'Τα ποσά στα Κόστη εμφανίζονται σε αυτό το νόμισμα μόνο για λόγους προβολής — τα αρχικά ποσά δεν αλλάζουν.',
   'settings.currencyTrip': 'Νόμισμα ταξιδιού',
   'settings.passkey.title': 'Passkeys',
   'settings.passkey.description':

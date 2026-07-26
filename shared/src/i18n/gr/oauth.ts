@@ -29,9 +29,11 @@ const oauth: TranslationStrings = {
   'oauth.scope.places:write.label': 'Διαχείριση τοποθεσιών',
   'oauth.scope.places:write.description': 'Δημιουργία, ενημέρωση και διαγραφή τοποθεσιών, αναθέσεων και ετικετών',
   'oauth.scope.collections:read.label': 'Προβολή συλλογών',
-  'oauth.scope.collections:read.description': 'Ανάγνωση συλλογών αποθηκευμένων τοποθεσιών, των τοποθεσιών τους, των βαθμολογιών, των ετικετών και των μελών τους',
+  'oauth.scope.collections:read.description':
+    'Ανάγνωση συλλογών αποθηκευμένων τοποθεσιών, των τοποθεσιών τους, των βαθμολογιών, των ετικετών και των μελών τους',
   'oauth.scope.collections:write.label': 'Διαχείριση συλλογών',
-  'oauth.scope.collections:write.description': 'Δημιουργία/επεξεργασία συλλογών, αποθήκευση, βαθμολόγηση, προσθήκη ετικετών και αντιγραφή τοποθεσιών και κοινή χρήση λιστών',
+  'oauth.scope.collections:write.description':
+    'Δημιουργία/επεξεργασία συλλογών, αποθήκευση, βαθμολόγηση, προσθήκη ετικετών και αντιγραφή τοποθεσιών και κοινή χρήση λιστών',
   'oauth.scope.atlas:read.label': 'Προβολή Atlas',
   'oauth.scope.atlas:read.description': 'Ανάγνωση περιοχών που έχουν επισκεφθεί, χωρών και λίστας επιθυμιών',
   'oauth.scope.atlas:write.label': 'Διαχείριση Atlas',

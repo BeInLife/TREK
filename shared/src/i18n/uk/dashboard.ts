@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Нова поїздка',
   'dashboard.newTripSub': 'Сплануйте нову поїздку з нуля',
   'dashboard.subscribeAllTrips': 'Підписатися на всі поїздки',
-  'dashboard.subscribeAllTripsDesc': 'Один календарний фід для всіх ваших активних поїздок, що автоматично синхронізується. Не включає архівовані поїздки та поїздки, що завершилися понад 90 днів тому.',
+  'dashboard.subscribeAllTripsDesc':
+    'Один календарний фід для всіх ваших активних поїздок, що автоматично синхронізується. Не включає архівовані поїздки та поїздки, що завершилися понад 90 днів тому.',
   'dashboard.gridView': 'Плитка',
   'dashboard.listView': 'Список',
   'dashboard.currency': 'Валюта',
@@ -105,7 +106,8 @@ const dashboard: TranslationStrings = {
   'dashboard.dateShiftTitle': 'Нова дата початку',
   'dashboard.dateShiftIntro': 'Ви змінили дату початку поїздки. Як ваші плани мають перейти на нові дати?',
   'dashboard.dateShiftKeepBookings': 'Залишити бронювання на своїх датах',
-  'dashboard.dateShiftKeepBookingsDesc': 'Плани днів переміщуються разом із новими датами, а бронювання та проживання залишаються на своїх початкових датах, поки ті все ще входять до поїздки.',
+  'dashboard.dateShiftKeepBookingsDesc':
+    'Плани днів переміщуються разом із новими датами, а бронювання та проживання залишаються на своїх початкових датах, поки ті все ще входять до поїздки.',
   'dashboard.dateShiftAll': 'Перемістити все',
   'dashboard.dateShiftAllDesc': 'Весь маршрут переміщується на нові дати, включно з бронюваннями та проживанням.',
   'dashboard.dateShiftHint': 'Порада: щоб зсунути лише частину маршруту, скористайтеся «Додати день» у планувальнику.',

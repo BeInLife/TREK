@@ -11,7 +11,8 @@ const dashboard: TranslationStrings = {
   'dashboard.newTrip': 'Chuyến đi mới',
   'dashboard.newTripSub': 'Lên kế hoạch cho một chuyến đi mới từ đầu',
   'dashboard.subscribeAllTrips': 'Đăng ký tất cả chuyến đi',
-  'dashboard.subscribeAllTripsDesc': 'Một nguồn cấp lịch cho tất cả các chuyến đi đang hoạt động của bạn, được tự động giữ đồng bộ. Không bao gồm các chuyến đi đã lưu trữ và các chuyến đi đã kết thúc hơn 90 ngày trước.',
+  'dashboard.subscribeAllTripsDesc':
+    'Một nguồn cấp lịch cho tất cả các chuyến đi đang hoạt động của bạn, được tự động giữ đồng bộ. Không bao gồm các chuyến đi đã lưu trữ và các chuyến đi đã kết thúc hơn 90 ngày trước.',
   'dashboard.gridView': 'Chế độ xem lưới',
   'dashboard.listView': 'Chế độ xem danh sách',
   'dashboard.currency': 'Tiền tệ',

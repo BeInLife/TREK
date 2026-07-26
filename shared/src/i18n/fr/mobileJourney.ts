@@ -10,7 +10,7 @@ const mobileJourney: TranslationStrings = {
   'mobileJourney.time': 'Heure',
   'mobileJourney.tags': 'Tags',
   'mobileJourney.addTag': 'Ajouter un tag',
-  'mobileJourney.uploadFromDevice': 'Importer depuis l\'appareil',
+  'mobileJourney.uploadFromDevice': "Importer depuis l'appareil",
   'mobileJourney.browseProvider': 'Parcourir {name}',
 };
 

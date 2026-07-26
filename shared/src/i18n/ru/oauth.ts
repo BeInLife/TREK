@@ -28,9 +28,11 @@ const oauth: TranslationStrings = {
   'oauth.scope.places:write.label': 'Управление местами',
   'oauth.scope.places:write.description': 'Создание, обновление и удаление мест, назначений и тегов',
   'oauth.scope.collections:read.label': 'Просмотр коллекций',
-  'oauth.scope.collections:read.description': 'Чтение коллекций сохранённых мест, входящих в них мест, оценок, меток и участников',
+  'oauth.scope.collections:read.description':
+    'Чтение коллекций сохранённых мест, входящих в них мест, оценок, меток и участников',
   'oauth.scope.collections:write.label': 'Управление коллекциями',
-  'oauth.scope.collections:write.description': 'Создание и изменение коллекций, сохранение, оценка, добавление меток и копирование мест, а также предоставление доступа к спискам',
+  'oauth.scope.collections:write.description':
+    'Создание и изменение коллекций, сохранение, оценка, добавление меток и копирование мест, а также предоставление доступа к спискам',
   'oauth.scope.atlas:read.label': 'Просмотр Atlas',
   'oauth.scope.atlas:read.description': 'Чтение посещённых стран, регионов и списка желаний',
   'oauth.scope.atlas:write.label': 'Управление Atlas',
