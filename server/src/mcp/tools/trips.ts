@@ -14,7 +14,7 @@ import {
 } from '../../nest/share/share.bridge';
 import { isAddonEnabled, getCollabFeatures } from '../../services/adminService';
 import { ADDON_IDS } from '../../addons';
-import { countMessages, listPolls } from '../../services/collabService';
+import { countMessages, listPolls } from '../../nest/collab/collab.bridge';
 import {
   listItems as listTodoItems,
 } from '../../nest/todo/todo.bridge';

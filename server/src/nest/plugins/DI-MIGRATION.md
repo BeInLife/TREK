@@ -95,7 +95,7 @@ moved from hidden (bridge files) to explicit (the container). `DatabaseModule`
 is `@Global`, so no import needed for it.
 
 **Interaction with the service-migration track:** legacy `services/*` functions
-(place, day, files, collab, …) stay as plain imports inside the
+(place, day, trip, …) stay as plain imports inside the
 factory *until their own domain migrates*. Each future migration then swaps one
 import for one injected service (+ module export/import) — **no more bridge
 files for the plugin host, ever**. The factory's import list shrinks
@@ -106,8 +106,10 @@ migrated 2026-07 without touching the factory — it was never imported here
 either; settings swapped in 2026-07 indirectly — the factory never imported it,
 but its `resolveLlmConfig` import became the injected `LlmConfigResolver`;
 fileService swapped in 2026-07 — its ten imported symbols became the injected
-`FilesService` plus the load-time constants from `files.constants.ts`; next
-factory swap: collabService, the last Wave-3 domain imported here).
+`FilesService` plus the load-time constants from `files.constants.ts`;
+collabService swapped in 2026-07 — its seven imported symbols became the
+injected `CollabService`, completing Wave 3; the remaining factory imports are
+all Wave-4+ domains: trips, places, days, journeys, atlas, vacay, collections).
 
 ### Test impact (as landed)
 

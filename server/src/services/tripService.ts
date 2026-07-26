@@ -10,7 +10,7 @@ import { listDays, listAccommodations, addDays, resyncAccommodationDays, restamp
 import { listBudgetItems, removeUserFromBudgetItems } from './budgetService';
 import { listItems as listPackingItems } from '../nest/packing/packing.bridge';
 import { listReservations, loadEndpointsByTrip, resyncReservationDays } from './reservationService';
-import { listNotes as listCollabNotes } from './collabService';
+import { listNotes as listCollabNotes } from '../nest/collab/collab.bridge';
 import { shiftOwnerEntriesForTripWindow } from './vacayService';
 import { resolveTimeZone } from './timezoneService';
 

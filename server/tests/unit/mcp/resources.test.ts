@@ -6,7 +6,8 @@
  * see tools-todos.test.ts; trek://trips/{tripId}/packing and .../packing/bags
  * moved to PackingMcp — see tools-packing.test.ts;
  * trek://trips/{tripId}/days/{dayId}/notes moved to DayNotesMcp — see
- * tools-notes.test.ts).
+ * tools-notes.test.ts; trek://trips/{tripId}/collab-notes moved to CollabMcp —
+ * see tools-notes.test.ts).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 
@@ -333,33 +334,9 @@ describe('Resource: trek://trips/{tripId}/members', () => {
   });
 });
 
-describe('Resource: trek://trips/{tripId}/collab-notes', () => {
-  it('returns collab notes with username', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    createCollabNote(testDb, trip.id, user.id, { title: 'Ideas' });
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/collab-notes` });
-      const notes = parseResourceResult(result) as any[];
-      expect(notes).toHaveLength(1);
-      expect(notes[0].title).toBe('Ideas');
-      expect(notes[0].username).toBeTruthy();
-    });
-  });
-
-  it('returns access denied for unauthorized trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/collab-notes` });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-});
+// trek://trips/{tripId}/collab-notes moved to tools-notes.test.ts: it now
+// registers via the nest-mcp registry inside registerTools (CollabMcp
+// @ResourceTemplate), which this file's withTools: false harness never attaches.
 
 // trek://categories moved to tools-categories.test.ts: it now registers via
 // the nest-mcp registry inside registerTools (CategoriesMcp @Resource), which

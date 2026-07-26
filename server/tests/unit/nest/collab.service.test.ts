@@ -1,7 +1,10 @@
 /**
- * Unit tests for collabService — COLLAB-SVC-001 to COLLAB-SVC-030.
- * Covers votePoll edge cases, listMessages pagination, deleteMessage ownership,
- * updateNote partial fields, fetchLinkPreview, avatarUrl, createMessage reply validation.
+ * Unit tests for the DI-native CollabService — COLLAB-SVC-001 to COLLAB-SVC-033
+ * (001–030 moved 1:1 from the legacy tests/unit/services/collabService.test.ts;
+ * 031–033 pin the collab.bridge delegation). Covers votePoll edge cases,
+ * listMessages pagination, deleteMessage ownership, updateNote partial fields,
+ * linkPreview, avatarUrl, createMessage reply validation. Uses a real in-memory
+ * SQLite DB so SQL logic is exercised faithfully.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 
@@ -36,8 +39,9 @@ vi.mock('../../../src/config', () => ({
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
   updateJwtSecret: () => {},
 }));
+vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 
-// Stub checkSsrf so fetchLinkPreview tests can control SSRF behaviour
+// Stub checkSsrf so linkPreview tests can control SSRF behaviour
 const { mockCheckSsrf, mockCreatePinnedDispatcher } = vi.hoisted(() => ({
   mockCheckSsrf: vi.fn(async () => ({ allowed: true, resolvedIp: '93.184.216.34' })),
   mockCreatePinnedDispatcher: vi.fn(() => ({})),
@@ -51,18 +55,12 @@ import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip } from '../../helpers/factories';
-import {
-  avatarUrl,
-  votePoll,
-  listMessages,
-  createMessage,
-  deleteMessage,
-  updateNote,
-  createNote,
-  createPoll,
-  closePoll,
-  fetchLinkPreview,
-} from '../../../src/services/collabService';
+import { avatarUrl } from '../../../src/services/avatarUrl';
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { CollabService } from '../../../src/nest/collab/collab.service';
+import { listNotes as bridgeListNotes, listPolls as bridgeListPolls, countMessages as bridgeCountMessages } from '../../../src/nest/collab/collab.bridge';
+
+const svc = new CollabService(new DatabaseService(testDb));
 
 beforeAll(() => {
   createTables(testDb);
@@ -114,40 +112,40 @@ describe('avatarUrl', () => {
 describe('votePoll', () => {
   it('COLLAB-SVC-004: returns error "closed" when poll is closed', () => {
     const { user1, trip } = setup();
-    const poll = createPoll(trip.id, user1.id, { question: 'Q?', options: ['A', 'B'] });
-    closePoll(trip.id, poll!.id);
+    const poll = svc.createPoll(trip.id, user1.id, { question: 'Q?', options: ['A', 'B'] });
+    svc.closePoll(trip.id, poll!.id);
 
-    const result = votePoll(trip.id, poll!.id, user1.id, 0);
+    const result = svc.votePoll(trip.id, poll!.id, user1.id, 0);
     expect(result.error).toBe('closed');
   });
 
   it('COLLAB-SVC-005: returns error "invalid_index" for negative index', () => {
     const { user1, trip } = setup();
-    const poll = createPoll(trip.id, user1.id, { question: 'Q?', options: ['A', 'B'] });
+    const poll = svc.createPoll(trip.id, user1.id, { question: 'Q?', options: ['A', 'B'] });
 
-    const result = votePoll(trip.id, poll!.id, user1.id, -1);
+    const result = svc.votePoll(trip.id, poll!.id, user1.id, -1);
     expect(result.error).toBe('invalid_index');
   });
 
   it('COLLAB-SVC-006: returns error "invalid_index" for out-of-range index', () => {
     const { user1, trip } = setup();
-    const poll = createPoll(trip.id, user1.id, { question: 'Q?', options: ['A', 'B'] });
+    const poll = svc.createPoll(trip.id, user1.id, { question: 'Q?', options: ['A', 'B'] });
 
-    const result = votePoll(trip.id, poll!.id, user1.id, 5);
+    const result = svc.votePoll(trip.id, poll!.id, user1.id, 5);
     expect(result.error).toBe('invalid_index');
   });
 
   it('COLLAB-SVC-007: returns error "not_found" for nonexistent poll', () => {
     const { user1, trip } = setup();
-    const result = votePoll(trip.id, 9999, user1.id, 0);
+    const result = svc.votePoll(trip.id, 9999, user1.id, 0);
     expect(result.error).toBe('not_found');
   });
 
   it('COLLAB-SVC-008: successfully votes and returns poll with voters', () => {
     const { user1, trip } = setup();
-    const poll = createPoll(trip.id, user1.id, { question: 'Q?', options: ['Yes', 'No'] });
+    const poll = svc.createPoll(trip.id, user1.id, { question: 'Q?', options: ['Yes', 'No'] });
 
-    const result = votePoll(trip.id, poll!.id, user1.id, 0);
+    const result = svc.votePoll(trip.id, poll!.id, user1.id, 0);
     expect(result.error).toBeUndefined();
     expect(result.poll).toBeDefined();
     expect(result.poll!.options[0].voters).toHaveLength(1);
@@ -155,10 +153,10 @@ describe('votePoll', () => {
 
   it('COLLAB-SVC-009: toggles vote off when voted again on same option', () => {
     const { user1, trip } = setup();
-    const poll = createPoll(trip.id, user1.id, { question: 'Q?', options: ['Yes', 'No'] });
+    const poll = svc.createPoll(trip.id, user1.id, { question: 'Q?', options: ['Yes', 'No'] });
 
-    votePoll(trip.id, poll!.id, user1.id, 0);
-    const result = votePoll(trip.id, poll!.id, user1.id, 0);
+    svc.votePoll(trip.id, poll!.id, user1.id, 0);
+    const result = svc.votePoll(trip.id, poll!.id, user1.id, 0);
     expect(result.poll!.options[0].voters).toHaveLength(0);
   });
 });
@@ -168,21 +166,21 @@ describe('votePoll', () => {
 describe('listMessages', () => {
   it('COLLAB-SVC-010: returns all messages when no before cursor', () => {
     const { user1, trip } = setup();
-    createMessage(trip.id, user1.id, 'Hello');
-    createMessage(trip.id, user1.id, 'World');
+    svc.createMessage(trip.id, user1.id, 'Hello');
+    svc.createMessage(trip.id, user1.id, 'World');
 
-    const msgs = listMessages(trip.id);
+    const msgs = svc.listMessages(trip.id);
     expect(msgs).toHaveLength(2);
   });
 
   it('COLLAB-SVC-011: paginates using before cursor (returns messages with id < before)', () => {
     const { user1, trip } = setup();
-    const r1 = createMessage(trip.id, user1.id, 'First');
-    const r2 = createMessage(trip.id, user1.id, 'Second');
-    const r3 = createMessage(trip.id, user1.id, 'Third');
+    svc.createMessage(trip.id, user1.id, 'First');
+    svc.createMessage(trip.id, user1.id, 'Second');
+    const r3 = svc.createMessage(trip.id, user1.id, 'Third');
 
     const id3 = r3.message!.id;
-    const msgs = listMessages(trip.id, id3);
+    const msgs = svc.listMessages(trip.id, id3);
     expect(msgs.length).toBe(2);
     const texts = msgs.map(m => m.text);
     expect(texts).toContain('First');
@@ -192,22 +190,22 @@ describe('listMessages', () => {
 
   it('COLLAB-SVC-012: returns messages in ascending order (reversed after DESC query)', () => {
     const { user1, trip } = setup();
-    createMessage(trip.id, user1.id, 'A');
-    createMessage(trip.id, user1.id, 'B');
-    createMessage(trip.id, user1.id, 'C');
+    svc.createMessage(trip.id, user1.id, 'A');
+    svc.createMessage(trip.id, user1.id, 'B');
+    svc.createMessage(trip.id, user1.id, 'C');
 
-    const msgs = listMessages(trip.id);
+    const msgs = svc.listMessages(trip.id);
     expect(msgs[0].text).toBe('A');
     expect(msgs[2].text).toBe('C');
   });
 
   it('COLLAB-SVC-013: includes reactions grouped by emoji', () => {
     const { user1, trip } = setup();
-    const r = createMessage(trip.id, user1.id, 'React me');
+    const r = svc.createMessage(trip.id, user1.id, 'React me');
     const msgId = r.message!.id;
     testDb.prepare('INSERT INTO collab_message_reactions (message_id, user_id, emoji) VALUES (?, ?, ?)').run(msgId, user1.id, '👍');
 
-    const msgs = listMessages(trip.id);
+    const msgs = svc.listMessages(trip.id);
     expect(msgs[0].reactions).toBeDefined();
     expect(msgs[0].reactions).toHaveLength(1);
     expect(msgs[0].reactions[0].emoji).toBe('👍');
@@ -219,14 +217,14 @@ describe('listMessages', () => {
 describe('createMessage', () => {
   it('COLLAB-SVC-014: returns error when replyTo message does not exist', () => {
     const { user1, trip } = setup();
-    const result = createMessage(trip.id, user1.id, 'Reply to nothing', 9999);
+    const result = svc.createMessage(trip.id, user1.id, 'Reply to nothing', 9999);
     expect(result.error).toBe('reply_not_found');
   });
 
   it('COLLAB-SVC-015: creates message with valid replyTo', () => {
     const { user1, trip } = setup();
-    const r1 = createMessage(trip.id, user1.id, 'Original');
-    const r2 = createMessage(trip.id, user1.id, 'Reply', r1.message!.id);
+    const r1 = svc.createMessage(trip.id, user1.id, 'Original');
+    const r2 = svc.createMessage(trip.id, user1.id, 'Reply', r1.message!.id);
     expect(r2.error).toBeUndefined();
     expect(r2.message!.reply_to).toBe(r1.message!.id);
   });
@@ -237,23 +235,23 @@ describe('createMessage', () => {
 describe('deleteMessage', () => {
   it('COLLAB-SVC-016: returns error "not_owner" when user does not own message', () => {
     const { user1, user2, trip } = setup();
-    const r = createMessage(trip.id, user1.id, 'My message');
+    const r = svc.createMessage(trip.id, user1.id, 'My message');
 
-    const result = deleteMessage(trip.id, r.message!.id, user2.id);
+    const result = svc.deleteMessage(trip.id, r.message!.id, user2.id);
     expect(result.error).toBe('not_owner');
   });
 
   it('COLLAB-SVC-017: returns error "not_found" for nonexistent message', () => {
     const { user1, trip } = setup();
-    const result = deleteMessage(trip.id, 9999, user1.id);
+    const result = svc.deleteMessage(trip.id, 9999, user1.id);
     expect(result.error).toBe('not_found');
   });
 
   it('COLLAB-SVC-018: marks message as deleted when owner deletes it', () => {
     const { user1, trip } = setup();
-    const r = createMessage(trip.id, user1.id, 'Delete me');
+    const r = svc.createMessage(trip.id, user1.id, 'Delete me');
 
-    const result = deleteMessage(trip.id, r.message!.id, user1.id);
+    const result = svc.deleteMessage(trip.id, r.message!.id, user1.id);
     expect(result.error).toBeUndefined();
 
     const row = testDb.prepare('SELECT deleted FROM collab_messages WHERE id = ?').get(r.message!.id) as any;
@@ -266,9 +264,9 @@ describe('deleteMessage', () => {
 describe('updateNote', () => {
   it('COLLAB-SVC-019: updates only title when other fields are undefined', () => {
     const { user1, trip } = setup();
-    const note = createNote(trip.id, user1.id, { title: 'Original', content: 'Some content', website: 'https://example.com' });
+    const note = svc.createNote(trip.id, user1.id, { title: 'Original', content: 'Some content', website: 'https://example.com' });
 
-    updateNote(trip.id, note.id, { title: 'Updated' });
+    svc.updateNote(trip.id, note.id, { title: 'Updated' });
 
     const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
     expect(updated.title).toBe('Updated');
@@ -278,9 +276,9 @@ describe('updateNote', () => {
 
   it('COLLAB-SVC-020: clears content when content is explicitly set to empty string', () => {
     const { user1, trip } = setup();
-    const note = createNote(trip.id, user1.id, { title: 'T', content: 'Old content' });
+    const note = svc.createNote(trip.id, user1.id, { title: 'T', content: 'Old content' });
 
-    updateNote(trip.id, note.id, { content: '' });
+    svc.updateNote(trip.id, note.id, { content: '' });
 
     const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
     expect(updated.content).toBe('');
@@ -288,9 +286,9 @@ describe('updateNote', () => {
 
   it('COLLAB-SVC-021: updates website when website is defined', () => {
     const { user1, trip } = setup();
-    const note = createNote(trip.id, user1.id, { title: 'T' });
+    const note = svc.createNote(trip.id, user1.id, { title: 'T' });
 
-    updateNote(trip.id, note.id, { website: 'https://new.example.com' });
+    svc.updateNote(trip.id, note.id, { website: 'https://new.example.com' });
 
     const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
     expect(updated.website).toBe('https://new.example.com');
@@ -298,9 +296,9 @@ describe('updateNote', () => {
 
   it('COLLAB-SVC-022: clears website when website is explicitly set to empty string', () => {
     const { user1, trip } = setup();
-    const note = createNote(trip.id, user1.id, { title: 'T', website: 'https://old.com' });
+    const note = svc.createNote(trip.id, user1.id, { title: 'T', website: 'https://old.com' });
 
-    updateNote(trip.id, note.id, { website: '' });
+    svc.updateNote(trip.id, note.id, { website: '' });
 
     const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
     expect(updated.website).toBe('');
@@ -308,24 +306,24 @@ describe('updateNote', () => {
 
   it('COLLAB-SVC-023: returns null when note does not exist', () => {
     const { trip } = setup();
-    const result = updateNote(trip.id, 9999, { title: 'Ghost' });
+    const result = svc.updateNote(trip.id, 9999, { title: 'Ghost' });
     expect(result).toBeNull();
   });
 
   it('COLLAB-SVC-024: updates pinned flag', () => {
     const { user1, trip } = setup();
-    const note = createNote(trip.id, user1.id, { title: 'T', pinned: false });
+    const note = svc.createNote(trip.id, user1.id, { title: 'T', pinned: false });
 
-    updateNote(trip.id, note.id, { pinned: true });
+    svc.updateNote(trip.id, note.id, { pinned: true });
 
     const updated = testDb.prepare('SELECT * FROM collab_notes WHERE id = ?').get(note.id) as any;
     expect(updated.pinned).toBe(1);
   });
 });
 
-// ── fetchLinkPreview ──────────────────────────────────────────────────────────
+// ── linkPreview ───────────────────────────────────────────────────────────────
 
-describe('fetchLinkPreview', () => {
+describe('linkPreview', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -345,7 +343,7 @@ describe('fetchLinkPreview', () => {
       `,
     }));
 
-    const result = await fetchLinkPreview('https://example.com/page');
+    const result = await svc.linkPreview('https://example.com/page');
     expect(result.title).toBe('Test Title');
     expect(result.description).toBe('Test Description');
     expect(result.image).toBe('https://example.com/image.jpg');
@@ -358,7 +356,7 @@ describe('fetchLinkPreview', () => {
       text: async () => `<html><head><title>Page Title</title></head></html>`,
     }));
 
-    const result = await fetchLinkPreview('https://example.com/');
+    const result = await svc.linkPreview('https://example.com/');
     expect(result.title).toBe('Page Title');
   });
 
@@ -368,7 +366,7 @@ describe('fetchLinkPreview', () => {
       text: async () => '',
     }));
 
-    const result = await fetchLinkPreview('https://example.com/bad');
+    const result = await svc.linkPreview('https://example.com/bad');
     expect(result.title).toBeNull();
     expect(result.description).toBeNull();
     expect(result.url).toBe('https://example.com/bad');
@@ -377,14 +375,14 @@ describe('fetchLinkPreview', () => {
   it('COLLAB-SVC-028: returns fallback when SSRF check blocks the URL', async () => {
     mockCheckSsrf.mockResolvedValue({ allowed: false, error: 'SSRF blocked' });
 
-    const result = await fetchLinkPreview('https://169.254.169.254/');
+    const result = await svc.linkPreview('https://169.254.169.254/');
     expect(result.title).toBeNull();
   });
 
   it('COLLAB-SVC-029: returns fallback when fetch throws (network error)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')));
 
-    const result = await fetchLinkPreview('https://example.com/net-error');
+    const result = await svc.linkPreview('https://example.com/net-error');
     expect(result.title).toBeNull();
     expect(result.url).toBe('https://example.com/net-error');
   });
@@ -399,7 +397,38 @@ describe('fetchLinkPreview', () => {
       `,
     }));
 
-    const result = await fetchLinkPreview('https://example.com/meta');
+    const result = await svc.linkPreview('https://example.com/meta');
     expect(result.description).toBe('Meta description here');
   });
 });
+
+// ── collab.bridge delegation (out-of-container consumers) ─────────────────────
+
+describe('collab.bridge', () => {
+  it('COLLAB-SVC-031: listNotes delegates to CollabService over the shared db', () => {
+    const { user1, trip } = setup();
+    svc.createNote(trip.id, user1.id, { title: 'Bridged note' });
+
+    const notes = bridgeListNotes(trip.id);
+    expect(notes).toHaveLength(1);
+    expect(notes[0].title).toBe('Bridged note');
+  });
+
+  it('COLLAB-SVC-032: listPolls delegates to CollabService over the shared db', () => {
+    const { user1, trip } = setup();
+    svc.createPoll(trip.id, user1.id, { question: 'Bridged?', options: ['A', 'B'] });
+
+    const polls = bridgeListPolls(trip.id);
+    expect(polls).toHaveLength(1);
+    expect(polls[0]!.question).toBe('Bridged?');
+  });
+
+  it('COLLAB-SVC-033: countMessages delegates to CollabService over the shared db', () => {
+    const { user1, trip } = setup();
+    svc.createMessage(trip.id, user1.id, 'one');
+    svc.createMessage(trip.id, user1.id, 'two');
+
+    expect(bridgeCountMessages(trip.id)).toBe(2);
+  });
+});
+

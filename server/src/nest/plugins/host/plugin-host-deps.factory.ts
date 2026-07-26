@@ -5,7 +5,6 @@ import { listBudgetItems } from '../../../services/budgetService';
 import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
 import { BLOCKED_EXTENSIONS, filesDir } from '../../files/files.constants';
-import { createNote as createCollabNoteSvc, createPoll as createCollabPollSvc, votePoll as voteCollabPollSvc, createMessage as createCollabMessageSvc, listNotes as listCollabNotesSvc, listPolls as listCollabPollsSvc, listMessages as listCollabMessagesSvc } from '../../../services/collabService';
 import { getRates as getExchangeRates } from '../../../services/exchangeRateService';
 import { joinTripAsMember } from '../../../services/tripMembership';
 import { send as sendNotification } from '../../../services/notificationService';
@@ -37,6 +36,7 @@ import { AssignmentsService } from '../../assignments/assignments.service';
 import { LlmConfigResolver } from '../../llm-parse/llm-config.resolver';
 import { DatabaseService } from '../../database/database.service';
 import { FilesService } from '../../files/files.service';
+import { CollabService } from '../../collab/collab.service';
 import { notifyBookingChange } from '../../../services/reservationService';
 import { PluginRpcHost, ForbiddenResource, BadParams } from './rpc-host';
 import { appendAudit } from './plugin-audit';
@@ -137,7 +137,8 @@ export interface PluginCallRouter {
  * `plugin:{id}:{event}` so a plugin can't forge a core event.
  *
  * DI-native domain services (budget, reservations, tags, categories, todo,
- * packing, day-notes, assignments, oauth, files, the LLM config resolver) and
+ * packing, day-notes, assignments, oauth, files, collab, the LLM config
+ * resolver) and
  * the DatabaseService (all inline SQL + the trip-access helper) are
  * constructor-injected; legacy `services/*` domains stay plain function
  * imports until their own migration lands (DI-MIGRATION.md), at which point
@@ -158,6 +159,7 @@ export class PluginHostDepsFactory {
     private readonly llmConfig: LlmConfigResolver,
     private readonly db: DatabaseService,
     private readonly files: FilesService,
+    private readonly collab: CollabService,
   ) {}
 
   /**
@@ -297,33 +299,33 @@ export class PluginHostDepsFactory {
       },
       // --- Collab reads (collab addon; membership checked by the host). Same hydrated
       // shapes as the REST GETs, so a collab plugin can finally read what it writes. ---
-      listCollabNotes: (tripId) => { requireAddon(ADDON_IDS.COLLAB, 'collab'); return listCollabNotesSvc(tripId) as unknown[]; },
-      listCollabPolls: (tripId) => { requireAddon(ADDON_IDS.COLLAB, 'collab'); return listCollabPollsSvc(tripId) as unknown[]; },
-      listCollabMessages: (tripId, before) => { requireAddon(ADDON_IDS.COLLAB, 'collab'); return listCollabMessagesSvc(tripId, before) as unknown[]; },
+      listCollabNotes: (tripId) => { requireAddon(ADDON_IDS.COLLAB, 'collab'); return this.collab.listNotes(tripId) as unknown[]; },
+      listCollabPolls: (tripId) => { requireAddon(ADDON_IDS.COLLAB, 'collab'); return this.collab.listPolls(tripId) as unknown[]; },
+      listCollabMessages: (tripId, before) => { requireAddon(ADDON_IDS.COLLAB, 'collab'); return this.collab.listMessages(tripId, before) as unknown[]; },
       // --- Collab content (collab addon). The services validate + self-report errors. ---
       canEditCollab: (tripId, userId) => this.canEditTripAs('collab_edit', tripId, userId),
       createCollabNote: (tripId, input, actingUserId) => {
         requireAddon(ADDON_IDS.COLLAB, 'collab');
-        const note = createCollabNoteSvc(String(tripId), actingUserId, input as never);
+        const note = this.collab.createNote(String(tripId), actingUserId, input as never);
         broadcast(tripId, 'collab:note:created', { note }, undefined);
         return note;
       },
       createCollabPoll: (tripId, input, actingUserId) => {
         requireAddon(ADDON_IDS.COLLAB, 'collab');
-        const poll = createCollabPollSvc(String(tripId), actingUserId, input as never);
+        const poll = this.collab.createPoll(String(tripId), actingUserId, input as never);
         broadcast(tripId, 'collab:poll:created', { poll }, undefined);
         return poll;
       },
       voteCollabPoll: (tripId, pollId, optionIndex, actingUserId) => {
         requireAddon(ADDON_IDS.COLLAB, 'collab');
-        const result = voteCollabPollSvc(String(tripId), String(pollId), actingUserId, optionIndex);
+        const result = this.collab.votePoll(String(tripId), String(pollId), actingUserId, optionIndex);
         if (result.error) throw new BadParams(result.error);
         broadcast(tripId, 'collab:poll:voted', { poll: result.poll }, undefined);
         return result.poll;
       },
       createCollabMessage: (tripId, text, replyTo, actingUserId) => {
         requireAddon(ADDON_IDS.COLLAB, 'collab');
-        const result = createCollabMessageSvc(String(tripId), actingUserId, text, replyTo ?? null);
+        const result = this.collab.createMessage(String(tripId), actingUserId, text, replyTo ?? null);
         if (result.error) throw new BadParams(result.error);
         broadcast(tripId, 'collab:message:created', { message: result.message }, undefined);
         return result.message;

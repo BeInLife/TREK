@@ -2,8 +2,8 @@
  * Unit tests for MCP note tools: create_day_note, update_day_note, delete_day_note
  * (DayNotesMcp, DI-discovered — attached via the nest-mcp registry inside
  * registerTools, so every harness here keeps withTools on) and
- * create_collab_note, update_collab_note, delete_collab_note (still on the
- * legacy registrar).
+ * create_collab_note, update_collab_note, delete_collab_note (CollabMcp,
+ * DI-discovered via the same registry).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -507,6 +507,38 @@ describe('Tool: delete_collab_note', () => {
     await withHarness(user.id, async (h) => {
       const result = await h.client.callTool({ name: 'delete_collab_note', arguments: { tripId: trip.id, noteId: note.id } });
       expect(result.isError).toBe(true);
+    });
+  });
+});
+
+// Moved from resources.test.ts with the collab migration: the resource now
+// registers via the nest-mcp registry inside registerTools (CollabMcp
+// @ResourceTemplate), which resources.test.ts's withTools: false harness
+// never attaches.
+describe('Resource: trek://trips/{tripId}/collab-notes', () => {
+  it('returns collab notes with username', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    createCollabNote(testDb, trip.id, user.id, { title: 'Ideas' });
+
+    await withHarness(user.id, async (h) => {
+      const result = await h.client.readResource({ uri: `trek://trips/${trip.id}/collab-notes` });
+      const notes = parseResourceResult(result) as any[];
+      expect(notes).toHaveLength(1);
+      expect(notes[0].title).toBe('Ideas');
+      expect(notes[0].username).toBeTruthy();
+    });
+  });
+
+  it('returns access denied for unauthorized trip', async () => {
+    const { user } = createUser(testDb);
+    const { user: other } = createUser(testDb);
+    const trip = createTrip(testDb, other.id);
+
+    await withHarness(user.id, async (h) => {
+      const result = await h.client.readResource({ uri: `trek://trips/${trip.id}/collab-notes` });
+      const data = parseResourceResult(result) as any;
+      expect(data.error).toBeTruthy();
     });
   });
 });

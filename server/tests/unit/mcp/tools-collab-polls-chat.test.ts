@@ -2,7 +2,8 @@
  * Unit tests for MCP collab polls and chat tools (collab addon-gated):
  * list_collab_polls, create_collab_poll, vote_collab_poll, close_collab_poll,
  * delete_collab_poll, list_collab_messages, send_collab_message,
- * delete_collab_message, react_collab_message.
+ * delete_collab_message, react_collab_message (CollabMcp, DI-discovered —
+ * attached via the nest-mcp registry inside registerTools).
  * Resources: trek://trips/{tripId}/collab/polls, trek://trips/{tripId}/collab/messages.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';

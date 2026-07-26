@@ -5,6 +5,8 @@ import { AssignmentsMcp } from '../../src/nest/assignments/assignments.mcp';
 import { AssignmentsService } from '../../src/nest/assignments/assignments.service';
 import { CategoriesMcp } from '../../src/nest/categories/categories.mcp';
 import { CategoriesService } from '../../src/nest/categories/categories.service';
+import { CollabMcp } from '../../src/nest/collab/collab.mcp';
+import { CollabService } from '../../src/nest/collab/collab.service';
 import { DatabaseService } from '../../src/nest/database/database.service';
 import { DayNotesMcp } from '../../src/nest/days/day-notes.mcp';
 import { DayNotesService } from '../../src/nest/days/day-notes.service';
@@ -32,6 +34,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new PackingMcp(new PackingService(dbService)),
       new DayNotesMcp(new DayNotesService(dbService)),
       new AssignmentsMcp(new AssignmentsService(dbService)),
+      new CollabMcp(new CollabService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy },
   );

@@ -198,7 +198,9 @@ const filesStub = {
   findForeignLinkTarget: vi.fn((_tid: number, opts: { reservation_id?: number | null; place_id?: number | null }) =>
     (Number(opts.reservation_id) === 999 ? 'reservation_id' : Number(opts.place_id) === 999 ? 'place_id' : null)),
 } as unknown as FilesService;
-vi.mock('../../../src/services/collabService', () => ({
+// Collab: injected stub since the collabService DI migration (same behaviors
+// as the old path mock).
+const collabStub = {
   listNotes: vi.fn((tid: number) => [{ id: 1, trip_id: Number(tid), title: 'Note' }]),
   listPolls: vi.fn((tid: number) => [{ id: 2, trip_id: Number(tid), question: 'Q?' }]),
   listMessages: vi.fn((tid: number, before?: number) => [{ id: 3, trip_id: Number(tid), text: 'hi', _before: before ?? null }]),
@@ -208,7 +210,7 @@ vi.mock('../../../src/services/collabService', () => ({
     (optionIndex > 5 ? { error: 'Invalid option' } : { poll: { id: Number(pollId), votes: 1 } })),
   createMessage: vi.fn((tid: number, uid: number, text: string) =>
     (text === 'toolong' ? { error: 'Message too long' } : { message: { id: 142, trip_id: Number(tid), user_id: uid, text } })),
-}));
+} as unknown as CollabService;
 vi.mock('../../../src/services/tripMembership', () => ({
   joinTripAsMember: vi.fn((tripId: number, userId: number) => ({ joined: userId !== 5, tripId })), // owner add = no-op
 }));
@@ -309,12 +311,13 @@ import type { AssignmentsService } from '../../../src/nest/assignments/assignmen
 import type { PluginOAuthService } from '../../../src/nest/plugins/plugin-oauth.service';
 import type { LlmConfigResolver } from '../../../src/nest/llm-parse/llm-config.resolver';
 import type { FilesService } from '../../../src/nest/files/files.service';
+import type { CollabService } from '../../../src/nest/collab/collab.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 

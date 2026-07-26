@@ -5,11 +5,10 @@ import { listDays, listAccommodations } from '../services/dayService';
 import { listPlaces } from '../services/placeService';
 import { listBudgetItems, getPerPersonSummary, calculateSettlement } from '../services/budgetService';
 import { listReservations } from '../services/reservationService';
-import { listNotes as listCollabNotes, listPolls, listMessages } from '../services/collabService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
 import { getActivePlanId, getActivePlan, getPlanData, getEntries as getVacayEntries, getHolidays } from '../services/vacayService';
-import { isAddonEnabled, getCollabFeatures } from '../services/adminService';
+import { isAddonEnabled } from '../services/adminService';
 import { ADDON_IDS } from '../addons';
 import { canAccessJourney, getJourneyFull, listEntries, listJourneys } from '../services/journeyService';
 import { canRead, canReadTrips } from './scopes';
@@ -162,19 +161,9 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // Collab notes for a trip
-  const collabFeatures = isAddonEnabled(ADDON_IDS.COLLAB) ? getCollabFeatures() : null;
-  if (collabFeatures?.notes && canRead(scopes, 'collab')) server.registerResource(
-    'trip-collab-notes',
-    new ResourceTemplate('trek://trips/{tripId}/collab-notes', { list: undefined }),
-    { description: 'Shared collaborative notes for a trip', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const notes = listCollabNotes(id);
-      return jsonContent(uri.href, notes);
-    }
-  );
+  // The trek://trips/{tripId}/collab-notes, …/collab/polls and …/collab/messages
+  // resources moved to the DI-discovered src/nest/collab/collab.mcp.ts
+  // (@ResourceTemplate, attached via the nest-mcp registry in registerTools).
 
   // The trek://trips/{tripId}/todos resource moved to the DI-discovered
   // src/nest/todo/todo.mcp.ts (@ResourceTemplate, attached via the nest-mcp
@@ -265,36 +254,6 @@ export function registerResources(server: McpServer, userId: number, scopes: str
       async (uri) => {
         const regions = listManuallyVisitedRegions(userId);
         return jsonContent(uri.href, regions);
-      }
-    );
-  }
-
-  // Collab polls (addon + sub-feature gated)
-  if (collabFeatures?.polls && canRead(scopes, 'collab')) {
-    server.registerResource(
-      'trip-collab-polls',
-      new ResourceTemplate('trek://trips/{tripId}/collab/polls', { list: undefined }),
-      { description: 'All polls for a trip with vote counts per option', mimeType: 'application/json' },
-      async (uri, { tripId }) => {
-        const id = parseId(tripId);
-        if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-        const polls = listPolls(id);
-        return jsonContent(uri.href, polls);
-      }
-    );
-  }
-
-  // Collab messages (addon + sub-feature gated)
-  if (collabFeatures?.chat && canRead(scopes, 'collab')) {
-    server.registerResource(
-      'trip-collab-messages',
-      new ResourceTemplate('trek://trips/{tripId}/collab/messages', { list: undefined }),
-      { description: 'Most recent 100 chat messages for a trip', mimeType: 'application/json' },
-      async (uri, { tripId }) => {
-        const id = parseId(tripId);
-        if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-        const messages = listMessages(id);
-        return jsonContent(uri.href, messages);
       }
     );
   }

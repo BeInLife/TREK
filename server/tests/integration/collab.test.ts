@@ -48,22 +48,18 @@ vi.mock('../../src/config', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
-// Partially mock collabService to make fetchLinkPreview controllable
-vi.mock('../../src/services/collabService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/services/collabService')>();
-  return {
-    ...actual,
-    fetchLinkPreview: vi.fn().mockResolvedValue({ title: null, description: null, image: null, url: '' }),
-  };
-});
-
 import { buildApp } from '../../src/bootstrap';
 import { createTables } from '../../src/db/schema';
 import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip, addTripMember } from '../helpers/factories';
 import { authCookie, generateToken } from '../helpers/auth';
-import * as collabService from '../../src/services/collabService';
+import { CollabService } from '../../src/nest/collab/collab.service';
+
+// Spy on the DI-native service's linkPreview so the SSRF-guarded fetch never
+// runs; the rest of CollabService exercises its real SQL through the container.
+const linkPreviewSpy = vi.spyOn(CollabService.prototype, 'linkPreview')
+  .mockResolvedValue({ title: null, description: null, image: null, url: '' });
 
 let nestApp: INestApplication;
 let app: Application;
@@ -687,7 +683,7 @@ describe('Link preview', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    vi.mocked(collabService.fetchLinkPreview).mockResolvedValueOnce({
+    linkPreviewSpy.mockResolvedValueOnce({
       title: 'Example Domain',
       description: 'A test page',
       image: null,
@@ -706,7 +702,7 @@ describe('Link preview', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    vi.mocked(collabService.fetchLinkPreview).mockResolvedValueOnce({
+    linkPreviewSpy.mockResolvedValueOnce({
       title: null,
       description: null,
       image: null,
@@ -726,7 +722,7 @@ describe('Link preview', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    vi.mocked(collabService.fetchLinkPreview).mockRejectedValueOnce(new Error('Unexpected error'));
+    linkPreviewSpy.mockRejectedValueOnce(new Error('Unexpected error'));
 
     const res = await request(app)
       .get(`/api/trips/${trip.id}/collab/link-preview?url=https://example.com`)

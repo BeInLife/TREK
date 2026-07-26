@@ -8,7 +8,6 @@ import { registerPlaceTools } from './tools/places';
 import { registerCollectionTools } from './tools/collections';
 import { registerDayTools } from './tools/days';
 import { registerBudgetTools } from './tools/budget';
-import { registerCollabTools } from './tools/collab';
 import { registerTripTools } from './tools/trips';
 import { registerTransportTools } from './tools/transports';
 import { registerTransitTools } from './tools/transit';
@@ -41,7 +40,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
 
   registerAtlasTools(server, userId, scopes);
 
-  registerCollabTools(server, userId, scopes);
+  // The collab tools moved to the DI-discovered src/nest/collab/collab.mcp.ts
+  // (@McpController, attached via the nest-mcp registry below).
 
   registerTransportTools(server, userId, scopes);
 
