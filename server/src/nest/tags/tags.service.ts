@@ -5,8 +5,8 @@ import { DatabaseService } from '../database/database.service';
 /**
  * Tags domain service — owns the tag SQL (moved 1:1 from the legacy
  * services/tagService.ts: identical statements, the #10b981 default and the
- * COALESCE update semantics). Non-Nest consumers (MCP tools, plugin RPC host)
- * go through tags.bridge.ts instead of importing this class directly.
+ * COALESCE update semantics). All consumers are in-container now — the plugin
+ * RPC host injects this class via PluginHostDepsFactory.
  */
 @Injectable()
 export class TagsService {

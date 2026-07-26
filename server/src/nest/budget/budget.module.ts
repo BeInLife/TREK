@@ -6,5 +6,7 @@ import { BudgetService } from './budget.service';
 @Module({
   controllers: [BudgetController],
   providers: [BudgetService],
+  // For in-container consumers (PluginHostDepsFactory).
+  exports: [BudgetService],
 })
 export class BudgetModule {}

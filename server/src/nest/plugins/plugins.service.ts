@@ -6,7 +6,7 @@ import { devLinkEnabled } from './dev-link';
 import { maybe_encrypt_api_key, decrypt_api_key } from '../../services/apiKeyCrypto';
 import { readAudit } from './host/plugin-audit';
 import { keyFingerprint } from './signature-status';
-import { pluginBudgetUsage } from './host/create-rpc-host';
+import { pluginBudgetUsage } from './host/plugin-host-state';
 import { isAddonEnabled } from '../../services/adminService';
 import { parseDependencies, disabledRequiredAddons, resolveDependencyState, type PluginDepRow, type PluginDependencies, type VersionMismatch } from './dependencies';
 import { hostSatisfies, hostVersion } from './install/host-compat';

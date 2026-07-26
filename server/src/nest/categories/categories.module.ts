@@ -7,5 +7,7 @@ import { CategoriesService } from './categories.service';
 @Module({
   controllers: [CategoriesController],
   providers: [CategoriesService, CategoriesMcp],
+  // For in-container consumers (PluginHostDepsFactory).
+  exports: [CategoriesService],
 })
 export class CategoriesModule {}

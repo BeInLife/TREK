@@ -14,7 +14,8 @@ import { decrypt_api_key } from '../../services/apiKeyCrypto';
 import { PluginSupervisor, type PluginRouteInfo } from './supervisor/plugin-supervisor';
 import fs from 'node:fs';
 import path from 'node:path';
-import { createRealRpcHost, closePluginDataDb } from './host/create-rpc-host';
+import { PluginHostDepsFactory } from './host/plugin-host-deps.factory';
+import { closePluginDataDb } from './host/plugin-host-state';
 import { ForbiddenResource } from './host/rpc-host';
 import { removePluginData } from './host/plugin-data.service';
 import { isKnownPermission } from './protocol/envelope';
@@ -130,8 +131,13 @@ export class PluginDependencyError extends Error {
 export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
   // The rpc-host factory is bound to `this` as the inter-plugin router, so a
   // plugin's ctx.plugins.call / ctx.events.emit resolve through callPlugin/
-  // emitPluginEvent below (which own the dependency-edge authorization).
-  private readonly supervisor = new PluginSupervisor((id, granted) => createRealRpcHost(id, granted, this), {
+  // emitPluginEvent below (which own the dependency-edge authorization). The
+  // arrow reads this.hostDeps lazily at spawn time, so the field-initializer
+  // ordering (it runs before the constructor params are assigned) is safe.
+  private readonly supervisor = new PluginSupervisor((id, granted) => {
+    if (!this.hostDeps) throw new Error('PluginHostDepsFactory not provided — tests that activate plugins must pass one');
+    return this.hostDeps.create(id, granted, this);
+  }, {
     // Both hooks run from child lifecycle EventEmitter callbacks (exit / stderr 'data'),
     // so a throw here becomes an uncaughtException that has no host-side handler. During a
     // restore the core DB is briefly CLOSED (closeDb → the this.db proxy throws on access), so a
@@ -163,12 +169,13 @@ export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
   // Coalesces overlapping erasure drains (the sweep and enqueue both trigger one).
   private drainInFlight: Promise<void> | null = null;
 
-  // The registry stays optional at the type level so tests can construct the
-  // service without one; Nest always injects the real one (the provider is in
-  // the module).
+  // The registry and host-deps factory stay optional at the type level so tests
+  // can construct the service without them; Nest always injects the real ones
+  // (both providers are in the module).
   constructor(
     private readonly dbs: DatabaseService,
     private readonly registry?: PluginRegistryService,
+    private readonly hostDeps?: PluginHostDepsFactory,
   ) {}
 
   private get db() {

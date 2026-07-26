@@ -14,7 +14,7 @@ import { TodoService } from '../../src/nest/todo/todo.service';
  * for the no-Nest MCP harness. One line per migrated domain — add the new
  * @McpController instance here when a domain moves off the legacy registrar
  * fan-out. Constructing against the `db` Proxy keeps per-file vi.mock's of
- * src/db/database flowing through (same pattern as tags.bridge.ts).
+ * src/db/database flowing through (same pattern as todo.bridge.ts).
  */
 export function createMcpTestRegistry(): McpRegistry {
   const dbService = new DatabaseService(db);

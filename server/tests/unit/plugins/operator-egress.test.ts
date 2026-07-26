@@ -27,6 +27,7 @@ vi.mock('../../../src/config', () => ({ JWT_SECRET: 'x'.repeat(40), ENCRYPTION_K
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { PluginRuntimeService } from '../../../src/nest/plugins/plugin-runtime.service';
+import { createPluginRuntime } from '../../helpers/plugin-host';
 import { parseManifest, ManifestError } from '../../../src/nest/plugins/install/manifest';
 import { makeHostAllow } from '../../../src/nest/plugins/runtime/egress-policy';
 
@@ -44,7 +45,7 @@ beforeEach(() => {
   testDb.prepare('DELETE FROM plugins').run();
   testDb.prepare('DELETE FROM plugin_egress_hosts').run();
   testDb.prepare('DELETE FROM plugin_actions').run();
-  rt = new PluginRuntimeService(new DatabaseService(dbConn));
+  rt = createPluginRuntime(new DatabaseService(dbConn));
 });
 
 describe('operator-supplied egress hosts', () => {

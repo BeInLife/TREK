@@ -7,5 +7,7 @@ import { TagsService } from './tags.service';
 @Module({
   controllers: [TagsController],
   providers: [TagsService, TagsMcp],
+  // For in-container consumers (PluginHostDepsFactory).
+  exports: [TagsService],
 })
 export class TagsModule {}

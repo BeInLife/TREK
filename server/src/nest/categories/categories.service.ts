@@ -5,8 +5,8 @@ import { DatabaseService } from '../database/database.service';
 /**
  * Categories domain service — owns the category SQL (moved 1:1 from the legacy
  * services/categoryService.ts: identical statements, the #6366f1/📍 defaults
- * and the COALESCE update semantics). Non-Nest consumers (plugin RPC host) go
- * through categories.bridge.ts instead of importing this class directly.
+ * and the COALESCE update semantics). All consumers are in-container now — the
+ * plugin RPC host injects this class via PluginHostDepsFactory.
  */
 @Injectable()
 export class CategoriesService {

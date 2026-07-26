@@ -1,8 +1,11 @@
 /**
- * The production wiring that connects a plugin's capability host to the real
- * privileged modules (#plugins, M1). Verifies the per-plugin data db is cached,
- * a granted db:own call works through the wired host, and trip broadcasts are
- * force-namespaced to plugin:{id}:{event}.
+ * The production wiring (PluginHostDepsFactory) that connects a plugin's
+ * capability host to the real privileged modules (#plugins, M1). Verifies the
+ * per-plugin data db is cached, a granted db:own call works through the wired
+ * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
+ * DI-native domains (budget/reservations/tags/categories/todo/oauth) are
+ * constructor-injected stubs; legacy services/* domains stay path-mocked
+ * until their own DI migration lands.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
@@ -43,22 +46,22 @@ vi.mock('../../../src/websocket', () => ({ broadcast, broadcastToUser }));
 // Addon gate — flip per test to exercise the "addon disabled" branch of the reads.
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn(() => true as boolean) }));
 vi.mock('../../../src/services/adminService', () => ({ isAddonEnabled }));
-vi.mock('../../../src/nest/budget/budget.service', () => ({
-  BudgetService: class {
-    async create(tid: string, input: Record<string, unknown>) { return { id: 1, trip_id: Number(tid), ...input }; }
-    async update(id: string, tid: string, input: Record<string, unknown>) {
-      return id === '404' ? null : { id: Number(id), trip_id: Number(tid), ...input };
-    }
-    remove(id: string, _tid: string) { return id !== '404'; }
+// DI-native services are constructor-injected into PluginHostDepsFactory below —
+// stub instances instead of path mocks (same behaviors as before the DI move).
+const budgetStub = {
+  async create(tid: string, input: Record<string, unknown>) { return { id: 1, trip_id: Number(tid), ...input }; },
+  async update(id: string, tid: string, input: Record<string, unknown>) {
+    return id === '404' ? null : { id: Number(id), trip_id: Number(tid), ...input };
   },
-}));
+  remove(id: string, _tid: string) { return id !== '404'; },
+} as unknown as BudgetService;
 
 // Edit permission — flip per test to exercise the gates.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn((..._a: any[]) => true as boolean) }));
 vi.mock('../../../src/services/permissions', () => ({ checkPermission }));
 
-// The core write services are delegated to; mock them so the create-rpc-host deps'
+// The core write services are delegated to; mock them so the host deps'
 // wiring + error branches run without the full core schema. The error classes must
 // be defined INSIDE the factory (vi.mock is hoisted above module-scope code).
 vi.mock('../../../src/services/tripService', () => {
@@ -113,10 +116,19 @@ vi.mock('../../../src/services/assignmentService', () => ({
   placeExists: vi.fn((placeId: number) => placeId === 7),
   getAssignmentForTrip: vi.fn((id: number) => (id === 99 ? undefined : { id })),
 }));
-vi.mock('../../../src/services/budgetService', () => ({ listBudgetItems: vi.fn(() => []) }));
+// The extra named exports satisfy the real reservations.service.ts module (now
+// loaded un-mocked as a factory constructor dep); its instance is stubbed, so
+// these are never called.
+vi.mock('../../../src/services/budgetService', () => ({
+  listBudgetItems: vi.fn(() => []),
+  createBudgetItem: vi.fn(),
+  updateBudgetItem: vi.fn(),
+  deleteBudgetItem: vi.fn(),
+  linkBudgetItemToReservation: vi.fn(),
+}));
 vi.mock('../../../src/services/packingService', () => ({
   listItems: vi.fn((tid: number, userId: number) => [{ id: 1, trip_id: tid, name: 'Socks', _uid: userId }]),
-  // Return the item with the #858 privacy fields the create-rpc-host deps scope on.
+  // Return the item with the #858 privacy fields the host deps scope on.
   createItem: vi.fn((tid: number, input: { name: string; visibility?: string; recipient_ids?: number[] }, ownerId?: number) => {
     if (input.visibility === 'personal') return { id: 70, trip_id: Number(tid), name: input.name, is_private: 1, owner_id: ownerId, recipients: [] };
     if (input.visibility === 'shared') return { id: 70, trip_id: Number(tid), name: input.name, is_private: 1, owner_id: ownerId, recipients: (input.recipient_ids || []).map((id) => ({ user_id: id })) };
@@ -136,20 +148,20 @@ vi.mock('../../../src/services/packingService', () => ({
 }));
 vi.mock('../../../src/services/conflictResult', () => ({ isUpdateConflict: (r: unknown) => !!(r as { conflict?: boolean })?.conflict }));
 vi.mock('../../../src/services/weatherService', () => ({ getWeather: vi.fn(async (lat: string, lng: string) => ({ lat, lng, temp: 20 })) }));
-vi.mock('../../../src/nest/categories/categories.bridge', () => ({ listCategories: vi.fn(() => [{ id: 1, name: 'Food' }]) }));
-vi.mock('../../../src/nest/tags/tags.bridge', () => ({
-  listTags: vi.fn((uid: number) => [{ id: 1, user_id: uid, name: 'work' }]),
-  createTag: vi.fn((uid: number, name: string, color?: string) => ({ id: 9, user_id: uid, name, color })),
-  getTagByIdAndUser: vi.fn((tagId: number, _uid: number) => (Number(tagId) === 404 ? undefined : { id: Number(tagId) })),
-  updateTag: vi.fn((tagId: number, name?: string) => ({ id: Number(tagId), name })),
-  deleteTag: vi.fn(),
-}));
-vi.mock('../../../src/nest/todo/todo.bridge', () => ({
+const categoriesStub = { list: vi.fn(() => [{ id: 1, name: 'Food' }]) } as unknown as CategoriesService;
+const tagsStub = {
+  list: vi.fn((uid: number) => [{ id: 1, user_id: uid, name: 'work' }]),
+  create: vi.fn((uid: number, name: string, color?: string) => ({ id: 9, user_id: uid, name, color })),
+  getByIdAndUser: vi.fn((tagId: number, _uid: number) => (Number(tagId) === 404 ? undefined : { id: Number(tagId) })),
+  update: vi.fn((tagId: number, name?: string) => ({ id: Number(tagId), name })),
+  remove: vi.fn(),
+} as unknown as TagsService;
+const todoStub = {
   listItems: vi.fn((tid: number) => [{ id: 1, trip_id: Number(tid), name: 'Pack' }]),
   createItem: vi.fn((tid: number, data: { name: string }) => ({ id: 90, trip_id: Number(tid), name: data.name })),
   updateItem: vi.fn((_tid: number, id: string) => (Number(id) === 404 ? null : { id: Number(id), name: 'Done' })),
   deleteItem: vi.fn((_tid: number, id: string) => Number(id) !== 404),
-}));
+} as unknown as TodoService;
 const { testFilesDir } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const osm = require('node:os') as typeof import('node:os');
@@ -193,30 +205,28 @@ vi.mock('../../../src/nest/llm-parse/llm-config.resolver', () => ({
 }));
 const { llmExtract } = vi.hoisted(() => ({ llmExtract: vi.fn(async (input: { text?: string }) => [{ text: `answer:${input.text ?? ''}` }]) }));
 vi.mock('../../../src/nest/llm-parse/llm-client.factory', () => ({ createLlmClient: vi.fn(() => ({ extract: llmExtract })) }));
-// The per-user settings read + OAuth broker the runtime deps delegate to.
+// The per-user settings read the runtime deps delegate to (still a path mock —
+// readUserSettingDecrypted is a bare function export, not an injected service).
 vi.mock('../../../src/nest/plugins/plugins.service', () => ({ readUserSettingDecrypted: vi.fn((_pid: string, uid: number, key: string) => (uid === 5 && key === 'apiKey' ? 'k-5' : undefined)) }));
-vi.mock('../../../src/nest/plugins/plugin-oauth.service', () => ({ PluginOAuthService: class { async getAccessToken(_pid: string, uid: number) { return uid === 5 ? 'tok-5' : null; } } }));
-// Reservations: the Nest service is delegated to; mock it so the create-rpc-host
-// reservation deps' side-effect branches (accommodation / budget-sync / notify) run.
-vi.mock('../../../src/nest/reservations/reservations.service', () => ({
-  ReservationsService: class {
-    create(tid: string, input: Record<string, unknown>) {
-      return { reservation: { id: 40, trip_id: Number(tid), ...input }, accommodationCreated: input.title === 'Stay' };
-    }
-    getReservation(id: string) { return id === '404' ? undefined : { id: Number(id), title: 'Old', type: 'flight' }; }
-    update(id: string, tid: string, input: Record<string, unknown>) {
-      return { reservation: { id: Number(id), trip_id: Number(tid), ...input }, accommodationChanged: input.title === 'New' };
-    }
-    remove(id: string) {
-      if (id === '404') return { deleted: undefined, accommodationDeleted: false, deletedBudgetItemId: null };
-      return { deleted: { id: Number(id), title: 'Gone', type: 'hotel', accommodation_id: 7 }, accommodationDeleted: true, deletedBudgetItemId: 9 };
-    }
-    list(tid: string) { return [{ id: 1, trip_id: Number(tid), title: 'Flight' }]; }
-    syncBudgetOnCreate() {}
-    syncBudgetOnUpdate() {}
-    notifyBookingChange() {}
+const oauthStub = { async getAccessToken(_pid: string, uid: number) { return uid === 5 ? 'tok-5' : null; } } as unknown as PluginOAuthService;
+// Reservations: injected stub so the reservation deps' side-effect branches
+// (accommodation / budget-sync / notify) run.
+const reservationsStub = {
+  create(tid: string, input: Record<string, unknown>) {
+    return { reservation: { id: 40, trip_id: Number(tid), ...input }, accommodationCreated: input.title === 'Stay' };
   },
-}));
+  getReservation(id: string) { return id === '404' ? undefined : { id: Number(id), title: 'Old', type: 'flight' }; },
+  update(id: string, tid: string, input: Record<string, unknown>) {
+    return { reservation: { id: Number(id), trip_id: Number(tid), ...input }, accommodationChanged: input.title === 'New' };
+  },
+  remove(id: string) {
+    if (id === '404') return { deleted: undefined, accommodationDeleted: false, deletedBudgetItemId: null };
+    return { deleted: { id: Number(id), title: 'Gone', type: 'hotel', accommodation_id: 7 }, accommodationDeleted: true, deletedBudgetItemId: 9 };
+  },
+  list(tid: string) { return [{ id: 1, trip_id: Number(tid), title: 'Flight' }]; },
+  syncBudgetOnCreate() {},
+  syncBudgetOnUpdate() {},
+} as unknown as ReservationsService;
 vi.mock('../../../src/services/journeyService', () => ({
   listJourneys: vi.fn((uid: number) => [{ id: 1, owner: uid }]),
   // journeyId 88 = no access (listEntries self-gates to null); else returns entries
@@ -265,8 +275,22 @@ vi.mock('../../../src/services/dayNoteService', () => ({
   dayExists: vi.fn((dayId: number) => dayId === 3),
 }));
 
-import { createRealRpcHost, getPluginDataDb, closePluginDataDb } from '../../../src/nest/plugins/host/create-rpc-host';
+import { PluginHostDepsFactory, type PluginCallRouter } from '../../../src/nest/plugins/host/plugin-host-deps.factory';
+import { getPluginDataDb, closePluginDataDb } from '../../../src/nest/plugins/host/plugin-host-state';
 import { db as mockDb } from '../../../src/db/database';
+import type { BudgetService } from '../../../src/nest/budget/budget.service';
+import type { ReservationsService } from '../../../src/nest/reservations/reservations.service';
+import type { TagsService } from '../../../src/nest/tags/tags.service';
+import type { CategoriesService } from '../../../src/nest/categories/categories.service';
+import type { TodoService } from '../../../src/nest/todo/todo.service';
+import type { PluginOAuthService } from '../../../src/nest/plugins/plugin-oauth.service';
+
+// The factory under test, wired exactly like PluginsModule does — but with the
+// DI-native domain services replaced by the stubs above. The shim keeps the
+// ~45 historical call sites unchanged and supplies a default no-op router.
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, oauthStub);
+const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
+const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 
 let tmp: string;
 beforeAll(() => {
@@ -279,7 +303,7 @@ afterAll(() => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-describe('create-rpc-host wiring', () => {
+describe('plugin host wiring (PluginHostDepsFactory)', () => {
   it('caches one data db per plugin id', () => {
     const a = getPluginDataDb('wired');
     const b = getPluginDataDb('wired');
@@ -344,7 +368,7 @@ describe('create-rpc-host wiring', () => {
   });
 });
 
-describe('create-rpc-host — planner write + metadata deps', () => {
+describe('host-deps factory — planner write + metadata deps', () => {
   const host = (...perms: string[]) => createRealRpcHost('writer', new Set(perms));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const call = async (h: ReturnType<typeof host>, method: string, params: Record<string, unknown>, uid = 5): Promise<any> =>
@@ -447,7 +471,7 @@ describe('create-rpc-host — planner write + metadata deps', () => {
   });
 });
 
-describe('create-rpc-host — reservations, day notes, cross-trip + addon reads (Waves 1-5)', () => {
+describe('host-deps factory — reservations, day notes, cross-trip + addon reads (Waves 1-5)', () => {
   const host = (...perms: string[]) => createRealRpcHost('w15', new Set(perms));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const call = async (h: ReturnType<typeof host>, method: string, params: Record<string, unknown>, uid: number | undefined = 5): Promise<any> =>
@@ -572,7 +596,7 @@ describe('create-rpc-host — reservations, day notes, cross-trip + addon reads 
   });
 });
 
-describe('create-rpc-host — packing write with #858 privacy-scoped broadcasts', () => {
+describe('host-deps factory — packing write with #858 privacy-scoped broadcasts', () => {
   const host = () => createRealRpcHost('pk', new Set(['db:write:packing']))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const call = async (method: string, params: Record<string, unknown>, uid = 5): Promise<any> =>
@@ -635,7 +659,7 @@ describe('create-rpc-host — packing write with #858 privacy-scoped broadcasts'
   })
 })
 
-describe('create-rpc-host — Wave 1 wiring (weather/categories/tags/todos/roster/bags)', () => {
+describe('host-deps factory — Wave 1 wiring (weather/categories/tags/todos/roster/bags)', () => {
   const host = (...perms: string[]) => createRealRpcHost('w1', new Set(perms))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const call = async (h: ReturnType<typeof host>, method: string, params: Record<string, unknown>, uid: number | undefined = 5): Promise<any> =>
@@ -685,7 +709,7 @@ describe('create-rpc-host — Wave 1 wiring (weather/categories/tags/todos/roste
   })
 })
 
-describe('create-rpc-host — Wave 2 wiring (atlas/vacay/journal/collections writes)', () => {
+describe('host-deps factory — Wave 2 wiring (atlas/vacay/journal/collections writes)', () => {
   const host = (...perms: string[]) => createRealRpcHost('w2', new Set(perms))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const call = async (h: ReturnType<typeof host>, method: string, params: Record<string, unknown>, uid: number | undefined = 5): Promise<any> =>
@@ -736,7 +760,7 @@ describe('create-rpc-host — Wave 2 wiring (atlas/vacay/journal/collections wri
   })
 })
 
-describe('create-rpc-host — Wave 3 wiring (files write / collab / member-add)', () => {
+describe('host-deps factory — Wave 3 wiring (files write / collab / member-add)', () => {
   const host = (...perms: string[]) => createRealRpcHost('w3', new Set(perms))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const call = async (h: ReturnType<typeof host>, method: string, params: Record<string, unknown>, uid: number | undefined = 5): Promise<any> =>
@@ -806,7 +830,7 @@ describe('create-rpc-host — Wave 3 wiring (files write / collab / member-add)'
   })
 })
 
-describe('create-rpc-host — Wave 4 wiring (notify / ai)', () => {
+describe('host-deps factory — Wave 4 wiring (notify / ai)', () => {
   const host = (...perms: string[]) => createRealRpcHost('w4', new Set(perms))
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const call = async (h: ReturnType<typeof host>, method: string, params: Record<string, unknown>, uid: number | undefined = 5): Promise<any> =>
@@ -840,7 +864,7 @@ describe('create-rpc-host — Wave 4 wiring (notify / ai)', () => {
   })
 
   it('scheduler.set upserts by name with caps; cancel removes; recurring floor enforced', async () => {
-    const h = createRealRpcHost('wsched', new Set(['jobs:run']), { callPlugin: async () => undefined, emitPluginEvent: () => {} } as never);
+    const h = createRealRpcHost('wsched', new Set(['jobs:run']));
     const c = async (method: string, params: Record<string, unknown>): Promise<{ ok: boolean; result?: unknown; error?: { code: string; message: string } }> =>
       h.dispatch({ k: 'req', id: 'x', method, params }, undefined) as never;
     const due = Date.now() + 120_000;
@@ -868,7 +892,7 @@ describe('create-rpc-host — Wave 4 wiring (notify / ai)', () => {
     const ins = dbAny.prepare("INSERT INTO plugin_capability_audit (plugin_id, method, code, ts) VALUES (?, ?, 'ok', ?)");
     for (let i = 0; i < 100; i++) ins.run('wbudget', 'notify.send', today);
     for (let i = 0; i < 200; i++) ins.run('wbudget', 'ai.complete', today);
-    const h = createRealRpcHost('wbudget', new Set(['notify:send', 'ai:invoke']), { callPlugin: async () => undefined, emitPluginEvent: () => {} } as never);
+    const h = createRealRpcHost('wbudget', new Set(['notify:send', 'ai:invoke']));
     const c = async (method: string, params: Record<string, unknown>): Promise<{ ok: boolean; error?: { code: string; message: string } }> =>
       h.dispatch({ k: 'req', id: 'x', method, params }, 5) as never;
     const n = await c('notify.send', { input: { title: 't', body: 'b', scope: 'user', targetId: 5 } });
@@ -882,7 +906,7 @@ describe('create-rpc-host — Wave 4 wiring (notify / ai)', () => {
   })
 })
 
-describe('create-rpc-host — Wave 8 wiring (settings.get / oauth.getToken)', () => {
+describe('host-deps factory — Wave 8 wiring (settings.get / oauth.getToken)', () => {
   const host = (...perms: string[]) => createRealRpcHost('w8', new Set(perms))
   // uid is explicit here (no default) — an undefined must stay undefined, not fall back.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

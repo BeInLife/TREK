@@ -1,9 +1,9 @@
 /**
- * Unit tests for CategoriesService — CAT-SVC-001 through CAT-SVC-016.
+ * Unit tests for CategoriesService — CAT-SVC-001 through CAT-SVC-015.
  * Uses a real in-memory SQLite DB so SQL logic is exercised faithfully.
  * The service is constructed directly (new CategoriesService(new DatabaseService(db)))
- * — no Nest container needed. CAT-SVC-016 covers the categories.bridge export
- * used by the non-Nest plugin RPC host.
+ * — no Nest container needed. (CAT-SVC-016 covered the deleted
+ * categories.bridge; the plugin RPC host now injects CategoriesService directly.)
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -39,7 +39,6 @@ import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { CategoriesService } from '../../../src/nest/categories/categories.service';
-import { listCategories } from '../../../src/nest/categories/categories.bridge';
 
 const svc = new CategoriesService(new DatabaseService(testDb));
 
@@ -186,17 +185,5 @@ describe('remove', () => {
 
   it('CAT-SVC-015 — deleting a non-existent category does not throw', () => {
     expect(() => svc.remove(99999)).not.toThrow();
-  });
-});
-
-// ── categories.bridge (non-Nest entry point) ──────────────────────────────────
-
-describe('categories.bridge', () => {
-  it('CAT-SVC-016 — listCategories delegates to the service', () => {
-    const { user } = createUser(testDb);
-    svc.create(user.id, 'Bridged');
-    const names = listCategories().map((c) => c.name);
-    expect(names).toContain('Bridged');
-    expect(names).toEqual([...names].sort());
   });
 });

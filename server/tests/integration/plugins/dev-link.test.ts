@@ -32,6 +32,7 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
 
 import { PluginRuntimeService } from '../../../src/nest/plugins/plugin-runtime.service';
+import { createPluginRuntime } from '../../helpers/plugin-host';
 
 let codeRoot: string;
 let dataRoot: string;
@@ -60,7 +61,7 @@ beforeAll(() => {
   process.env.TREK_PLUGINS_DATA_DIR = dataRoot;
   process.env.TREK_PLUGINS_ENABLED = 'true';
   process.env.TREK_PLUGINS_DEV_LINK = '1';
-  runtime = new PluginRuntimeService(new DatabaseService(dbConn));
+  runtime = createPluginRuntime(new DatabaseService(dbConn));
 });
 
 afterAll(async () => {

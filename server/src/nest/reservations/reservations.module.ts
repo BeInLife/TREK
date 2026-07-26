@@ -13,5 +13,7 @@ import { UpcomingReservationsController } from './upcoming-reservations.controll
 @Module({
   controllers: [ReservationsController, AccommodationsController, UpcomingReservationsController],
   providers: [ReservationsService, AccommodationsService],
+  // For in-container consumers (PluginHostDepsFactory).
+  exports: [ReservationsService],
 })
 export class ReservationsModule {}

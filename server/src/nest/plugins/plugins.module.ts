@@ -23,6 +23,12 @@ import { PluginOAuthService } from './plugin-oauth.service';
 import { PluginsService } from './plugins.service';
 import { PluginRuntimeService } from './plugin-runtime.service';
 import { PluginRegistryService } from './registry/registry.service';
+import { PluginHostDepsFactory } from './host/plugin-host-deps.factory';
+import { TagsModule } from '../tags/tags.module';
+import { CategoriesModule } from '../categories/categories.module';
+import { BudgetModule } from '../budget/budget.module';
+import { ReservationsModule } from '../reservations/reservations.module';
+import { TodoModule } from '../todo/todo.module';
 
 /**
  * Plugin system (#plugins). M0 read side + M2 isolated runtime + M3 frontend:
@@ -32,8 +38,11 @@ import { PluginRegistryService } from './registry/registry.service';
  * widget assets at /plugin-frame/:id/*.
  */
 @Module({
+  // The DI-native domain services the plugin host wiring injects
+  // (PluginHostDepsFactory); DatabaseModule is @Global, so not listed.
+  imports: [TagsModule, CategoriesModule, BudgetModule, ReservationsModule, TodoModule],
   controllers: [PluginsController, PluginsFeedController, PluginsProxyController, PluginFrameController, PlaceDetailsController, TripWarningsController, ViewContributionsController, TripCardContributionsController, PluginPhotosController, PluginCalendarController, MapMarkersController, MapLayersController, PluginRoutesController, DayScheduleController, PdfSectionsController, AtlasLayersController, JournalEntryRowsController, PluginUserSettingsController, PluginOAuthController, PluginActivityController],
-  providers: [PluginsService, PluginRuntimeService, PluginRegistryService, PluginOAuthService],
+  providers: [PluginsService, PluginRuntimeService, PluginRegistryService, PluginOAuthService, PluginHostDepsFactory],
   // Exported so the admin addon-toggle handler can cascade-disable plugins whose
   // required addon was just turned off (#plugins dependencies).
   exports: [PluginRuntimeService],

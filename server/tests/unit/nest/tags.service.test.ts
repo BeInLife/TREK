@@ -1,9 +1,9 @@
 /**
- * Unit tests for TagsService — TAG-SVC-001 through TAG-SVC-020.
+ * Unit tests for TagsService — TAG-SVC-001 through TAG-SVC-015.
  * Uses a real in-memory SQLite DB so SQL logic is exercised faithfully.
  * The service is constructed directly (new TagsService(new DatabaseService(db)))
- * — no Nest container needed. TAG-SVC-016..020 cover the tags.bridge exports
- * used by non-Nest consumers (MCP tools, plugin RPC host).
+ * — no Nest container needed. (TAG-SVC-016..020 covered the deleted
+ * tags.bridge; the plugin RPC host now injects TagsService directly.)
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -39,7 +39,6 @@ import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { TagsService } from '../../../src/nest/tags/tags.service';
-import { listTags, createTag, getTagByIdAndUser, updateTag, deleteTag } from '../../../src/nest/tags/tags.bridge';
 
 const svc = new TagsService(new DatabaseService(testDb));
 
@@ -183,46 +182,5 @@ describe('remove', () => {
     const remaining = svc.list(user.id);
     expect(remaining).toHaveLength(1);
     expect(remaining[0].id).toBe(t1.id);
-  });
-});
-
-// ── tags.bridge (non-Nest entry point) ────────────────────────────────────────
-
-describe('tags.bridge', () => {
-  it('TAG-SVC-016 — listTags delegates to the service', () => {
-    const { user } = createUser(testDb);
-    createTag(user.id, 'Bravo');
-    createTag(user.id, 'Alpha');
-    expect(listTags(user.id).map((t) => t.name)).toEqual(['Alpha', 'Bravo']);
-  });
-
-  it('TAG-SVC-017 — createTag applies the default color', () => {
-    const { user } = createUser(testDb);
-    const tag = createTag(user.id, 'Bridged');
-    expect(tag.color).toBe('#10b981');
-    expect(tag.user_id).toBe(user.id);
-  });
-
-  it('TAG-SVC-018 — getTagByIdAndUser scopes to the owner', () => {
-    const { user: a } = createUser(testDb);
-    const { user: b } = createUser(testDb);
-    const tag = createTag(a.id, 'Mine');
-    expect(getTagByIdAndUser(tag.id, a.id)?.name).toBe('Mine');
-    expect(getTagByIdAndUser(tag.id, b.id)).toBeUndefined();
-  });
-
-  it('TAG-SVC-019 — updateTag keeps COALESCE semantics', () => {
-    const { user } = createUser(testDb);
-    const tag = createTag(user.id, 'Before', '#eeeeee');
-    const updated = updateTag(tag.id, 'After', undefined);
-    expect(updated?.name).toBe('After');
-    expect(updated?.color).toBe('#eeeeee');
-  });
-
-  it('TAG-SVC-020 — deleteTag removes the row', () => {
-    const { user } = createUser(testDb);
-    const tag = createTag(user.id, 'Gone');
-    deleteTag(tag.id);
-    expect(getTagByIdAndUser(tag.id, user.id)).toBeUndefined();
   });
 });
