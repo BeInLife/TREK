@@ -100,9 +100,10 @@ import for one injected service (+ module export/import) — **no more bridge
 files for the plugin host, ever**. The factory's import list shrinks
 monotonically as the recipe in `src/nest/README.md` proceeds (packing and
 day-notes swapped in 2026-07; trip-invite migrated without touching the
-factory — it was never imported here; assignments swapped in 2026-07; next
-factory swap: whichever Wave-3 domain the factory imports migrates next —
-shareService/fileService/collabService are all imported here).
+factory — it was never imported here; assignments swapped in 2026-07; share
+migrated 2026-07 without touching the factory — it was never imported here
+either; next factory swap: whichever Wave-3 domain the factory imports migrates
+next — fileService/collabService are both imported here).
 
 ### Test impact (as landed)
 

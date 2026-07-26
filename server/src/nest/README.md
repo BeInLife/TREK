@@ -27,8 +27,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
   categories, tags, notifications, atlas.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
-  todo, packing, day-notes, trip-invite, assignments — see the migration recipe
-  below.
+  todo, packing, day-notes, trip-invite, assignments, share — see the migration
+  recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -110,9 +110,13 @@ surface, no plugin-host import and no bridge — the SQL folded straight into
 `trip-invite.service.ts`); assignments followed (a 7-tool `assignments.mcp.ts`,
 the plugin-host swap, and a bridge kept only for the two legacy registrars —
 places and reservations — that borrow its existence checks; the batch loaders
-stay in `services/queryHelpers.ts`, shared with the unmigrated day/share/place
-services). Repeat these steps per
-service (next up: shareService). This is a **pure relocation** — byte-identical
+stay in `services/queryHelpers.ts`, shared with the unmigrated day/place
+services); share followed (never imported by the plugin host, and its three MCP
+tools stay in the legacy trips registrar — their `trips:share` scope gate has
+no declarative `access: { group, mode }` equivalent — so the port is the SQL
+fold plus a 3-export `share.bridge.ts` for `mcp/tools/trips.ts`). Repeat these
+steps per
+service (next up: settingsService). This is a **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it
 injects domain services via `PluginHostDepsFactory`, so a migrated domain adds

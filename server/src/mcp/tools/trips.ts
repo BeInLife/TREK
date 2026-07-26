@@ -11,7 +11,7 @@ import {
 } from '../../services/tripService';
 import {
   createOrUpdateShareLink, getShareLink, deleteShareLink,
-} from '../../services/shareService';
+} from '../../nest/share/share.bridge';
 import { isAddonEnabled, getCollabFeatures } from '../../services/adminService';
 import { ADDON_IDS } from '../../addons';
 import { countMessages, listPolls } from '../../services/collabService';
