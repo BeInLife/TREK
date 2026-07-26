@@ -1,8 +1,9 @@
 /**
  * Admin e2e — exercises the migrated /api/admin endpoints through the real
  * JwtAuthGuard + AdminGuard against a temp SQLite db. The admin service +
- * helpers are mocked; this focuses on auth (401), the admin gate (403 for a
- * non-admin), create-201, validation 400 and the dev-only 404.
+ * helpers are mocked (SettingsService is DI-native and runs real SQL); this
+ * focuses on auth (401), the admin gate (403 for a non-admin), create-201,
+ * validation 400 and the dev-only 404.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
@@ -19,6 +20,10 @@ const { db } = vi.hoisted(() => {
   tmp.exec('PRAGMA journal_mode = WAL');
   tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0);`);
+  // The real SettingsService (DI-injected into AdminService, no mock) reads these.
+  tmp.exec(`CREATE TABLE settings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
+    key TEXT NOT NULL, value TEXT, UNIQUE(user_id, key));`);
+  tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
   return { db: tmp };
 });
 
@@ -26,7 +31,6 @@ vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: (
 vi.mock('../../src/services/auditLog', () => ({ writeAudit: vi.fn(), getClientIp: () => '1.2.3.4', logInfo: vi.fn() }));
 vi.mock('../../src/mcp', () => ({ invalidateMcpSessions: vi.fn() }));
 vi.mock('../../src/services/notificationPreferencesService', () => ({ getPreferencesMatrix: vi.fn(() => ({})), setAdminPreferences: vi.fn() }));
-vi.mock('../../src/services/settingsService', () => ({ getAdminUserDefaults: vi.fn(() => ({})), setAdminUserDefaults: vi.fn() }));
 vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
 const { adminSvc } = vi.hoisted(() => ({

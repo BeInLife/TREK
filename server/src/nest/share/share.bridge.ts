@@ -2,6 +2,7 @@ import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
 import { ShareService } from './share.service';
 import type { SharePermissions } from './share.service';
+import { SettingsService } from '../settings/settings.service';
 
 /**
  * Non-Nest entry point for the share domain — for code running OUTSIDE the
@@ -16,7 +17,7 @@ import type { SharePermissions } from './share.service';
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.
  */
-const share = new ShareService(new DatabaseService(db));
+const share = new ShareService(new DatabaseService(db), new SettingsService(new DatabaseService(db)));
 
 export function createOrUpdateShareLink(tripId: string, createdBy: number, permissions: SharePermissions) {
   return share.createOrUpdate(tripId, createdBy, permissions);

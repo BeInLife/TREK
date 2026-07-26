@@ -5,7 +5,7 @@ import type { TripAccess } from '../database/database.service';
 import { checkPermission } from '../../services/permissions';
 import { loadTagsByPlaceIds } from '../../services/queryHelpers';
 import { serveFilePath } from '../../services/placePhotoCache';
-import { getUserSettings } from '../../services/settingsService';
+import { SettingsService } from '../settings/settings.service';
 import type { User } from '../../types';
 
 type Trip = TripAccess;
@@ -52,7 +52,10 @@ export interface ShareTokenInfo {
  */
 @Injectable()
 export class ShareService {
-  constructor(private readonly dbs: DatabaseService) {}
+  constructor(
+    private readonly dbs: DatabaseService,
+    private readonly settings: SettingsService,
+  ) {}
 
   verifyTripAccess(tripId: string, userId: number) {
     return this.dbs.canAccessTrip(tripId, userId);
@@ -275,7 +278,7 @@ export class ShareService {
     // (`||` on purpose: an empty-string trip currency also falls back).
     let baseCurrency = (trip as { currency?: string }).currency || 'EUR';
     if (shareRow.created_by != null) {
-      const ownerDefault = getUserSettings(shareRow.created_by)['default_currency'];
+      const ownerDefault = this.settings.getUserSettings(shareRow.created_by)['default_currency'];
       if (typeof ownerDefault === 'string' && ownerDefault.trim()) {
         baseCurrency = ownerDefault.trim();
       }

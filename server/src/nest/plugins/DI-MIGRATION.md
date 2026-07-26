@@ -76,9 +76,10 @@ microservice abstractions would obscure the boundary for near-zero payoff.
   previously `new`-ed **per call** inside the `getOAuthToken` closure).
   `create(id, granted, router)` returns the `PluginRpcHost` with the same
   ~130-member `HostDeps` object — closures over `this.*` for DI domains, still
-  plain imports for legacy `services/*`. `DatabaseService` is deliberately NOT
-  injected: after the singletons went away it had zero remaining uses (inline
-  SQL uses the raw `db` proxy until those domains migrate).
+  plain imports for legacy `services/*`. `DatabaseService` is injected too
+  (since 2026-07): the factory's inline SQL, the `canEditTripAs` gate and the
+  `HostDeps.db`/audit connection all go through it instead of the raw `db`
+  proxy (behavior-identical — the injected connection IS the proxy).
 - `host/plugin-host-state.ts` — the process-wide maps (`dataDbs`, `budgets`)
   and their accessors, kept module-level on purpose (see §1 table).
 
@@ -102,7 +103,9 @@ monotonically as the recipe in `src/nest/README.md` proceeds (packing and
 day-notes swapped in 2026-07; trip-invite migrated without touching the
 factory — it was never imported here; assignments swapped in 2026-07; share
 migrated 2026-07 without touching the factory — it was never imported here
-either; next factory swap: whichever Wave-3 domain the factory imports migrates
+either; settings swapped in 2026-07 indirectly — the factory never imported it,
+but its `resolveLlmConfig` import became the injected `LlmConfigResolver`;
+next factory swap: whichever Wave-3 domain the factory imports migrates
 next — fileService/collabService are both imported here).
 
 ### Test impact (as landed)

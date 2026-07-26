@@ -53,10 +53,11 @@ import {
 } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { ShareService } from '../../../src/nest/share/share.service';
+import { SettingsService } from '../../../src/nest/settings/settings.service';
 import { createOrUpdateShareLink, getShareLink, deleteShareLink } from '../../../src/nest/share/share.bridge';
 import type { User } from '../../../src/types';
 
-const svc = new ShareService(new DatabaseService(testDb));
+const svc = new ShareService(new DatabaseService(testDb), new SettingsService(new DatabaseService(testDb)));
 
 beforeAll(() => {
   createTables(testDb);

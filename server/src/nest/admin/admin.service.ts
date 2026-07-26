@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as svc from '../../services/adminService';
-import { getAdminUserDefaults, setAdminUserDefaults } from '../../services/settingsService';
+import { SettingsService } from '../settings/settings.service';
 import { invalidateMcpSessions } from '../../mcp';
 import { getPreferencesMatrix, setAdminPreferences } from '../../services/notificationPreferencesService';
 import { adminResetPasskeys } from '../../services/passkeyService';
@@ -13,6 +13,8 @@ import { adminResetPasskeys } from '../../services/passkeyService';
  */
 @Injectable()
 export class AdminService {
+  constructor(private readonly settings: SettingsService) {}
+
   // Users
   listUsers() { return svc.listUsers(); }
   createUser(body: unknown) { return svc.createUser(body as Parameters<typeof svc.createUser>[0]); }
@@ -75,8 +77,8 @@ export class AdminService {
   invalidateMcpSessions() { invalidateMcpSessions(); }
 
   // Settings + notification preference helpers (non-admin-service modules)
-  getAdminUserDefaults() { return getAdminUserDefaults(); }
-  setAdminUserDefaults(body: Record<string, unknown>) { return setAdminUserDefaults(body); }
+  getAdminUserDefaults() { return this.settings.getAdminUserDefaults(); }
+  setAdminUserDefaults(body: Record<string, unknown>) { return this.settings.setAdminUserDefaults(body); }
   getPreferencesMatrix(userId: number, role: string) { return getPreferencesMatrix(userId, role, 'admin'); }
   setAdminPreferences(userId: number, body: unknown) { return setAdminPreferences(userId, body as Parameters<typeof setAdminPreferences>[1]); }
 }

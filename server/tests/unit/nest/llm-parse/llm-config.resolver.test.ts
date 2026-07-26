@@ -9,13 +9,18 @@ vi.mock('../../../../src/db/database', () => ({ db: dbMock, closeDb: () => {}, r
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn() }));
 vi.mock('../../../../src/services/adminService', () => ({ isAddonEnabled }));
 
-const { getUserSettings, getDecryptedUserSetting } = vi.hoisted(() => ({
-  getUserSettings: vi.fn(() => ({}) as Record<string, unknown>),
-  getDecryptedUserSetting: vi.fn(() => null as string | null),
-}));
-vi.mock('../../../../src/services/settingsService', () => ({ getUserSettings, getDecryptedUserSetting }));
+import { LlmConfigResolver } from '../../../../src/nest/llm-parse/llm-config.resolver';
+import { DatabaseService } from '../../../../src/nest/database/database.service';
+import type { SettingsService } from '../../../../src/nest/settings/settings.service';
 
-import { resolveLlmConfig } from '../../../../src/nest/llm-parse/llm-config.resolver';
+// The resolver injects SettingsService — a stub instance instead of the old
+// legacy-module path mock (same behaviors as before the DI move). The
+// DatabaseService rides the same prepare/get mock the module-level db used.
+const getUserSettings = vi.fn(() => ({}) as Record<string, unknown>);
+const getDecryptedUserSetting = vi.fn(() => null as string | null);
+const settingsStub = { getUserSettings, getDecryptedUserSetting } as unknown as SettingsService;
+
+const resolver = new LlmConfigResolver(settingsStub, new DatabaseService(dbMock as never));
 
 function setInstanceConfig(config: unknown) {
   dbMock._stmt.get.mockReturnValue(config === undefined ? undefined : { config: JSON.stringify(config) });
@@ -32,12 +37,12 @@ beforeEach(() => {
 describe('resolveLlmConfig', () => {
   it('returns null when the addon is disabled', () => {
     isAddonEnabled.mockReturnValue(false);
-    expect(resolveLlmConfig(1)).toBeNull();
+    expect(resolver.resolve(1)).toBeNull();
   });
 
   it('uses instance config when present (and decrypts the key)', () => {
     setInstanceConfig({ provider: 'anthropic', model: 'claude-opus-4-8', apiKey: 'sk-plain', multimodal: true });
-    expect(resolveLlmConfig(1)).toEqual({
+    expect(resolver.resolve(1)).toEqual({
       provider: 'anthropic',
       model: 'claude-opus-4-8',
       baseUrl: undefined,
@@ -50,7 +55,7 @@ describe('resolveLlmConfig', () => {
     setInstanceConfig({ provider: 'anthropic' }); // no model → not usable
     getUserSettings.mockReturnValue({ llm_provider: 'local', llm_model: 'nuextract', llm_base_url: 'http://x/v1', llm_multimodal: true });
     getDecryptedUserSetting.mockReturnValue('user-key');
-    expect(resolveLlmConfig(7)).toEqual({
+    expect(resolver.resolve(7)).toEqual({
       provider: 'local',
       model: 'nuextract',
       baseUrl: 'http://x/v1',
@@ -62,6 +67,6 @@ describe('resolveLlmConfig', () => {
 
   it('returns null when neither instance nor user config is usable', () => {
     getUserSettings.mockReturnValue({ llm_provider: 'openai' }); // no model
-    expect(resolveLlmConfig(1)).toBeNull();
+    expect(resolver.resolve(1)).toBeNull();
   });
 });

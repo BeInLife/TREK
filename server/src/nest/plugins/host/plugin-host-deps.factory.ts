@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { readEnv } from '../../../app-config';
-import { db, canAccessTrip } from '../../../db/database';
 import { broadcast, broadcastToUser } from '../../../websocket';
 import { listBudgetItems } from '../../../services/budgetService';
 import { isUpdateConflict } from '../../../services/conflictResult';
@@ -10,7 +9,6 @@ import { createNote as createCollabNoteSvc, createPoll as createCollabPollSvc, v
 import { getRates as getExchangeRates } from '../../../services/exchangeRateService';
 import { joinTripAsMember } from '../../../services/tripMembership';
 import { send as sendNotification } from '../../../services/notificationService';
-import { resolveLlmConfig } from '../../llm-parse/llm-config.resolver';
 import { createLlmClient } from '../../llm-parse/llm-client.factory';
 import { readUserSettingDecrypted } from '../plugins.service';
 import { PluginOAuthService } from '../plugin-oauth.service';
@@ -36,24 +34,12 @@ import { TodoService } from '../../todo/todo.service';
 import { PackingService } from '../../packing/packing.service';
 import { DayNotesService } from '../../days/day-notes.service';
 import { AssignmentsService } from '../../assignments/assignments.service';
+import { LlmConfigResolver } from '../../llm-parse/llm-config.resolver';
+import { DatabaseService } from '../../database/database.service';
 import { notifyBookingChange } from '../../../services/reservationService';
 import { PluginRpcHost, ForbiddenResource, BadParams } from './rpc-host';
 import { appendAudit } from './plugin-audit';
 import { getPluginDataDb, budgetFor } from './plugin-host-state';
-
-/**
- * The trip-access + role gate used by every planner write, mirroring the app's
- * per-domain `canEdit` (canAccessTrip + checkPermission for the entity's *_edit
- * action). Returns false — never throws — so the caller maps it to a clean
- * RESOURCE_FORBIDDEN.
- */
-function canEditTripAs(action: string, tripId: number, userId: number): boolean {
-  const trip = canAccessTrip(tripId, userId) as { user_id: number } | undefined;
-  if (!trip) return false;
-  const u = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
-  if (!u) return false;
-  return checkPermission(action, u.role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
-}
 
 // The booking notification the REST controller sends after a create/update/delete
 // is fire-and-forget, so it never blocks the plugin write.
@@ -145,15 +131,16 @@ export interface PluginCallRouter {
 
 /**
  * Wires a plugin's capability host to the REAL privileged modules (#plugins,
- * M1). This is the ONLY plugin file that imports db/websocket — it runs in the
+ * M1). This is the ONLY plugin file that imports the websocket — it runs in the
  * host (parent), never in the child. Broadcasts are force-namespaced to
  * `plugin:{id}:{event}` so a plugin can't forge a core event.
  *
  * DI-native domain services (budget, reservations, tags, categories, todo,
- * packing, day-notes, assignments, oauth) are constructor-injected; legacy
- * `services/*` domains stay plain function imports until their own migration
- * lands (DI-MIGRATION.md), at which point each swaps one import for one
- * injected service.
+ * packing, day-notes, assignments, oauth, the LLM config resolver) and the
+ * DatabaseService (all inline SQL + the trip-access helper) are
+ * constructor-injected; legacy `services/*` domains stay plain function
+ * imports until their own migration lands (DI-MIGRATION.md), at which point
+ * each swaps one import for one injected service.
  */
 @Injectable()
 export class PluginHostDepsFactory {
@@ -167,7 +154,23 @@ export class PluginHostDepsFactory {
     private readonly oauth: PluginOAuthService,
     private readonly dayNotes: DayNotesService,
     private readonly assignments: AssignmentsService,
+    private readonly llmConfig: LlmConfigResolver,
+    private readonly db: DatabaseService,
   ) {}
+
+  /**
+   * The trip-access + role gate used by every planner write, mirroring the app's
+   * per-domain `canEdit` (canAccessTrip + checkPermission for the entity's *_edit
+   * action). Returns false — never throws — so the caller maps it to a clean
+   * RESOURCE_FORBIDDEN.
+   */
+  private canEditTripAs(action: string, tripId: number, userId: number): boolean {
+    const trip = this.db.canAccessTrip(tripId, userId) as { user_id: number } | undefined;
+    if (!trip) return false;
+    const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
+    if (!u) return false;
+    return checkPermission(action, u.role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
+  }
 
   create(id: string, granted: ReadonlySet<string>, router: PluginCallRouter): PluginRpcHost {
     return new PluginRpcHost(id, granted, {
@@ -180,14 +183,14 @@ export class PluginHostDepsFactory {
       // one the moment a stale dispose closes it. Safe because db.* is synchronous, so no
       // call is ever mid-flight when a dispose from another tick closes the handle.
       get data() { return getPluginDataDb(id); },
-      db,
-      canAccessTrip: (tripId, userId) => canAccessTrip(tripId, userId),
+      db: this.db.connection,
+      canAccessTrip: (tripId, userId) => this.db.canAccessTrip(tripId, userId),
       // The router binds this host's plugin id as the caller/source.
       callPlugin: (targetId, fn, args, actingUserId) => router.callPlugin(id, targetId, fn, args, actingUserId),
       emitPluginEvent: (event, payload) => router.emitPluginEvent(id, event, payload),
       // Two users "share a trip" when both are owner-or-member of the same trip.
       canSeeUser: (actingUserId, targetUserId) =>
-        !!db
+        !!this.db
           .prepare(
             `SELECT 1 FROM trips t
                LEFT JOIN trip_members m1 ON m1.trip_id = t.id AND m1.user_id = ?
@@ -199,15 +202,15 @@ export class PluginHostDepsFactory {
           .get(actingUserId, targetUserId, actingUserId, targetUserId),
       broadcastToTrip: (tripId, event, payload) => broadcast(tripId, `plugin:${id}:${event}`, payload),
       broadcastToUser: (userId, payload) => broadcastToUser(userId, { type: `plugin:${id}`, ...payload }),
-      audit: (entry) => appendAudit(db, entry),
+      audit: (entry) => appendAudit(this.db.connection, entry),
       // --- Costs (budget items) ---
       budgetAddonEnabled: () => isAddonEnabled(ADDON_IDS.BUDGET),
       // Same gate as a REST/MCP budget mutation: the acting user must have trip
       // access AND the 'budget_edit' permission for their global role.
       canEditCosts: (tripId, userId) => {
-        const trip = canAccessTrip(tripId, userId) as { user_id: number } | undefined;
+        const trip = this.db.canAccessTrip(tripId, userId) as { user_id: number } | undefined;
         if (!trip) return false;
-        const u = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
+        const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
         if (!u) return false;
         return checkPermission('budget_edit', u.role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
       },
@@ -234,16 +237,16 @@ export class PluginHostDepsFactory {
       // --- Files write. Bytes arrive as bounded base64; the extension is validated
       // against the central blocklist BEFORE anything touches disk, and link targets
       // must live on the same trip (findForeignLinkTarget). Same events as the app. ---
-      canUploadFiles: (tripId, userId) => canEditTripAs('file_upload', tripId, userId),
-      canEditFiles: (tripId, userId) => canEditTripAs('file_edit', tripId, userId),
-      canDeleteFiles: (tripId, userId) => canEditTripAs('file_delete', tripId, userId),
+      canUploadFiles: (tripId, userId) => this.canEditTripAs('file_upload', tripId, userId),
+      canEditFiles: (tripId, userId) => this.canEditTripAs('file_edit', tripId, userId),
+      canDeleteFiles: (tripId, userId) => this.canEditTripAs('file_delete', tripId, userId),
       createTripFile: (tripId, input, actingUserId) => {
         // Mirror the REST upload guard (files.controller): a demo user must not write
         // bytes to the shared demo instance, even through a plugin's db:write:files.
         // Only resolve the email when demo mode is actually on — keeps the hot path
         // (and the schema surface) untouched for self-hosted installs.
         if (readEnv().demo.enabled) {
-          const uploader = db.prepare('SELECT email FROM users WHERE id = ?').get(actingUserId) as { email?: string } | undefined;
+          const uploader = this.db.prepare('SELECT email FROM users WHERE id = ?').get(actingUserId) as { email?: string } | undefined;
           if (isDemoEmail(uploader?.email)) throw new ForbiddenResource('Uploads are disabled in demo mode.');
         }
         const i = input as { name: string; content_base64: string; mimetype?: string; description?: string; place_id?: number; reservation_id?: number };
@@ -296,7 +299,7 @@ export class PluginHostDepsFactory {
       listCollabPolls: (tripId) => { requireAddon(ADDON_IDS.COLLAB, 'collab'); return listCollabPollsSvc(tripId) as unknown[]; },
       listCollabMessages: (tripId, before) => { requireAddon(ADDON_IDS.COLLAB, 'collab'); return listCollabMessagesSvc(tripId, before) as unknown[]; },
       // --- Collab content (collab addon). The services validate + self-report errors. ---
-      canEditCollab: (tripId, userId) => canEditTripAs('collab_edit', tripId, userId),
+      canEditCollab: (tripId, userId) => this.canEditTripAs('collab_edit', tripId, userId),
       createCollabNote: (tripId, input, actingUserId) => {
         requireAddon(ADDON_IDS.COLLAB, 'collab');
         const note = createCollabNoteSvc(String(tripId), actingUserId, input as never);
@@ -325,16 +328,16 @@ export class PluginHostDepsFactory {
       },
       // --- Member add (member_manage). Grants trip access — the target must exist;
       // the acting user is recorded as the inviter. Owner/duplicate adds are no-ops. ---
-      canManageMembers: (tripId, userId) => canEditTripAs('member_manage', tripId, userId),
+      canManageMembers: (tripId, userId) => this.canEditTripAs('member_manage', tripId, userId),
       addTripMember: (tripId, targetUserId, invitedBy) => {
-        const target = db.prepare('SELECT id FROM users WHERE id = ?').get(targetUserId) as { id: number } | undefined;
+        const target = this.db.prepare('SELECT id FROM users WHERE id = ?').get(targetUserId) as { id: number } | undefined;
         if (!target) throw new ForbiddenResource(`no user ${targetUserId}`);
         return joinTripAsMember(tripId, targetUserId, invitedBy);
       },
       removeTripMember: (tripId, targetUserId) => {
         // Never remove the OWNER via this path — that would orphan the trip. Ownership
         // transfer is a separate, deliberate action, not a member-management side effect.
-        const trip = db.prepare('SELECT user_id FROM trips WHERE id = ?').get(tripId) as { user_id: number } | undefined;
+        const trip = this.db.prepare('SELECT user_id FROM trips WHERE id = ?').get(tripId) as { user_id: number } | undefined;
         if (trip && trip.user_id === targetUserId) throw new ForbiddenResource('cannot remove the trip owner');
         removeTripMemberSvc(tripId, targetUserId);
         return { removed: true };
@@ -343,7 +346,7 @@ export class PluginHostDepsFactory {
       // per-user preferences are all owned by notificationService.send; the plugin
       // supplies only the target (host-scoped by the router) + plain text. actorId is
       // null (no user sender), so the message body carries the plugin's content. ---
-      canAccessTripForNotify: (tripId, userId) => !!canAccessTrip(tripId, userId),
+      canAccessTripForNotify: (tripId, userId) => !!this.db.canAccessTrip(tripId, userId),
       sendPluginNotification: async (_pluginId, input) => {
         if (!budgetFor(id).take('notify', Date.now())) throw new BadParams('daily notification budget exhausted (resets at UTC midnight)');
         await sendNotification({
@@ -356,13 +359,13 @@ export class PluginHostDepsFactory {
         });
         return { sent: true };
       },
-      // --- Host-mediated LLM. The host holds the credential (resolveLlmConfig, encrypted
+      // --- Host-mediated LLM. The host holds the credential (LlmConfigResolver, encrypted
       // apiKey) and runs the call under the acting user's provider config; caps + the
       // provider-availability check live at the router. Reuses the extraction client:
       // complete() wraps it with a {text} schema; extract() passes the plugin's schema. ---
-      aiConfigured: (userId) => resolveLlmConfig(userId) !== null,
+      aiConfigured: (userId) => this.llmConfig.resolve(userId) !== null,
       aiComplete: async (userId, prompt, system) => {
-        const config = resolveLlmConfig(userId);
+        const config = this.llmConfig.resolve(userId);
         if (!config) throw new BadParams('no AI provider is configured for this user');
         if (!budgetFor(id).take('ai', Date.now())) throw new BadParams('daily AI budget exhausted (resets at UTC midnight)');
         const results = await createLlmClient(config).extract({
@@ -374,7 +377,7 @@ export class PluginHostDepsFactory {
         return { text: typeof first?.text === 'string' ? first.text : '' };
       },
       aiExtract: async (userId, text, jsonSchema, prompt) => {
-        const config = resolveLlmConfig(userId);
+        const config = this.llmConfig.resolve(userId);
         if (!config) throw new BadParams('no AI provider is configured for this user');
         if (!budgetFor(id).take('ai', Date.now())) throw new BadParams('daily AI budget exhausted (resets at UTC midnight)');
         const results = await createLlmClient(config).extract({
@@ -400,20 +403,20 @@ export class PluginHostDepsFactory {
         if (everyMs !== undefined && (!Number.isFinite(everyMs) || everyMs < EVERY_MIN)) throw new BadParams(`recurring interval must be >= ${EVERY_MIN} ms`);
         const json = JSON.stringify(payload ?? null);
         if (json.length > PAYLOAD_MAX) throw new BadParams(`scheduler payload too large (max ${PAYLOAD_MAX} bytes)`);
-        const existing = db.prepare('SELECT id FROM plugin_scheduled_tasks WHERE plugin_id = ? AND name = ?').get(id, name) as { id: number } | undefined;
+        const existing = this.db.prepare('SELECT id FROM plugin_scheduled_tasks WHERE plugin_id = ? AND name = ?').get(id, name) as { id: number } | undefined;
         if (!existing) {
-          const n = (db.prepare('SELECT COUNT(*) AS c FROM plugin_scheduled_tasks WHERE plugin_id = ?').get(id) as { c: number }).c;
+          const n = (this.db.prepare('SELECT COUNT(*) AS c FROM plugin_scheduled_tasks WHERE plugin_id = ?').get(id) as { c: number }).c;
           if (n >= SCHED_MAX) throw new BadParams(`too many scheduled tasks (max ${SCHED_MAX})`);
         }
         // Upsert by (plugin, name): re-scheduling the same name replaces it.
-        db.prepare(
+        this.db.prepare(
           `INSERT INTO plugin_scheduled_tasks (plugin_id, name, due_at, payload, every_ms) VALUES (?, ?, ?, ?, ?)
            ON CONFLICT (plugin_id, name) DO UPDATE SET due_at = excluded.due_at, payload = excluded.payload, every_ms = excluded.every_ms`,
         ).run(id, name, Math.max(dueAt, Date.now()), json, everyMs ?? null);
         return { scheduled: true };
       },
       schedulerCancel: (name) => {
-        const r = db.prepare('DELETE FROM plugin_scheduled_tasks WHERE plugin_id = ? AND name = ?').run(id, name);
+        const r = this.db.prepare('DELETE FROM plugin_scheduled_tasks WHERE plugin_id = ? AND name = ?').run(id, name);
         return { cancelled: r.changes > 0 };
       },
       listCostsForTrip: (tripId) => listBudgetItems(tripId),
@@ -450,7 +453,7 @@ export class PluginHostDepsFactory {
       },
       // --- Places (place_edit). Delegate to the same placeService the REST/MCP paths
       // use, then broadcast the same events so open web sessions update live. ---
-      canEditPlaces: (tripId, userId) => canEditTripAs('place_edit', tripId, userId),
+      canEditPlaces: (tripId, userId) => this.canEditTripAs('place_edit', tripId, userId),
       createPlace: (tripId, input) => {
         const place = createPlace(String(tripId), input as Parameters<typeof createPlace>[1]);
         broadcast(tripId, 'place:created', { place });
@@ -469,7 +472,7 @@ export class PluginHostDepsFactory {
         return { deleted: true };
       },
       // --- Days (day_edit). getDay scopes the row to the trip before any write. ---
-      canEditDays: (tripId, userId) => canEditTripAs('day_edit', tripId, userId),
+      canEditDays: (tripId, userId) => this.canEditTripAs('day_edit', tripId, userId),
       createDay: (tripId, input) => {
         const i = input as { date?: string; notes?: string };
         const day = createDay(tripId, i.date, i.notes);
@@ -512,7 +515,7 @@ export class PluginHostDepsFactory {
       // --- Trip creation (trip_create; owner = acting user). No broadcast — a new trip
       // is only visible to its owner, who refetches (same as the REST POST). ---
       canCreateTrip: (userId) => {
-        const u = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
+        const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
         return checkPermission('trip_create', u?.role ?? 'user', null, userId, false);
       },
       createTripForUser: (userId, input) => {
@@ -528,18 +531,18 @@ export class PluginHostDepsFactory {
       getRates: (base) => getExchangeRates(base),
       // --- Trip (trip_edit). Only the schema-writable fields reach updateTrip; its
       // NotFound/Validation errors are mapped to clean RPC codes. ---
-      canEditTrip: (tripId, userId) => canEditTripAs('trip_edit', tripId, userId),
+      canEditTrip: (tripId, userId) => this.canEditTripAs('trip_edit', tripId, userId),
       updateTrip: (tripId, userId, input) => {
         // The REST controller gates two fields behind their OWN admin-configurable
         // permissions, separate from trip_edit — reproduce that here so a plugin (or
         // its member user) can't archive or re-cover a trip it may only edit.
-        if ('is_archived' in input && !canEditTripAs('trip_archive', tripId, userId)) {
+        if ('is_archived' in input && !this.canEditTripAs('trip_archive', tripId, userId)) {
           throw new ForbiddenResource(`no permission to archive trip ${tripId}`);
         }
-        if ('cover_image' in input && !canEditTripAs('trip_cover_upload', tripId, userId)) {
+        if ('cover_image' in input && !this.canEditTripAs('trip_cover_upload', tripId, userId)) {
           throw new ForbiddenResource(`no permission to change the cover of trip ${tripId}`);
         }
-        const u = db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
+        const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
         try {
           const result = updateTrip(tripId, userId, input as Parameters<typeof updateTrip>[2], u?.role ?? 'user');
           broadcast(tripId, 'trip:updated', { trip: result.updatedTrip });
@@ -723,7 +726,7 @@ export class PluginHostDepsFactory {
       // --- Reservations (bookings, reservation_edit). Delegates to ReservationsService
       // so the accommodation/budget-sync/notification/broadcast side effects match the
       // web app EXACTLY. socketId is undefined — a plugin has no originating socket. ---
-      canEditReservations: (tripId, userId) => canEditTripAs('reservation_edit', tripId, userId),
+      canEditReservations: (tripId, userId) => this.canEditTripAs('reservation_edit', tripId, userId),
       createReservation: (tripId, input, actingUserId) => {
         const { reservation, accommodationCreated } = this.reservations.create(String(tripId), input as never);
         if (accommodationCreated) broadcast(tripId, 'accommodation:created', {}, undefined);
@@ -757,7 +760,7 @@ export class PluginHostDepsFactory {
       // --- Packing (packing_edit). Reuses PackingService + replicates the #858
       // privacy-scoped broadcasts (create/delete via emitPackingToViewers, update via
       // the four-case broadcastPackingUpdate) so a private item never leaks room-wide. ---
-      canEditPacking: (tripId, userId) => canEditTripAs('packing_edit', tripId, userId),
+      canEditPacking: (tripId, userId) => this.canEditTripAs('packing_edit', tripId, userId),
       createPackingItem: (tripId, input, actingUserId) => {
         const i = input as { name: string; category?: string; checked?: boolean; is_private?: boolean; visibility?: 'common' | 'personal' | 'shared'; recipient_ids?: number[] };
         const item = this.packing.createItem(String(tripId), i, actingUserId) as PackingPrivacy;
@@ -808,7 +811,7 @@ export class PluginHostDepsFactory {
       getWeather: (lat, lng, date) => getWeather(String(lat), String(lng), date, 'en'),
       listCategories: () => this.categories.list() as unknown[],
       tripMembers: (tripId) =>
-        db.prepare('SELECT u.id, u.username, u.display_name, u.avatar FROM trip_members tm JOIN users u ON u.id = tm.user_id WHERE tm.trip_id = ?').all(tripId) as unknown[],
+        this.db.prepare('SELECT u.id, u.username, u.display_name, u.avatar FROM trip_members tm JOIN users u ON u.id = tm.user_id WHERE tm.trip_id = ?').all(tripId) as unknown[],
       // --- Tags (the acting user's own; ownership re-checked before a write). ---
       listTagsForUser: (userId) => this.tags.list(userId) as unknown[],
       createTagForUser: (userId, name, color) => this.tags.create(userId, name, color),
@@ -822,7 +825,7 @@ export class PluginHostDepsFactory {
         return { deleted: true };
       },
       // --- Todos (core, trip-scoped; the app's 'packing_edit' permission). ---
-      canEditTodos: (tripId, userId) => canEditTripAs('packing_edit', tripId, userId),
+      canEditTodos: (tripId, userId) => this.canEditTripAs('packing_edit', tripId, userId),
       listTodos: (tripId) => this.todos.listItems(String(tripId)) as unknown[],
       createTodo: (tripId, input) => {
         const item = this.todos.createItem(String(tripId), input as never);
@@ -844,7 +847,7 @@ export class PluginHostDepsFactory {
       // to a core entity; the plugin only ever sees rows tagged with its own id. ---
       metaEntityTrip: (entityType, entityId) => {
         if (entityType === 'trip') {
-          return (db.prepare('SELECT id FROM trips WHERE id = ?').get(entityId) as { id: number } | undefined)?.id;
+          return (this.db.prepare('SELECT id FROM trips WHERE id = ?').get(entityId) as { id: number } | undefined)?.id;
         }
         // Each of these tables has a NOT NULL trip_id, so the metadata gate resolves to
         // the owning trip and reuses the standard canAccessTrip / *_edit checks.
@@ -852,10 +855,10 @@ export class PluginHostDepsFactory {
           : entityType === 'day' ? 'days'
           : entityType === 'reservation' ? 'reservations'
           : 'day_accommodations'; // accommodation
-        return (db.prepare(`SELECT trip_id FROM ${table} WHERE id = ?`).get(entityId) as { trip_id: number } | undefined)?.trip_id;
+        return (this.db.prepare(`SELECT trip_id FROM ${table} WHERE id = ?`).get(entityId) as { trip_id: number } | undefined)?.trip_id;
       },
       metaGet: (entityType, entityId, key) => {
-        const row = db.prepare('SELECT value FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? AND key=?')
+        const row = this.db.prepare('SELECT value FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? AND key=?')
           .get(id, entityType, entityId, key) as { value: string } | undefined;
         if (!row) return null;
         try { return JSON.parse(row.value); } catch { return null; }
@@ -864,14 +867,14 @@ export class PluginHostDepsFactory {
         if (key.length > META_KEY_MAX) throw new BadParams(`metadata key too long (>${META_KEY_MAX} chars)`);
         const json = JSON.stringify(value ?? null);
         if (json.length > META_VALUE_MAX) throw new BadParams(`metadata value too large (>${META_VALUE_MAX} bytes)`);
-        const exists = db.prepare('SELECT 1 FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? AND key=?')
+        const exists = this.db.prepare('SELECT 1 FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? AND key=?')
           .get(id, entityType, entityId, key);
         if (!exists) {
-          const { n } = db.prepare('SELECT COUNT(*) AS n FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=?')
+          const { n } = this.db.prepare('SELECT COUNT(*) AS n FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=?')
             .get(id, entityType, entityId) as { n: number };
           if (n >= META_KEYS_MAX) throw new BadParams(`too many metadata keys on this ${entityType} (max ${META_KEYS_MAX})`);
         }
-        db.prepare(`INSERT INTO plugin_entity_metadata (plugin_id, entity_type, entity_id, key, value, updated_at)
+        this.db.prepare(`INSERT INTO plugin_entity_metadata (plugin_id, entity_type, entity_id, key, value, updated_at)
                     VALUES (?, ?, ?, ?, ?, datetime('now'))
                     ON CONFLICT(plugin_id, entity_type, entity_id, key)
                     DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
@@ -879,14 +882,14 @@ export class PluginHostDepsFactory {
         return { key, value: value ?? null };
       },
       metaList: (entityType, entityId) => {
-        const list = db.prepare('SELECT key, value FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? ORDER BY key')
+        const list = this.db.prepare('SELECT key, value FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? ORDER BY key')
           .all(id, entityType, entityId) as Array<{ key: string; value: string }>;
         const out: Record<string, unknown> = {};
         for (const r of list) { try { out[r.key] = JSON.parse(r.value); } catch { out[r.key] = null; } }
         return out;
       },
       metaDelete: (entityType, entityId, key) => {
-        const res = db.prepare('DELETE FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? AND key=?')
+        const res = this.db.prepare('DELETE FROM plugin_entity_metadata WHERE plugin_id=? AND entity_type=? AND entity_id=? AND key=?')
           .run(id, entityType, entityId, key);
         return { deleted: res.changes > 0 };
       },

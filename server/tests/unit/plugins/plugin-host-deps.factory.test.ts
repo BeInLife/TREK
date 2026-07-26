@@ -4,8 +4,8 @@
  * per-plugin data db is cached, a granted db:own call works through the wired
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
  * DI-native domains (budget/reservations/tags/categories/todo/packing/
- * day-notes/assignments/oauth) are constructor-injected stubs; legacy
- * services/* domains stay path-mocked until their own DI migration lands.
+ * day-notes/assignments/oauth/llm-config) are constructor-injected stubs;
+ * legacy services/* domains stay path-mocked until their own DI migration lands.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
@@ -208,9 +208,10 @@ vi.mock('../../../src/services/tripMembership', () => ({
 const { notifySend } = vi.hoisted(() => ({ notifySend: vi.fn(async () => undefined) }));
 vi.mock('../../../src/services/notificationService', () => ({ send: notifySend }));
 // userId 7 = no provider configured; everyone else resolves to a stub config.
-vi.mock('../../../src/nest/llm-parse/llm-config.resolver', () => ({
-  resolveLlmConfig: vi.fn((uid: number) => (uid === 7 ? null : { provider: 'openai', model: 'gpt-x', baseUrl: undefined, apiKey: 'sekret' })),
-}));
+// Constructor-injected stub since the resolver became DI-native (settings migration).
+const llmConfigStub = {
+  resolve: vi.fn((uid: number) => (uid === 7 ? null : { provider: 'openai', model: 'gpt-x', baseUrl: undefined, apiKey: 'sekret' })),
+} as unknown as LlmConfigResolver;
 const { llmExtract } = vi.hoisted(() => ({ llmExtract: vi.fn(async (input: { text?: string }) => [{ text: `answer:${input.text ?? ''}` }]) }));
 vi.mock('../../../src/nest/llm-parse/llm-client.factory', () => ({ createLlmClient: vi.fn(() => ({ extract: llmExtract })) }));
 // The per-user settings read the runtime deps delegate to (still a path mock —
@@ -299,11 +300,13 @@ import type { PackingService } from '../../../src/nest/packing/packing.service';
 import type { DayNotesService } from '../../../src/nest/days/day-notes.service';
 import type { AssignmentsService } from '../../../src/nest/assignments/assignments.service';
 import type { PluginOAuthService } from '../../../src/nest/plugins/plugin-oauth.service';
+import type { LlmConfigResolver } from '../../../src/nest/llm-parse/llm-config.resolver';
+import { DatabaseService } from '../../../src/nest/database/database.service';
 
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb));
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 
