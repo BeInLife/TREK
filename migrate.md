@@ -18,7 +18,7 @@ Wave 2 — cross-cutting leverage (parallel to wave 3, high payoff)
 
 Wave 3 — domain services with existing modules, low fan-in
 
-7. dayNoteService (done 2026-07), tripInviteService (done 2026-07), assignmentService (done 2026-07), shareService (done 2026-07), settingsService (done 2026-07), fileService (done 2026-07), collabService, packingService (done 2026-07) — each maps 1:1 to a Nest module that's already a thin delegate; none is imported by more than one
+7. dayNoteService (done 2026-07), tripInviteService (done 2026-07), assignmentService (done 2026-07), shareService (done 2026-07), settingsService (done 2026-07), fileService (done 2026-07), collabService (done 2026-07), packingService (done 2026-07) — each maps 1:1 to a Nest module that's already a thin delegate; none is imported by more than one
    other legacy service.
 
 Wave 4 — the coupled cluster (order matters here)
