@@ -1,6 +1,8 @@
 /**
  * Unit tests for MCP resources (resources.ts).
- * Tests all 14 resources via InMemoryTransport + Client.
+ * Tests all 13 legacy-registrar resources via InMemoryTransport + Client
+ * (trek://categories moved to the DI-discovered CategoriesMcp — see
+ * tools-categories.test.ts).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 
@@ -416,21 +418,9 @@ describe('Resource: trek://trips/{tripId}/collab-notes', () => {
   });
 });
 
-describe('Resource: trek://categories', () => {
-  it('returns all categories', async () => {
-    const { user } = createUser(testDb);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: 'trek://categories' });
-      const categories = parseResourceResult(result) as any[];
-      expect(categories.length).toBeGreaterThan(0);
-      expect(categories[0]).toHaveProperty('id');
-      expect(categories[0]).toHaveProperty('name');
-      expect(categories[0]).toHaveProperty('color');
-      expect(categories[0]).toHaveProperty('icon');
-    });
-  });
-});
+// trek://categories moved to tools-categories.test.ts: it now registers via
+// the nest-mcp registry inside registerTools (CategoriesMcp @Resource), which
+// this file's withTools: false harness never attaches.
 
 describe('Resource: trek://bucket-list', () => {
   it('returns only the current user\'s bucket list items', async () => {

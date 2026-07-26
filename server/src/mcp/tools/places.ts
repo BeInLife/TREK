@@ -5,7 +5,6 @@ import { isDemoUser } from '../../services/authService';
 import { deletePlacesMany, updatePlacesMany, importGoogleList, importNaverList, listPlaces, createPlace, updatePlace, deletePlace, ratePlace } from '../../services/placeService';
 import { createAssignment, dayExists } from '../../services/assignmentService';
 import { onPlaceDeleted, reconcileTripSkeletons } from '../../services/journeyService';
-import { listCategories } from '../../services/categoryService';
 import { searchPlaces } from '../../services/mapsService';
 import {
   safeBroadcast, TOOL_ANNOTATIONS_READONLY, TOOL_ANNOTATIONS_WRITE,
@@ -203,20 +202,8 @@ export function registerPlaceTools(server: McpServer, userId: number, scopes: st
     }
   );
 
-  // --- CATEGORIES ---
-
-  if (R) server.registerTool(
-    'list_categories',
-    {
-      description: 'List all available place categories with their id, name, icon and color. Use category_id when creating or updating places.',
-      inputSchema: {},
-      annotations: TOOL_ANNOTATIONS_READONLY,
-    },
-    async () => {
-      const categories = listCategories();
-      return ok({ categories });
-    }
-  );
+  // The list_categories tool moved to the DI-discovered
+  // src/nest/categories/categories.mcp.ts (@McpController).
 
   // --- SEARCH ---
 

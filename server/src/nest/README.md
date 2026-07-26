@@ -26,8 +26,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **Phase 1 (leaf):** weather, airports, config (public), system-notices, maps,
   categories, tags, notifications, atlas.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
-- **DI-native services (legacy `src/services/*` deleted):** tags — see the
-  migration recipe below.
+- **DI-native services (legacy `src/services/*` deleted):** tags, categories —
+  see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -94,9 +94,12 @@ at the typed contract (Frontend Track).
 ## Migrating a legacy `src/services/*` service into its Nest module (recipe)
 
 Pilot: **tags** (`services/tagService.ts` → `nest/tags/tags.service.ts` +
-`nest/tags/tags.bridge.ts`). Repeat these steps per service (next up:
-categoryService, then todoService). This is a **pure relocation** — byte-identical
-SQL, statuses, bodies, and error strings.
+`nest/tags/tags.bridge.ts`); categories followed the same shape (and piloted the
+first `@Resource` in `categories.mcp.ts`). Repeat these steps per service (next
+up: todoService). This is a **pure relocation** — byte-identical
+SQL, statuses, bodies, and error strings. The long-run plan for the last
+non-Nest consumer (the plugin RPC host, today served via the bridges) is in
+`src/nest/plugins/DI-MIGRATION.md`.
 
 1. **Move the SQL** into `<domain>.service.ts` as methods over an injected
    `DatabaseService` (`this.db.all<T>/get<T>/run/prepare/transaction`; strict

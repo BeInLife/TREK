@@ -1,6 +1,8 @@
 import { createTestRegistry, type McpRegistry } from '@trek/nest-mcp';
 import { db } from '../../src/db/database';
 import { trekMcpAccessPolicy } from '../../src/mcp/nest-mcp-policy';
+import { CategoriesMcp } from '../../src/nest/categories/categories.mcp';
+import { CategoriesService } from '../../src/nest/categories/categories.service';
 import { DatabaseService } from '../../src/nest/database/database.service';
 import { TagsMcp } from '../../src/nest/tags/tags.mcp';
 import { TagsService } from '../../src/nest/tags/tags.service';
@@ -17,6 +19,7 @@ export function createMcpTestRegistry(): McpRegistry {
   return createTestRegistry(
     [
       new TagsMcp(new TagsService(dbService)),
+      new CategoriesMcp(new CategoriesService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy },
   );

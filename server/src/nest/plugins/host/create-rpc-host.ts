@@ -6,7 +6,7 @@ import { listBudgetItems } from '../../../services/budgetService';
 import { listItems as listPackingItemsSvc, createItem as createPackingItemSvc, updateItem as updatePackingItemSvc, deleteItem as deletePackingItemSvc, listBags, createBag as createBagSvc, updateBag as updateBagSvc, deleteBag as deleteBagSvc, setBagMembers } from '../../../services/packingService';
 import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
-import { listCategories } from '../../../services/categoryService';
+import { listCategories } from '../../categories/categories.bridge';
 import { listTags, createTag, updateTag, deleteTag, getTagByIdAndUser } from '../../tags/tags.bridge';
 import { listItems as listTodosSvc, createItem as createTodoSvc, updateItem as updateTodoSvc, deleteItem as deleteTodoSvc } from '../../../services/todoService';
 import { listFiles, createFile, createFileLink, getFileById, updateFile, softDeleteFile, findForeignLinkTarget, resolveFilePath, BLOCKED_EXTENSIONS, filesDir } from '../../../services/fileService';

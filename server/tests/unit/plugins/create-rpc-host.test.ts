@@ -136,7 +136,7 @@ vi.mock('../../../src/services/packingService', () => ({
 }));
 vi.mock('../../../src/services/conflictResult', () => ({ isUpdateConflict: (r: unknown) => !!(r as { conflict?: boolean })?.conflict }));
 vi.mock('../../../src/services/weatherService', () => ({ getWeather: vi.fn(async (lat: string, lng: string) => ({ lat, lng, temp: 20 })) }));
-vi.mock('../../../src/services/categoryService', () => ({ listCategories: vi.fn(() => [{ id: 1, name: 'Food' }]) }));
+vi.mock('../../../src/nest/categories/categories.bridge', () => ({ listCategories: vi.fn(() => [{ id: 1, name: 'Food' }]) }));
 vi.mock('../../../src/nest/tags/tags.bridge', () => ({
   listTags: vi.fn((uid: number) => [{ id: 1, user_id: uid, name: 'work' }]),
   createTag: vi.fn((uid: number, name: string, color?: string) => ({ id: 9, user_id: uid, name, color })),

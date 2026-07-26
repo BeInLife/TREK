@@ -1,6 +1,9 @@
 /**
- * Unit tests for categoryService — CAT-SVC-001 through CAT-SVC-015.
+ * Unit tests for CategoriesService — CAT-SVC-001 through CAT-SVC-016.
  * Uses a real in-memory SQLite DB so SQL logic is exercised faithfully.
+ * The service is constructed directly (new CategoriesService(new DatabaseService(db)))
+ * — no Nest container needed. CAT-SVC-016 covers the categories.bridge export
+ * used by the non-Nest plugin RPC host.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -34,13 +37,11 @@ import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
-import {
-  listCategories,
-  createCategory,
-  getCategoryById,
-  updateCategory,
-  deleteCategory,
-} from '../../../src/services/categoryService';
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { CategoriesService } from '../../../src/nest/categories/categories.service';
+import { listCategories } from '../../../src/nest/categories/categories.bridge';
+
+const svc = new CategoriesService(new DatabaseService(testDb));
 
 beforeAll(() => {
   createTables(testDb);
@@ -55,22 +56,22 @@ afterAll(() => {
   testDb.close();
 });
 
-// ── listCategories ────────────────────────────────────────────────────────────
+// ── list ──────────────────────────────────────────────────────────────────────
 
-describe('listCategories', () => {
+describe('list', () => {
   it('CAT-SVC-001 — returns an array (seeded defaults are present after migrations)', () => {
     // Migrations seed default categories, so the list is never empty in a fully initialized DB
-    const cats = listCategories() as any[];
+    const cats = svc.list();
     expect(Array.isArray(cats)).toBe(true);
     expect(cats.length).toBeGreaterThan(0);
   });
 
   it('CAT-SVC-002 — results are ordered by name ascending (custom categories sort correctly)', () => {
     const { user } = createUser(testDb);
-    createCategory(user.id, 'Zoo');
-    createCategory(user.id, 'Aquarium');
+    svc.create(user.id, 'Zoo');
+    svc.create(user.id, 'Aquarium');
     // Migrations seed default categories; verify ordering by checking our custom ones appear in sorted order
-    const names = (listCategories() as any[]).map((c: any) => c.name);
+    const names = svc.list().map((c) => c.name);
     const aquariumIdx = names.indexOf('Aquarium');
     const zooIdx = names.indexOf('Zoo');
     expect(aquariumIdx).toBeGreaterThanOrEqual(0);
@@ -81,19 +82,19 @@ describe('listCategories', () => {
   it('CAT-SVC-003 — returns categories from all users (including seeded defaults)', () => {
     const { user: a } = createUser(testDb);
     const { user: b } = createUser(testDb);
-    const before = (listCategories() as any[]).length;
-    createCategory(a.id, 'Cat-A');
-    createCategory(b.id, 'Cat-B');
-    expect(listCategories()).toHaveLength(before + 2);
+    const before = svc.list().length;
+    svc.create(a.id, 'Cat-A');
+    svc.create(b.id, 'Cat-B');
+    expect(svc.list()).toHaveLength(before + 2);
   });
 });
 
-// ── createCategory ────────────────────────────────────────────────────────────
+// ── create ────────────────────────────────────────────────────────────────────
 
-describe('createCategory', () => {
+describe('create', () => {
   it('CAT-SVC-004 — creates a category with name, color, and icon', () => {
     const { user } = createUser(testDb);
-    const cat = createCategory(user.id, 'Restaurant', '#ff5500', '🍽️') as any;
+    const cat = svc.create(user.id, 'Restaurant', '#ff5500', '🍽️');
     expect(cat.name).toBe('Restaurant');
     expect(cat.color).toBe('#ff5500');
     expect(cat.icon).toBe('🍽️');
@@ -102,55 +103,55 @@ describe('createCategory', () => {
 
   it('CAT-SVC-005 — defaults color to #6366f1 when not provided', () => {
     const { user } = createUser(testDb);
-    const cat = createCategory(user.id, 'Default Color') as any;
+    const cat = svc.create(user.id, 'Default Color');
     expect(cat.color).toBe('#6366f1');
   });
 
   it('CAT-SVC-006 — defaults icon to 📍 when not provided', () => {
     const { user } = createUser(testDb);
-    const cat = createCategory(user.id, 'Default Icon') as any;
+    const cat = svc.create(user.id, 'Default Icon');
     expect(cat.icon).toBe('📍');
   });
 
   it('CAT-SVC-007 — returns the inserted row with an id', () => {
     const { user } = createUser(testDb);
-    const cat = createCategory(user.id, 'WithId') as any;
+    const cat = svc.create(user.id, 'WithId');
     expect(typeof cat.id).toBe('number');
     expect(cat.id).toBeGreaterThan(0);
   });
 });
 
-// ── getCategoryById ───────────────────────────────────────────────────────────
+// ── getById ───────────────────────────────────────────────────────────────────
 
-describe('getCategoryById', () => {
+describe('getById', () => {
   it('CAT-SVC-008 — returns category for a valid id', () => {
     const { user } = createUser(testDb);
-    const created = createCategory(user.id, 'Find Me') as any;
-    const found = getCategoryById(created.id) as any;
+    const created = svc.create(user.id, 'Find Me');
+    const found = svc.getById(created.id);
     expect(found).toBeDefined();
-    expect(found.name).toBe('Find Me');
+    expect(found?.name).toBe('Find Me');
   });
 
   it('CAT-SVC-009 — returns undefined for non-existent id', () => {
-    expect(getCategoryById(99999)).toBeUndefined();
+    expect(svc.getById(99999)).toBeUndefined();
   });
 
   it('CAT-SVC-010 — accepts string id (coerced by SQLite)', () => {
     const { user } = createUser(testDb);
-    const created = createCategory(user.id, 'StringId') as any;
-    const found = getCategoryById(String(created.id)) as any;
+    const created = svc.create(user.id, 'StringId');
+    const found = svc.getById(String(created.id));
     expect(found).toBeDefined();
-    expect(found.id).toBe(created.id);
+    expect(found?.id).toBe(created.id);
   });
 });
 
-// ── updateCategory ────────────────────────────────────────────────────────────
+// ── update ────────────────────────────────────────────────────────────────────
 
-describe('updateCategory', () => {
+describe('update', () => {
   it('CAT-SVC-011 — updates name, color, and icon', () => {
     const { user } = createUser(testDb);
-    const cat = createCategory(user.id, 'Old', '#aaaaaa', '❓') as any;
-    const updated = updateCategory(cat.id, 'New', '#bbbbbb', '✅') as any;
+    const cat = svc.create(user.id, 'Old', '#aaaaaa', '❓');
+    const updated = svc.update(cat.id, 'New', '#bbbbbb', '✅');
     expect(updated.name).toBe('New');
     expect(updated.color).toBe('#bbbbbb');
     expect(updated.icon).toBe('✅');
@@ -158,32 +159,44 @@ describe('updateCategory', () => {
 
   it('CAT-SVC-012 — COALESCE: omitting name preserves existing name', () => {
     const { user } = createUser(testDb);
-    const cat = createCategory(user.id, 'KeepName', '#aaaaaa', '⭐') as any;
-    const updated = updateCategory(cat.id, undefined, '#cccccc', '🔥') as any;
+    const cat = svc.create(user.id, 'KeepName', '#aaaaaa', '⭐');
+    const updated = svc.update(cat.id, undefined, '#cccccc', '🔥');
     expect(updated.name).toBe('KeepName');
     expect(updated.color).toBe('#cccccc');
   });
 
   it('CAT-SVC-013 — COALESCE: omitting color preserves existing color', () => {
     const { user } = createUser(testDb);
-    const cat = createCategory(user.id, 'KeepColor', '#dddddd', '⭐') as any;
-    const updated = updateCategory(cat.id, 'NewName', undefined, '🌟') as any;
+    const cat = svc.create(user.id, 'KeepColor', '#dddddd', '⭐');
+    const updated = svc.update(cat.id, 'NewName', undefined, '🌟');
     expect(updated.name).toBe('NewName');
     expect(updated.color).toBe('#dddddd');
   });
 });
 
-// ── deleteCategory ────────────────────────────────────────────────────────────
+// ── remove ────────────────────────────────────────────────────────────────────
 
-describe('deleteCategory', () => {
+describe('remove', () => {
   it('CAT-SVC-014 — deletes the category from the database', () => {
     const { user } = createUser(testDb);
-    const cat = createCategory(user.id, 'ToDelete') as any;
-    deleteCategory(cat.id);
-    expect(getCategoryById(cat.id)).toBeUndefined();
+    const cat = svc.create(user.id, 'ToDelete');
+    svc.remove(cat.id);
+    expect(svc.getById(cat.id)).toBeUndefined();
   });
 
   it('CAT-SVC-015 — deleting a non-existent category does not throw', () => {
-    expect(() => deleteCategory(99999)).not.toThrow();
+    expect(() => svc.remove(99999)).not.toThrow();
+  });
+});
+
+// ── categories.bridge (non-Nest entry point) ──────────────────────────────────
+
+describe('categories.bridge', () => {
+  it('CAT-SVC-016 — listCategories delegates to the service', () => {
+    const { user } = createUser(testDb);
+    svc.create(user.id, 'Bridged');
+    const names = listCategories().map((c) => c.name);
+    expect(names).toContain('Bridged');
+    expect(names).toEqual([...names].sort());
   });
 });

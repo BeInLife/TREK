@@ -9,7 +9,6 @@ import { listReservations } from '../services/reservationService';
 import { listNotes as listDayNotes } from '../services/dayNoteService';
 import { listNotes as listCollabNotes, listPolls, listMessages } from '../services/collabService';
 import { listItems as listTodoItems } from '../services/todoService';
-import { listCategories } from '../services/categoryService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
 import { getActivePlanId, getActivePlan, getPlanData, getEntries as getVacayEntries, getHolidays } from '../services/vacayService';
@@ -215,16 +214,9 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // All place categories (global, no trip filter) — safe for any authenticated session
-  server.registerResource(
-    'categories',
-    'trek://categories',
-    { description: 'All available place categories (id, name, color, icon) for use when creating places', mimeType: 'application/json' },
-    async (uri) => {
-      const categories = listCategories();
-      return jsonContent(uri.href, categories);
-    }
-  );
+  // The trek://categories resource moved to the DI-discovered
+  // src/nest/categories/categories.mcp.ts (@Resource, attached via the
+  // nest-mcp registry in registerTools).
 
   // User's bucket list
   if (isAddonEnabled(ADDON_IDS.ATLAS) && canRead(scopes, 'atlas')) server.registerResource(

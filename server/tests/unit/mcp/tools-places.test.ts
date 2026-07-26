@@ -1,5 +1,6 @@
 /**
- * Unit tests for MCP place tools: create_place, update_place, delete_place, list_categories, search_place.
+ * Unit tests for MCP place tools: create_place, update_place, delete_place, search_place.
+ * (list_categories moved to tools-categories.test.ts with the CategoriesMcp migration.)
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -352,27 +353,6 @@ describe('Tool: create_and_assign_place', () => {
       expect(skeleton).toBeDefined();
       expect(skeleton.type).toBe('skeleton');
       expect(skeleton.title).toBe('Fresh POI');
-    });
-  });
-});
-
-// ---------------------------------------------------------------------------
-// list_categories
-// ---------------------------------------------------------------------------
-
-describe('Tool: list_categories', () => {
-  it('returns all categories with id, name, color, icon', async () => {
-    const { user } = createUser(testDb);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'list_categories', arguments: {} });
-      const data = parseToolResult(result) as any;
-      expect(data.categories).toBeDefined();
-      expect(data.categories.length).toBeGreaterThan(0);
-      const cat = data.categories[0];
-      expect(cat).toHaveProperty('id');
-      expect(cat).toHaveProperty('name');
-      expect(cat).toHaveProperty('color');
-      expect(cat).toHaveProperty('icon');
     });
   });
 });
