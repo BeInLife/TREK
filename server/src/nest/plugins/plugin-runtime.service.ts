@@ -1,6 +1,5 @@
 import { Injectable, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
 import semver from 'semver';
-import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
 import { pluginsEnabled } from './kill-switch';
 import { setPluginEventSink } from '../../plugin-event-sink';
@@ -40,15 +39,6 @@ const HTTP_OUTBOUND = 'http:outbound:';
 // any embedded space — the string is interpolated into the egress guard and the CSP.
 const EGRESS_HOST_RE = /^(\*\.[a-z0-9-]+(\.[a-z0-9-]+)+|[a-z0-9-]+(\.[a-z0-9-]+)*)$/i;
 
-/** Hosts an admin added post-install for a plugin that declared `operatorEgress`. */
-function operatorEgressHosts(id: string): string[] {
-  try {
-    return (db.prepare('SELECT host FROM plugin_egress_hosts WHERE plugin_id = ? ORDER BY host').all(id) as Array<{ host: string }>)
-      .map((r) => r.host);
-  } catch {
-    return []; // table absent (a slimmed test app) — never block activation
-  }
-}
 
 /**
  * Remove `<plugins>/<id>` whether it is a real directory, a POSIX symlink or a
@@ -155,7 +145,7 @@ export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
         // Retention: a crash-looping plugin emits a stderr line per restart, so an
         // uncapped table grows without bound in the shared trek.db. Keep only the
         // most recent LOG_RETENTION rows per plugin (the admin view shows 200).
-        pruneErrorLog(id);
+        this.pruneErrorLog(id);
       } catch { /* DB unavailable — a log line must never crash the host */ }
     },
   });
@@ -555,13 +545,18 @@ export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
     // still bounds what is possible — and it is always the admin, never an end user,
     // who widens it. The egress list is spawn-time only, which is why changing it
     // re-spawns the plugin (see setOperatorEgressHosts).
-    const egress = [...new Set([...manifestHosts, ...operatorEgressHosts(id)])];
+    const egress = [...new Set([...manifestHosts, ...this.operatorEgressHosts(id)])];
     await this.supervisor.activate(id, new Set(declared), config, egress);
   }
 
   /** Hosts an admin added for this plugin (empty unless it declared `operatorEgress`). */
   operatorEgressHosts(id: string): string[] {
-    return operatorEgressHosts(id);
+    try {
+      return (this.db.prepare('SELECT host FROM plugin_egress_hosts WHERE plugin_id = ? ORDER BY host').all(id) as Array<{ host: string }>)
+        .map((r) => r.host);
+    } catch {
+      return []; // table absent (a slimmed test app) — never block activation
+    }
   }
 
   /** Does this plugin's manifest declare that it needs operator-supplied hosts? */
@@ -1123,6 +1118,16 @@ export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
       return [];
     }
   }
+
+  /** Trim a plugin's error log to the most recent LOG_RETENTION rows. Cheap: onLog
+   * only fires on warn/error, so this never runs on the hot path. */
+  private pruneErrorLog(pluginId: string): void {
+    this.db.prepare(
+      `DELETE FROM plugin_error_log WHERE plugin_id = ? AND id NOT IN (
+         SELECT id FROM plugin_error_log WHERE plugin_id = ? ORDER BY id DESC LIMIT ${LOG_RETENTION}
+       )`,
+    ).run(pluginId, pluginId);
+  }
 }
 
 function parseArray(json: string): string[] {
@@ -1151,12 +1156,3 @@ function decryptConfig(config: Record<string, unknown>): Record<string, unknown>
 }
 
 const LOG_RETENTION = 500; // rows kept per plugin (the admin view shows the newest 200)
-/** Trim a plugin's error log to the most recent LOG_RETENTION rows. Cheap: onLog
- * only fires on warn/error, so this never runs on the hot path. */
-function pruneErrorLog(pluginId: string): void {
-  db.prepare(
-    `DELETE FROM plugin_error_log WHERE plugin_id = ? AND id NOT IN (
-       SELECT id FROM plugin_error_log WHERE plugin_id = ? ORDER BY id DESC LIMIT ${LOG_RETENTION}
-     )`,
-  ).run(pluginId, pluginId);
-}

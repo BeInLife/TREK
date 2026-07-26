@@ -45,15 +45,6 @@ interface PluginRawRow {
   update_block_version: string | null;
 }
 
-/** Hosts an admin has added for a plugin (0 unless it declared operatorEgress). */
-function egressHostCount(id: string): number {
-  try {
-    return (db.prepare('SELECT COUNT(*) AS n FROM plugin_egress_hosts WHERE plugin_id = ?').get(id) as { n: number }).n;
-  } catch {
-    return 0; // table absent (a slimmed test app)
-  }
-}
-
 export interface PluginListItem {
   id: string;
   name: string;
@@ -106,6 +97,15 @@ export class PluginsService {
     return this.dbs.connection;
   }
 
+  /** Hosts an admin has added for a plugin (0 unless it declared operatorEgress). */
+  private egressHostCount(id: string): number {
+    try {
+      return (this.db.prepare('SELECT COUNT(*) AS n FROM plugin_egress_hosts WHERE plugin_id = ?').get(id) as { n: number }).n;
+    } catch {
+      return 0; // table absent (a slimmed test app)
+    }
+  }
+
   list(): { enabled: boolean; devLink: boolean; plugins: PluginListItem[] } {
     const rows = this.db
       .prepare(
@@ -145,7 +145,7 @@ export class PluginsService {
       return {
         ...rest,
         operatorEgress: _oe === 1,
-        egressHostCount: egressHostCount(r.id),
+        egressHostCount: this.egressHostCount(r.id),
         dependencies: deps,
         dependencyStatus,
         trekRange: trek_range,
