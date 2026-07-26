@@ -26,7 +26,7 @@ interface Poll {
   id: number
   question: string
   options: PollOption[]
-  multi_choice: boolean
+  multiple_choice: boolean
   is_closed: boolean
   deadline: string | null
   created_by: number
@@ -59,7 +59,7 @@ function totalVotes(poll) {
 // ── Create Poll Modal ────────────────────────────────────────────────────────
 interface CreatePollModalProps {
   onClose: () => void
-  onCreate: (data: { question: string; options: string[]; multi_choice: boolean }) => Promise<void>
+  onCreate: (data: { question: string; options: string[]; multiple_choice: boolean }) => Promise<void>
   t: (key: string) => string
 }
 
@@ -80,7 +80,9 @@ function CreatePollModal({ onClose, onCreate, t }: CreatePollModalProps) {
     if (!canSubmit) return
     setSubmitting(true)
     try {
-      await onCreate({ question: question.trim(), options: options.filter(o => o.trim()), multi_choice: multiChoice })
+      // `multiple_choice` is the field the server reads (nest/collab/collab.service.ts);
+      // the old `multi_choice` name was silently dropped, losing desktop multi-choice.
+      await onCreate({ question: question.trim(), options: options.filter(o => o.trim()), multiple_choice: multiChoice })
       onClose()
     } catch {} finally { setSubmitting(false) }
   }
@@ -232,7 +234,7 @@ function PollCard({ poll, currentUser, canEdit, onVote, onClose, onDelete, t }: 
                 <Clock size={8} /> {remaining}
               </span>
             )}
-            {poll.multi_choice && (
+            {poll.multiple_choice && (
               <span style={{ fontSize: 'calc(9px * var(--fs-scale-caption, 1))', fontWeight: 600, color: 'var(--text-faint)', background: 'var(--bg-tertiary)', padding: '2px 7px', borderRadius: 99 }}>
                 {t('collab.polls.multiChoice')}
               </span>

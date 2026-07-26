@@ -30,7 +30,7 @@ const buildPoll = (overrides: Record<string, unknown> = {}) => ({
     { id: 1, text: 'Paris', label: 'Paris', voters: [] },
     { id: 2, text: 'Rome', label: 'Rome', voters: [] },
   ],
-  multi_choice: false,
+  multiple_choice: false,
   is_closed: false,
   deadline: null,
   created_by: 1,

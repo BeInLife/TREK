@@ -97,8 +97,8 @@ export default function MCollabPolls({ planner }: MCollabPollsProps) {
       const res = (await collabApi.createPoll(tripId, {
         question: data.question,
         options: data.options,
-        // Server reads `data.multiple || data.multiple_choice` (collabService.ts) —
-        // both are sent so either shape lands correctly.
+        // Server reads `data.multiple || data.multiple_choice`
+        // (nest/collab/collab.service.ts) — both are sent so either shape lands.
         multiple: data.multipleChoice,
         multiple_choice: data.multipleChoice,
         deadline: data.deadline || undefined,
