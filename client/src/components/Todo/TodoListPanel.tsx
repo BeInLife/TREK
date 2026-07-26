@@ -350,7 +350,7 @@ function DetailPane({ item, tripId, categories, members, onClose }: {
         name: name.trim(), description: desc || null,
         due_date: dueDate || null, category: category || null,
         assigned_user_id: assignedUserId, priority,
-      } as any)
+      })
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.error')) }
     setSaving(false)
   }
@@ -566,7 +566,7 @@ function NewTaskPane({ tripId, categories, members, defaultCategory, onCreated, 
         name: name.trim(), description: desc || null, priority,
         due_date: dueDate || null, category: trimmedCategory || null,
         assigned_user_id: assignedUserId,
-      } as any)
+      })
       if (item?.id) onCreated(item.id)
     } catch (err: unknown) { toast.error(err instanceof Error ? err.message : t('common.error')) }
     setSaving(false)

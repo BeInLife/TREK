@@ -20,19 +20,6 @@ export interface MTaskSheetProps {
   onClose: () => void
 }
 
-/** Payload shape covering both create and update — the update schema allows
- * clearing a field with `null`, which `TodoUpdateItemRequest` itself (typed
- * against the create request) doesn't express; the store call below is cast
- * to it rather than widened to `any`. */
-interface TodoSavePayload {
-  name: string
-  description: string | null
-  due_date: string | null
-  category: string | null
-  assigned_user_id: number | null
-  priority: number
-}
-
 /**
  * Add/Edit task sheet (spec 03 §4.7 `openTask` / progress-card "New task"):
  * name, description, list (category), due date, assignee and priority.
@@ -99,7 +86,7 @@ export default function MTaskSheet({ planner, open, itemId, categories, members,
     setSaving(true)
     try {
       if (item) {
-        const payload: TodoSavePayload = {
+        const payload: TodoUpdateItemRequest = {
           name: trimmedName,
           description: description || null,
           due_date: dueDate || null,
@@ -107,7 +94,7 @@ export default function MTaskSheet({ planner, open, itemId, categories, members,
           assigned_user_id: assignedUserId,
           priority,
         }
-        await tripActions.updateTodoItem(tripId, item.id, payload as unknown as TodoUpdateItemRequest)
+        await tripActions.updateTodoItem(tripId, item.id, payload)
       } else {
         const payload: TodoCreateItemRequest = {
           name: trimmedName,
