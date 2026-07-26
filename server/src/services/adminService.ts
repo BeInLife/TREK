@@ -2,7 +2,10 @@ import { ADDON_IDS } from '../addons';
 import { readEnv } from '../app-config';
 import { updateJwtSecret } from '../config';
 import { db } from '../db/database';
-import { revokeUserSessions, revokeUserSessionsForClient } from '../mcp';
+// Import from sessionManager directly, NOT the ../mcp barrel: the barrel pulls
+// the whole tools fan-out (and via the domain bridges, the Nest services) into
+// every consumer of this module — a services→mcp→nest module cycle.
+import { revokeUserSessions, revokeUserSessionsForClient } from '../mcp/sessionManager';
 import { emitUserDeleted } from '../plugin-user-lifecycle';
 import { User, Addon } from '../types';
 import { maybe_encrypt_api_key, decrypt_api_key } from './apiKeyCrypto';
