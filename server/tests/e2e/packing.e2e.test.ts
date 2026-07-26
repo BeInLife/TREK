@@ -118,6 +118,7 @@ vi.mock('../../src/services/permissions', () => ({ checkPermission }));
 import { PackingModule } from '../../src/nest/packing/packing.module';
 import { DatabaseModule } from '../../src/nest/database/database.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
+import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 
 function insertItem(tripId: number, name: string, extra: Partial<{ sort_order: number; category: string; is_private: number; owner_id: number }> = {}): number {
   const res = db
@@ -136,6 +137,9 @@ describe('Packing e2e (real auth guard + real SQL over temp SQLite)', () => {
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());
+    // Mirror the production APP_PIPE (app.module.ts): the DTO-typed bodies
+    // validate by metatype, exactly as they do under buildApp().
+    nest.useGlobalPipes(new ZodValidationPipe());
     await nest.init();
     return nest;
   }
@@ -273,6 +277,38 @@ describe('Packing e2e (real auth guard + real SQL over temp SQLite)', () => {
     const res = await request(server).post(`/api/trips/${tripId}/packing/import`).set('Cookie', sessionCookie(1)).send({ items: [] });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'items must be a non-empty array' });
+  });
+
+  it('400 from the Zod pipe on create without a name', async () => {
+    const res = await request(server).post(`/api/trips/${tripId}/packing`).set('Cookie', sessionCookie(1)).send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('name');
+  });
+
+  it('400 from the Zod pipe on reorder without orderedIds', async () => {
+    const res = await request(server).put(`/api/trips/${tripId}/packing/reorder`).set('Cookie', sessionCookie(1)).send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('orderedIds');
+  });
+
+  it('400 from the Zod pipe on sharing with an invalid visibility', async () => {
+    const id = insertItem(tripId, 'Tent');
+    const res = await request(server).put(`/api/trips/${tripId}/packing/${id}/sharing`).set('Cookie', sessionCookie(1)).send({ visibility: 'secret' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('visibility');
+  });
+
+  it('accepts the legacy numeric checked form through the pipe', async () => {
+    const id = insertItem(tripId, 'Toggle me');
+    const res = await request(server).put(`/api/trips/${tripId}/packing/${id}`).set('Cookie', sessionCookie(1)).send({ checked: 1 });
+    expect(res.status).toBe(200);
+    expect(res.body.item.checked).toBe(1);
+  });
+
+  it('whitespace-only bag name still gets the bespoke 400', async () => {
+    const res = await request(server).post(`/api/trips/${tripId}/packing/bags`).set('Cookie', sessionCookie(1)).send({ name: '   ' });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Name is required' });
   });
 
   it('bags round-trip: 201 create (default color), 200 update (COALESCE), 200 delete, then 404', async () => {
