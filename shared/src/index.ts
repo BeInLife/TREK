@@ -33,6 +33,7 @@ export * from './assignment/assignment.schema';
 export * from './place/place.schema';
 export * from './collection/collection.schema';
 export * from './trip/trip.schema';
+export * from './trip-invite/trip-invite.schema';
 export * from './collab/collab.schema';
 export * from './file/file.schema';
 export * from './journey/journey.schema';

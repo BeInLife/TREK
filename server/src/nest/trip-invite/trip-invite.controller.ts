@@ -5,6 +5,7 @@ import { TripInviteService } from './trip-invite.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RateLimitService } from '../auth/rate-limit.service';
+import { TripInviteLinkCreateDto } from './trip-invite.dto';
 import { writeAudit, getClientIp } from '../../services/auditLog';
 
 const RL_WINDOW = 15 * 60 * 1000;
@@ -40,7 +41,7 @@ export class TripInviteLinkController {
   create(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
-    @Body() body: { expires_in_days?: number | string | null },
+    @Body() body: TripInviteLinkCreateDto,
     @Req() req: Request,
   ) {
     this.requireManage(tripId, user);

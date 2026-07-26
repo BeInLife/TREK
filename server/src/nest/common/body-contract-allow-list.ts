@@ -145,7 +145,6 @@ export const BODY_CONTRACT_ALLOW_LIST: string[] = [
   'SynologyMemoriesController.test',
   'TagsController.create',
   'TagsController.update',
-  'TripInviteLinkController.create',
   'TripShareController.create',
   'TripsController.addMember',
   'TripsController.copy',
