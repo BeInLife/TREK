@@ -31,6 +31,7 @@ import { ReservationsModule } from '../reservations/reservations.module';
 import { TodoModule } from '../todo/todo.module';
 import { PackingModule } from '../packing/packing.module';
 import { DaysModule } from '../days/days.module';
+import { AssignmentsModule } from '../assignments/assignments.module';
 
 /**
  * Plugin system (#plugins). M0 read side + M2 isolated runtime + M3 frontend:
@@ -42,7 +43,7 @@ import { DaysModule } from '../days/days.module';
 @Module({
   // The DI-native domain services the plugin host wiring injects
   // (PluginHostDepsFactory); DatabaseModule is @Global, so not listed.
-  imports: [TagsModule, CategoriesModule, BudgetModule, ReservationsModule, TodoModule, PackingModule, DaysModule],
+  imports: [TagsModule, CategoriesModule, BudgetModule, ReservationsModule, TodoModule, PackingModule, DaysModule, AssignmentsModule],
   controllers: [PluginsController, PluginsFeedController, PluginsProxyController, PluginFrameController, PlaceDetailsController, TripWarningsController, ViewContributionsController, TripCardContributionsController, PluginPhotosController, PluginCalendarController, MapMarkersController, MapLayersController, PluginRoutesController, DayScheduleController, PdfSectionsController, AtlasLayersController, JournalEntryRowsController, PluginUserSettingsController, PluginOAuthController, PluginActivityController],
   providers: [PluginsService, PluginRuntimeService, PluginRegistryService, PluginOAuthService, PluginHostDepsFactory],
   // Exported so the admin addon-toggle handler can cascade-disable plugins whose

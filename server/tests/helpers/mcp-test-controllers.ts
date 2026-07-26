@@ -1,6 +1,8 @@
 import { createTestRegistry, type McpRegistry } from '@trek/nest-mcp';
 import { db } from '../../src/db/database';
 import { trekMcpAccessPolicy } from '../../src/mcp/nest-mcp-policy';
+import { AssignmentsMcp } from '../../src/nest/assignments/assignments.mcp';
+import { AssignmentsService } from '../../src/nest/assignments/assignments.service';
 import { CategoriesMcp } from '../../src/nest/categories/categories.mcp';
 import { CategoriesService } from '../../src/nest/categories/categories.service';
 import { DatabaseService } from '../../src/nest/database/database.service';
@@ -29,6 +31,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new TodoMcp(new TodoService(dbService)),
       new PackingMcp(new PackingService(dbService)),
       new DayNotesMcp(new DayNotesService(dbService)),
+      new AssignmentsMcp(new AssignmentsService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy },
   );

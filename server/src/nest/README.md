@@ -27,7 +27,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
   categories, tags, notifications, atlas.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
-  todo, packing, day-notes — see the migration recipe below.
+  todo, packing, day-notes, trip-invite, assignments — see the migration recipe
+  below.
 
 ## Cross-cutting Foundation pieces
 
@@ -106,8 +107,12 @@ migration needing **no bridge at all**: after its three tools + resource moved
 to `day-notes.mcp.ts` and the plugin host injection, nothing outside the
 container consumed it); trip-invite followed (the smallest port: no MCP
 surface, no plugin-host import and no bridge — the SQL folded straight into
-`trip-invite.service.ts`). Repeat these steps per
-service (next up: assignmentService). This is a **pure relocation** — byte-identical
+`trip-invite.service.ts`); assignments followed (a 7-tool `assignments.mcp.ts`,
+the plugin-host swap, and a bridge kept only for the two legacy registrars —
+places and reservations — that borrow its existence checks; the batch loaders
+stay in `services/queryHelpers.ts`, shared with the unmigrated day/share/place
+services). Repeat these steps per
+service (next up: shareService). This is a **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it
 injects domain services via `PluginHostDepsFactory`, so a migrated domain adds

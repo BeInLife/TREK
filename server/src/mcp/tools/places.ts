@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { canAccessTrip, db } from '../../db/database';
 import { isDemoUser } from '../../services/authService';
 import { deletePlacesMany, updatePlacesMany, importGoogleList, importNaverList, listPlaces, createPlace, updatePlace, deletePlace, ratePlace } from '../../services/placeService';
-import { createAssignment, dayExists } from '../../services/assignmentService';
+import { createAssignment, dayExists } from '../../nest/assignments/assignments.bridge';
 import { onPlaceDeleted, reconcileTripSkeletons } from '../../services/journeyService';
 import { searchPlaces } from '../../services/mapsService';
 import {

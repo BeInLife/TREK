@@ -21,7 +21,6 @@ import { checkPermission } from '../../../services/permissions';
 import { listTrips, updateTrip, createTrip, removeMember as removeTripMemberSvc, NotFoundError, ValidationError } from '../../../services/tripService';
 import { createPlace, updatePlace, deletePlace } from '../../../services/placeService';
 import { createDay, getDay, updateDay, deleteDay, listDays, listAccommodations, validateAccommodationRefs, createAccommodation as createAccommodationSvc, getAccommodation, updateAccommodation as updateAccommodationSvc, deleteAccommodation as deleteAccommodationSvc } from '../../../services/dayService';
-import { createAssignment, deleteAssignment, dayExists, placeExists, getAssignmentForTrip } from '../../../services/assignmentService';
 import { isAddonEnabled } from '../../../services/adminService';
 import { isDemoEmail } from '../../../services/demo';
 import { ADDON_IDS } from '../../../addons';
@@ -36,6 +35,7 @@ import { CategoriesService } from '../../categories/categories.service';
 import { TodoService } from '../../todo/todo.service';
 import { PackingService } from '../../packing/packing.service';
 import { DayNotesService } from '../../days/day-notes.service';
+import { AssignmentsService } from '../../assignments/assignments.service';
 import { notifyBookingChange } from '../../../services/reservationService';
 import { PluginRpcHost, ForbiddenResource, BadParams } from './rpc-host';
 import { appendAudit } from './plugin-audit';
@@ -150,10 +150,10 @@ export interface PluginCallRouter {
  * `plugin:{id}:{event}` so a plugin can't forge a core event.
  *
  * DI-native domain services (budget, reservations, tags, categories, todo,
- * packing, day-notes, oauth) are constructor-injected; legacy `services/*`
- * domains stay plain function imports until their own migration lands
- * (DI-MIGRATION.md), at which point each swaps one import for one injected
- * service.
+ * packing, day-notes, assignments, oauth) are constructor-injected; legacy
+ * `services/*` domains stay plain function imports until their own migration
+ * lands (DI-MIGRATION.md), at which point each swaps one import for one
+ * injected service.
  */
 @Injectable()
 export class PluginHostDepsFactory {
@@ -166,6 +166,7 @@ export class PluginHostDepsFactory {
     private readonly packing: PackingService,
     private readonly oauth: PluginOAuthService,
     private readonly dayNotes: DayNotesService,
+    private readonly assignments: AssignmentsService,
   ) {}
 
   create(id: string, granted: ReadonlySet<string>, router: PluginCallRouter): PluginRpcHost {
@@ -490,19 +491,22 @@ export class PluginHostDepsFactory {
         return { deleted: true };
       },
       // --- Itinerary (day_edit). Both the day AND the place must belong to the trip,
-      // so a plugin can't cross-link another trip's rows (assignmentService doesn't
+      // so a plugin can't cross-link another trip's rows (AssignmentsService doesn't
       // self-check this — the controllers do, so we reproduce it here). ---
       assignPlaceToDay: (tripId, dayId, placeId, notes) => {
-        if (!dayExists(dayId, tripId)) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
-        if (!placeExists(placeId, tripId)) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
-        const assignment = createAssignment(dayId, placeId, notes);
+        if (!this.assignments.dayExists(dayId, tripId)) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
+        if (!this.assignments.placeExists(placeId, tripId)) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
+        const assignment = this.assignments.createAssignment(dayId, placeId, notes);
         broadcast(tripId, 'assignment:created', { assignment });
         return assignment;
       },
       unassignPlace: (tripId, assignmentId) => {
-        if (!getAssignmentForTrip(assignmentId, tripId)) throw new ForbiddenResource(`no assignment ${assignmentId} on trip ${tripId}`);
-        deleteAssignment(assignmentId);
-        broadcast(tripId, 'assignment:deleted', { assignmentId });
+        const existing = this.assignments.getAssignmentForTrip(assignmentId, tripId);
+        if (!existing) throw new ForbiddenResource(`no assignment ${assignmentId} on trip ${tripId}`);
+        this.assignments.deleteAssignment(assignmentId);
+        // Same payload shape as the REST/MCP delete, so client stores can
+        // evict the assignment from the right day.
+        broadcast(tripId, 'assignment:deleted', { assignmentId, dayId: existing.day_id });
         return { deleted: true };
       },
       // --- Trip creation (trip_create; owner = acting user). No broadcast — a new trip

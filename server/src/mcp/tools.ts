@@ -1,5 +1,4 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
-import { registerAssignmentTools } from './tools/assignments';
 import { registerJourneyTools } from './tools/journey';
 import { registerReservationTools } from './tools/reservations';
 import { registerMapsWeatherTools } from './tools/mapsWeather';
@@ -33,7 +32,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
 
   registerDayTools(server, userId, scopes);
 
-  registerAssignmentTools(server, userId, scopes);
+  // The assignment tools moved to the DI-discovered src/nest/assignments/
+  // assignments.mcp.ts (@McpController, attached via the nest-mcp registry below).
 
   registerMapsWeatherTools(server, userId, scopes);
 

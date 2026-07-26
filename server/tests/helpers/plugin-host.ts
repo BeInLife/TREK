@@ -10,6 +10,7 @@ import { CategoriesService } from '../../src/nest/categories/categories.service'
 import { TodoService } from '../../src/nest/todo/todo.service';
 import { PackingService } from '../../src/nest/packing/packing.service';
 import { DayNotesService } from '../../src/nest/days/day-notes.service';
+import { AssignmentsService } from '../../src/nest/assignments/assignments.service';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -27,6 +28,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     new PackingService(dbs),
     new PluginOAuthService(dbs),
     new DayNotesService(dbs),
+    new AssignmentsService(dbs),
   );
 }
 

@@ -8,7 +8,7 @@ import {
 } from '../../services/reservationService';
 import { linkBudgetItemToReservation } from '../../services/budgetService';
 import { getDay } from '../../services/dayService';
-import { placeExists, getAssignmentForTrip } from '../../services/assignmentService';
+import { placeExists, getAssignmentForTrip } from '../../nest/assignments/assignments.bridge';
 import {
   safeBroadcast, TOOL_ANNOTATIONS_WRITE, TOOL_ANNOTATIONS_DELETE,
   TOOL_ANNOTATIONS_NON_IDEMPOTENT,

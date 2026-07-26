@@ -100,7 +100,9 @@ import for one injected service (+ module export/import) — **no more bridge
 files for the plugin host, ever**. The factory's import list shrinks
 monotonically as the recipe in `src/nest/README.md` proceeds (packing and
 day-notes swapped in 2026-07; trip-invite migrated without touching the
-factory — it was never imported here; next factory swap: assignmentService).
+factory — it was never imported here; assignments swapped in 2026-07; next
+factory swap: whichever Wave-3 domain the factory imports migrates next —
+shareService/fileService/collabService are all imported here).
 
 ### Test impact (as landed)
 
@@ -108,7 +110,8 @@ factory — it was never imported here; next factory swap: assignmentService).
   `PluginRpcHost` directly with hand-built `HostDeps`).
 - `tests/unit/plugins/plugin-host-deps.factory.test.ts` (was
   `create-rpc-host.test.ts`) — the six DI-domain path mocks became constructor
-  stubs; the ~25 legacy-service path mocks remain; a file-local shim keeps the
+  stubs (nine stubs as of the 2026-07 assignments migration); the ~25
+  legacy-service path mocks remain; a file-local shim keeps the
   historical `createRealRpcHost(id, granted)` call sites and supplies a default
   no-op router.
 - Bridge delegation tests (TAG-SVC-016..020, CAT-SVC-016) — deleted with the
@@ -216,9 +219,9 @@ none of it is throwaway.
 1. ~~**Now / opportunistically — Option A.**~~ **Done (2026-07).** Injectable
    factory, tags/categories bridges deleted, wiring test rewritten against
    stubs (see §2).
-2. **Per domain, as the service migrations proceed** (`packingService` and
-   `dayNoteService` done 2026-07; `tripInviteService` done 2026-07 with no
-   factory impact — it was never imported here; `assignmentService` next, per
+2. **Per domain, as the service migrations proceed** (`packingService`,
+   `dayNoteService` and `assignmentService` done 2026-07; `tripInviteService`
+   done 2026-07 with no factory impact — it was never imported here; next per
    `src/nest/README.md`): migrate the
    service to DI as usual; the factory swaps one legacy import for one
    injected service. Optionally pilot `tags.rpc.ts` here — tags is small and
