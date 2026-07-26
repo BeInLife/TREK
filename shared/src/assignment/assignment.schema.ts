@@ -7,10 +7,11 @@ import { z } from 'zod';
  * endpoints under /api/trips/:tripId/days/:dayId/assignments and
  * /api/trips/:tripId/assignments/:id/*.
  *
- * Trip-scoped; mutations use the 'day_edit' permission. The legacy route
- * (server/src/routes/assignments.ts, mounted on /api) wraps assignmentService.
- * Assignment rows carry joined place data and are kept open in responses; the
- * request schemas + the bespoke 404/400 controller messages pin the rest.
+ * Trip-scoped; mutations use the 'day_edit' permission. The server side is the
+ * DI-native AssignmentsService (server/src/nest/assignments/), validated via
+ * the createZodDto wrappers in assignments.dto.ts. Assignment rows carry
+ * joined place data and are kept open in responses; the request schemas + the
+ * bespoke 404 controller messages pin the rest.
  */
 
 /**
@@ -61,7 +62,9 @@ export type AssignmentReorderRequest = z.infer<typeof assignmentReorderRequestSc
 
 export const assignmentMoveRequestSchema = z.object({
   new_day_id: z.union([z.number(), z.string()]),
-  order_index: z.number().optional(),
+  // The client api types this `number | null` (assignmentsApi.move) and the
+  // legacy route accepted null (`orderIndex || 0`) — keep null on the wire.
+  order_index: z.number().nullable().optional(),
 });
 export type AssignmentMoveRequest = z.infer<typeof assignmentMoveRequestSchema>;
 
@@ -73,7 +76,9 @@ export type AssignmentTimeRequest = z.infer<typeof assignmentTimeRequestSchema>;
 
 /** Set the leg's travel mode (a RouteProfileKey, or null to inherit the day default). */
 export const assignmentTransportRequestSchema = z.object({
-  transport_mode: z.string().nullable(),
+  // The legacy route read `body.transport_mode ?? null`, so an absent key
+  // behaves like an explicit null — keep it optional on the wire.
+  transport_mode: z.string().nullable().optional(),
 });
 export type AssignmentTransportRequest = z.infer<typeof assignmentTransportRequestSchema>;
 
