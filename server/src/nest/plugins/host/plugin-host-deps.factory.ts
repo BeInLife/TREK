@@ -28,7 +28,6 @@ import { ADDON_IDS } from '../../../addons';
 import { listJourneys, listEntries as listJournalEntriesSvc, createEntry as createJournalEntrySvc, updateEntry as updateJournalEntrySvc, deleteEntry as deleteJournalEntrySvc, createJourney as createJourneySvc, deleteJourney as deleteJourneySvc } from '../../../services/journeyService';
 import { listVisitedCountries, listManuallyVisitedRegions, listBucketList, markCountryVisited, unmarkCountryVisited, markRegionVisited, unmarkRegionVisited, createBucketItem as createBucketItemSvc, deleteBucketItem as deleteBucketItemSvc } from '../../../services/atlasService';
 import { getPlanData, getActivePlanId, toggleEntry as vacayToggleEntrySvc, toggleCompanyHoliday as vacayToggleCompanyHolidaySvc } from '../../../services/vacayService';
-import { listNotes, createNote, getNote, updateNote, deleteNote, dayExists as dayNoteDayExists } from '../../../services/dayNoteService';
 import { listCollections, getCollection, createCollection, updateCollection, savePlace as saveCollectionPlaceSvc, copyToTrip as copyCollectionToTripSvc, deletePlace as deleteCollectionPlaceSvc } from '../../../services/collectionsService';
 import { BudgetService } from '../../budget/budget.service';
 import { ReservationsService } from '../../reservations/reservations.service';
@@ -36,6 +35,7 @@ import { TagsService } from '../../tags/tags.service';
 import { CategoriesService } from '../../categories/categories.service';
 import { TodoService } from '../../todo/todo.service';
 import { PackingService } from '../../packing/packing.service';
+import { DayNotesService } from '../../days/day-notes.service';
 import { notifyBookingChange } from '../../../services/reservationService';
 import { PluginRpcHost, ForbiddenResource, BadParams } from './rpc-host';
 import { appendAudit } from './plugin-audit';
@@ -150,9 +150,10 @@ export interface PluginCallRouter {
  * `plugin:{id}:{event}` so a plugin can't forge a core event.
  *
  * DI-native domain services (budget, reservations, tags, categories, todo,
- * packing, oauth) are constructor-injected; legacy `services/*` domains stay
- * plain function imports until their own migration lands (DI-MIGRATION.md), at
- * which point each swaps one import for one injected service.
+ * packing, day-notes, oauth) are constructor-injected; legacy `services/*`
+ * domains stay plain function imports until their own migration lands
+ * (DI-MIGRATION.md), at which point each swaps one import for one injected
+ * service.
  */
 @Injectable()
 export class PluginHostDepsFactory {
@@ -164,6 +165,7 @@ export class PluginHostDepsFactory {
     private readonly todos: TodoService,
     private readonly packing: PackingService,
     private readonly oauth: PluginOAuthService,
+    private readonly dayNotes: DayNotesService,
   ) {}
 
   create(id: string, granted: ReadonlySet<string>, router: PluginCallRouter): PluginRpcHost {
@@ -690,27 +692,27 @@ export class PluginHostDepsFactory {
         return { deleted: true };
       },
       // Day notes are core (no addon) and trip-scoped; membership is enforced by the host.
-      listDayNotes: (tripId, dayId) => listNotes(dayId, tripId),
+      listDayNotes: (tripId, dayId) => this.dayNotes.list(dayId, tripId),
       // --- Day notes write (day_edit). The day must belong to the trip; broadcasts the
       // same dayNote:* events the REST controller emits so open sessions update live. ---
       createDayNote: (tripId, dayId, input) => {
-        if (!dayNoteDayExists(dayId, tripId)) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
+        if (!this.dayNotes.dayExists(dayId, tripId)) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
         const i = input as { text?: string; time?: string; icon?: string; sort_order?: number };
-        const note = createNote(dayId, tripId, i.text ?? '', i.time, i.icon, i.sort_order);
+        const note = this.dayNotes.create(dayId, tripId, i.text ?? '', i.time, i.icon, i.sort_order);
         broadcast(tripId, 'dayNote:created', { dayId, note }, undefined);
         return note;
       },
       updateDayNote: (tripId, dayId, noteId, input) => {
-        const current = getNote(noteId, dayId, tripId);
+        const current = this.dayNotes.getNote(noteId, dayId, tripId);
         if (!current) throw new ForbiddenResource(`no note ${noteId} on day ${dayId}`);
-        const note = updateNote(noteId, current as never, input as { text?: string; time?: string; icon?: string; sort_order?: number });
+        const note = this.dayNotes.update(noteId, current as never, input as { text?: string; time?: string; icon?: string; sort_order?: number });
         broadcast(tripId, 'dayNote:updated', { dayId, note }, undefined);
         return note;
       },
       deleteDayNote: (tripId, dayId, noteId) => {
-        const current = getNote(noteId, dayId, tripId);
+        const current = this.dayNotes.getNote(noteId, dayId, tripId);
         if (!current) throw new ForbiddenResource(`no note ${noteId} on day ${dayId}`);
-        deleteNote(noteId);
+        this.dayNotes.remove(noteId);
         broadcast(tripId, 'dayNote:deleted', { noteId, dayId }, undefined);
         return { deleted: true };
       },

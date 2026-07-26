@@ -5,7 +5,6 @@ import { listDays, listAccommodations } from '../services/dayService';
 import { listPlaces } from '../services/placeService';
 import { listBudgetItems, getPerPersonSummary, calculateSettlement } from '../services/budgetService';
 import { listReservations } from '../services/reservationService';
-import { listNotes as listDayNotes } from '../services/dayNoteService';
 import { listNotes as listCollabNotes, listPolls, listMessages } from '../services/collabService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
@@ -132,19 +131,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // Day notes
-  if (canReadTrips(scopes)) server.registerResource(
-    'day-notes',
-    new ResourceTemplate('trek://trips/{tripId}/days/{dayId}/notes', { list: undefined }),
-    { description: 'Notes for a specific day in a trip', mimeType: 'application/json' },
-    async (uri, { tripId, dayId }) => {
-      const tId = parseId(tripId);
-      const dId = parseId(dayId);
-      if (tId === null || dId === null || !canAccessTrip(tId, userId)) return accessDenied(uri.href);
-      const notes = listDayNotes(dId, tId);
-      return jsonContent(uri.href, notes);
-    }
-  );
+  // The day-notes resource moved to the DI-discovered
+  // src/nest/days/day-notes.mcp.ts (@ResourceTemplate).
 
   // Accommodations (hotels, rentals) per trip
   if (canReadTrips(scopes)) server.registerResource(

@@ -4,6 +4,8 @@ import { trekMcpAccessPolicy } from '../../src/mcp/nest-mcp-policy';
 import { CategoriesMcp } from '../../src/nest/categories/categories.mcp';
 import { CategoriesService } from '../../src/nest/categories/categories.service';
 import { DatabaseService } from '../../src/nest/database/database.service';
+import { DayNotesMcp } from '../../src/nest/days/day-notes.mcp';
+import { DayNotesService } from '../../src/nest/days/day-notes.service';
 import { PackingMcp } from '../../src/nest/packing/packing.mcp';
 import { PackingService } from '../../src/nest/packing/packing.service';
 import { TagsMcp } from '../../src/nest/tags/tags.mcp';
@@ -26,6 +28,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new CategoriesMcp(new CategoriesService(dbService)),
       new TodoMcp(new TodoService(dbService)),
       new PackingMcp(new PackingService(dbService)),
+      new DayNotesMcp(new DayNotesService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy },
   );

@@ -9,10 +9,6 @@ import {
 } from '../../services/dayService';
 import { createPlace } from '../../services/placeService';
 import {
-  createNote as createDayNote, getNote as getDayNote, updateNote as updateDayNote,
-  deleteNote as deleteDayNote, dayExists as dayNoteExists,
-} from '../../services/dayNoteService';
-import {
   safeBroadcast, TOOL_ANNOTATIONS_WRITE, TOOL_ANNOTATIONS_DELETE,
   TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, noAccess, ok, hasTripPermission, permissionDenied,
@@ -221,78 +217,6 @@ export function registerDayTools(server: McpServer, userId: number, scopes: stri
     }
   );
 
-  // --- DAY NOTES ---
-
-  server.registerTool(
-    'create_day_note',
-    {
-      description: 'Add a note to a specific day in a trip.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        dayId: z.number().int().positive(),
-        text: z.string().min(1).max(500),
-        time: z.string().max(250).optional().describe('Time label (e.g. "09:00" or "Morning")'),
-        icon: z.string().optional().describe('Emoji icon for the note'),
-      },
-      annotations: TOOL_ANNOTATIONS_NON_IDEMPOTENT,
-    },
-    async ({ tripId, dayId, text, time, icon }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      if (!hasTripPermission('day_edit', tripId, userId)) return permissionDenied();
-      if (!dayNoteExists(dayId, tripId)) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
-      const note = createDayNote(dayId, tripId, text, time, icon);
-      safeBroadcast(tripId, 'dayNote:created', { dayId, note });
-      return ok({ note });
-    }
-  );
-
-  server.registerTool(
-    'update_day_note',
-    {
-      description: 'Edit an existing note on a specific day.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        dayId: z.number().int().positive(),
-        noteId: z.number().int().positive(),
-        text: z.string().min(1).max(500).optional(),
-        time: z.string().max(250).nullable().optional().describe('Time label (e.g. "09:00" or "Morning"), or null to clear'),
-        icon: z.string().optional().describe('Emoji icon for the note'),
-      },
-      annotations: TOOL_ANNOTATIONS_WRITE,
-    },
-    async ({ tripId, dayId, noteId, text, time, icon }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      if (!hasTripPermission('day_edit', tripId, userId)) return permissionDenied();
-      const existing = getDayNote(noteId, dayId, tripId);
-      if (!existing) return { content: [{ type: 'text' as const, text: 'Note not found.' }], isError: true };
-      const note = updateDayNote(noteId, existing, { text, time: time !== undefined ? time : undefined, icon });
-      safeBroadcast(tripId, 'dayNote:updated', { dayId, note });
-      return ok({ note });
-    }
-  );
-
-  server.registerTool(
-    'delete_day_note',
-    {
-      description: 'Delete a note from a specific day.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        dayId: z.number().int().positive(),
-        noteId: z.number().int().positive(),
-      },
-      annotations: TOOL_ANNOTATIONS_DELETE,
-    },
-    async ({ tripId, dayId, noteId }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      if (!hasTripPermission('day_edit', tripId, userId)) return permissionDenied();
-      const note = getDayNote(noteId, dayId, tripId);
-      if (!note) return { content: [{ type: 'text' as const, text: 'Note not found.' }], isError: true };
-      deleteDayNote(noteId);
-      safeBroadcast(tripId, 'dayNote:deleted', { noteId, dayId });
-      return ok({ success: true });
-    }
-  );
+  // The day-note tools (create/update/delete_day_note) moved to the
+  // DI-discovered src/nest/days/day-notes.mcp.ts (@McpController).
 }

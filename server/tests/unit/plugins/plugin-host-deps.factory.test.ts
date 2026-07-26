@@ -3,9 +3,9 @@
  * capability host to the real privileged modules (#plugins, M1). Verifies the
  * per-plugin data db is cached, a granted db:own call works through the wired
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
- * DI-native domains (budget/reservations/tags/categories/todo/packing/oauth)
- * are constructor-injected stubs; legacy services/* domains stay path-mocked
- * until their own DI migration lands.
+ * DI-native domains (budget/reservations/tags/categories/todo/packing/
+ * day-notes/oauth) are constructor-injected stubs; legacy services/* domains
+ * stay path-mocked until their own DI migration lands.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
@@ -273,14 +273,15 @@ vi.mock('../../../src/services/collectionsService', () => {
     deletePlace: vi.fn((_uid: number, placeId: number) => { if (placeId === 404) httpError(404, 'Collection not found'); }),
   };
 });
-vi.mock('../../../src/services/dayNoteService', () => ({
-  listNotes: vi.fn((dayId: number, tripId: number) => [{ id: 1, day_id: dayId, trip_id: tripId }]),
-  createNote: vi.fn((dayId: number, _tripId: number, text: string) => ({ id: 50, day_id: dayId, text })),
+// Day notes are a constructor-injected stub (same behaviors as the old path mock).
+const dayNotesStub = {
+  list: vi.fn((dayId: number, tripId: number) => [{ id: 1, day_id: dayId, trip_id: tripId }]),
+  create: vi.fn((dayId: number, _tripId: number, text: string) => ({ id: 50, day_id: dayId, text })),
   getNote: vi.fn((id: number) => (id === 99 ? undefined : { id, text: 'Old' })),
-  updateNote: vi.fn((id: number, _current: unknown, fields: Record<string, unknown>) => ({ id, ...fields })),
-  deleteNote: vi.fn(),
+  update: vi.fn((id: number, _current: unknown, fields: Record<string, unknown>) => ({ id, ...fields })),
+  remove: vi.fn(),
   dayExists: vi.fn((dayId: number) => dayId === 3),
-}));
+} as unknown as DayNotesService;
 
 import { PluginHostDepsFactory, type PluginCallRouter } from '../../../src/nest/plugins/host/plugin-host-deps.factory';
 import { getPluginDataDb, closePluginDataDb } from '../../../src/nest/plugins/host/plugin-host-state';
@@ -291,12 +292,13 @@ import type { TagsService } from '../../../src/nest/tags/tags.service';
 import type { CategoriesService } from '../../../src/nest/categories/categories.service';
 import type { TodoService } from '../../../src/nest/todo/todo.service';
 import type { PackingService } from '../../../src/nest/packing/packing.service';
+import type { DayNotesService } from '../../../src/nest/days/day-notes.service';
 import type { PluginOAuthService } from '../../../src/nest/plugins/plugin-oauth.service';
 
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 

@@ -98,8 +98,8 @@ is `@Global`, so no import needed for it.
 factory *until their own domain migrates*. Each future migration then swaps one
 import for one injected service (+ module export/import) — **no more bridge
 files for the plugin host, ever**. The factory's import list shrinks
-monotonically as the recipe in `src/nest/README.md` proceeds (packing swapped
-in 2026-07; next up: dayNoteService).
+monotonically as the recipe in `src/nest/README.md` proceeds (packing and
+day-notes swapped in 2026-07; next up: tripInviteService).
 
 ### Test impact (as landed)
 
@@ -215,8 +215,9 @@ none of it is throwaway.
 1. ~~**Now / opportunistically — Option A.**~~ **Done (2026-07).** Injectable
    factory, tags/categories bridges deleted, wiring test rewritten against
    stubs (see §2).
-2. **Per domain, as the service migrations proceed** (`packingService` done
-   2026-07; `dayNoteService` next, per `src/nest/README.md`): migrate the
+2. **Per domain, as the service migrations proceed** (`packingService` and
+   `dayNoteService` done 2026-07; `tripInviteService` next, per
+   `src/nest/README.md`): migrate the
    service to DI as usual; the factory swaps one legacy import for one
    injected service. Optionally pilot `tags.rpc.ts` here — tags is small and
    already fully DI on HTTP + MCP.

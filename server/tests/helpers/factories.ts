@@ -279,11 +279,11 @@ export function createDayNote(
   db: Database.Database,
   dayId: number,
   tripId: number,
-  overrides: Partial<{ text: string; time: string; icon: string }> = {}
+  overrides: Partial<{ text: string; time: string; icon: string; sort_order: number }> = {}
 ): TestDayNote {
   const result = db.prepare(
-    'INSERT INTO day_notes (day_id, trip_id, text, time, icon, sort_order) VALUES (?, ?, ?, ?, ?, 9999)'
-  ).run(dayId, tripId, overrides.text ?? 'Test note', overrides.time ?? null, overrides.icon ?? '📝');
+    'INSERT INTO day_notes (day_id, trip_id, text, time, icon, sort_order) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(dayId, tripId, overrides.text ?? 'Test note', overrides.time ?? null, overrides.icon ?? '📝', overrides.sort_order ?? 9999);
   return db.prepare('SELECT * FROM day_notes WHERE id = ?').get(result.lastInsertRowid) as TestDayNote;
 }
 
