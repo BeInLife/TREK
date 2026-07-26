@@ -104,8 +104,10 @@ gates, and the first `PluginHostDepsFactory` swap done as part of a service
 migration — no bridge entry for the plugin host); day-notes followed (the first
 migration needing **no bridge at all**: after its three tools + resource moved
 to `day-notes.mcp.ts` and the plugin host injection, nothing outside the
-container consumed it). Repeat these steps per
-service (next up: tripInviteService). This is a **pure relocation** — byte-identical
+container consumed it); trip-invite followed (the smallest port: no MCP
+surface, no plugin-host import and no bridge — the SQL folded straight into
+`trip-invite.service.ts`). Repeat these steps per
+service (next up: assignmentService). This is a **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it
 injects domain services via `PluginHostDepsFactory`, so a migrated domain adds
