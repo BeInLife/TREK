@@ -132,8 +132,6 @@ export const BODY_CONTRACT_ALLOW_LIST: string[] = [
   'ReservationsController.update',
   'ReservationsController.updatePositions',
   'ReservationsController.updateTravelers',
-  'SettingsController.bulk',
-  'SettingsController.upsert',
   'SynologyMemoriesController.putSettings',
   'SynologyMemoriesController.search',
   'SynologyMemoriesController.test',
