@@ -48,11 +48,15 @@ export interface LinkPreviewResult {
 }
 
 /**
- * Collab domain service — owns the collab SQL (moved 1:1 from the legacy
- * services/collabService.ts: identical statements, the `||` falsy-coercion
- * defaults, the mixed COALESCE/CASE update, the post-write re-selects and the
- * sentinel error strings). Trip access, the 'collab_edit' / 'file_upload'
- * permissions and the WebSocket broadcast keep their legacy call paths.
+ * Collab domain service — owns the collab SQL (moved from the legacy
+ * services/collabService.ts: the `||` falsy-coercion defaults, the mixed
+ * COALESCE/CASE update, the post-write re-selects and the sentinel error
+ * strings). Trip access, the 'collab_edit' / 'file_upload' permissions and the
+ * WebSocket broadcast keep their legacy call paths. Post-migration hardening
+ * on top of the 1:1 move: the multi-statement writes (deleteNote, votePoll)
+ * run in db.transaction(), getFormattedNoteById is trip-scoped and null-safe,
+ * votePoll rejects non-integer indexes, and linkPreview absorbs malformed URLs
+ * instead of throwing.
  * Non-Nest consumers (legacy tripService, the legacy MCP trips registrar) go
  * through collab.bridge.ts instead of importing this class directly.
  */
@@ -186,15 +190,17 @@ export class CollabService {
     const existing = this.db.get('SELECT id FROM collab_notes WHERE id = ? AND trip_id = ?', noteId, tripId);
     if (!existing) return false;
 
-    // Clean up attached files from disk
+    // Clean up attached files from disk (unlink-first is intentional — a
+    // failed row delete leaves dangling rows, never orphaned files).
     const noteFiles = this.db.all<NoteFileRow>('SELECT id, filename FROM trip_files WHERE note_id = ?', noteId);
     for (const f of noteFiles) {
       const filePath = path.join(__dirname, '../../../uploads', f.filename);
       try { fs.unlinkSync(filePath); } catch { /* ignore */ }
     }
-    this.db.run('DELETE FROM trip_files WHERE note_id = ?', noteId);
-
-    this.db.run('DELETE FROM collab_notes WHERE id = ?', noteId);
+    this.db.transaction(() => {
+      this.db.run('DELETE FROM trip_files WHERE note_id = ?', noteId);
+      this.db.run('DELETE FROM collab_notes WHERE id = ?', noteId);
+    });
     return true;
   }
 
@@ -215,8 +221,9 @@ export class CollabService {
     return { file: { ...saved, url: `/api/trips/${tripId}/files/${saved.id}/download` } };
   }
 
-  getFormattedNoteById(noteId: string | number) {
-    const note = this.db.get<CollabNote>('SELECT n.*, u.username, u.avatar FROM collab_notes n JOIN users u ON n.user_id = u.id WHERE n.id = ?', noteId)!;
+  getFormattedNoteById(tripId: string | number, noteId: string | number) {
+    const note = this.db.get<CollabNote>('SELECT n.*, u.username, u.avatar FROM collab_notes n JOIN users u ON n.user_id = u.id WHERE n.id = ? AND n.trip_id = ?', noteId, tripId);
+    if (!note) return null;
     return this.formatNote(note);
   }
 
@@ -304,7 +311,7 @@ export class CollabService {
     if (poll.closed) return { error: 'closed' };
 
     const options = JSON.parse(poll.options);
-    if (optionIndex < 0 || optionIndex >= options.length) {
+    if (!Number.isInteger(optionIndex) || optionIndex < 0 || optionIndex >= options.length) {
       return { error: 'invalid_index' };
     }
 
@@ -316,10 +323,12 @@ export class CollabService {
     if (existingVote) {
       this.db.run('DELETE FROM collab_poll_votes WHERE id = ?', existingVote.id);
     } else {
-      if (!poll.multiple) {
-        this.db.run('DELETE FROM collab_poll_votes WHERE poll_id = ? AND user_id = ?', pollId, userId);
-      }
-      this.db.run('INSERT INTO collab_poll_votes (poll_id, user_id, option_index) VALUES (?, ?, ?)', pollId, userId, optionIndex);
+      this.db.transaction(() => {
+        if (!poll.multiple) {
+          this.db.run('DELETE FROM collab_poll_votes WHERE poll_id = ? AND user_id = ?', pollId, userId);
+        }
+        this.db.run('INSERT INTO collab_poll_votes (poll_id, user_id, option_index) VALUES (?, ?, ?)', pollId, userId, optionIndex);
+      });
     }
 
     return { poll: this.getPollWithVotes(pollId) };
@@ -430,7 +439,9 @@ export class CollabService {
   async linkPreview(url: string): Promise<LinkPreviewResult> {
     const fallback: LinkPreviewResult = { title: null, description: null, image: null, url };
 
-    const parsed = new URL(url);
+    // A malformed URL returns the fallback directly (the legacy code let
+    // `new URL` throw and relied on the controller's catch for the same 200).
+    try { new URL(url); } catch { return fallback; }
     const ssrf = await checkSsrf(url, true);
     if (!ssrf.allowed) {
       return { ...fallback, error: ssrf.error } as LinkPreviewResult & { error?: string };

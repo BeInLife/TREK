@@ -669,6 +669,19 @@ describe('Collab validation', () => {
 });
 
 describe('Link preview', () => {
+  it('COLLAB-025 — GET /collab/link-preview as a non-member returns 404 (trip-access check added post-migration)', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: outsider } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+
+    const res = await request(app)
+      .get(`/api/trips/${trip.id}/collab/link-preview?url=https://example.com`)
+      .set('Cookie', authCookie(outsider.id));
+
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Trip not found' });
+  });
+
   it('COLLAB-025 — GET /collab/link-preview without url returns 400', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);

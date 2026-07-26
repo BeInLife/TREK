@@ -53,8 +53,9 @@ function jsonContent(uri: string, data: unknown) {
  * and broadcasts). The registration-time gates map to the composite `when`
  * thunks (collab addon AND per-sub-feature flag) plus the declarative collab
  * read/write access markers (the legacy `if (R)` / `if (W)` checks, resolved
- * by trekMcpAccessPolicy). Parity quirks kept on purpose: vote_collab_poll has
- * no demo-user gate, and the list tools check only trip access.
+ * by trekMcpAccessPolicy). The list tools check only trip access (as legacy);
+ * vote_collab_poll gained the demo-user gate the legacy registrar was missing,
+ * matching every other collab write tool.
  */
 @McpController()
 export class CollabMcp {
@@ -202,6 +203,7 @@ export class CollabMcp {
     access: { group: 'collab', mode: 'write' },
   })
   async voteCollabPoll({ tripId, pollId, optionIndex }: { tripId: number; pollId: number; optionIndex: number }, ctx: McpContext) {
+    if (isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const result = this.collab.votePoll(tripId, pollId, ctx.userId, optionIndex);

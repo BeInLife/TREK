@@ -178,6 +178,24 @@ describe('Tool: vote_collab_poll', () => {
     });
   });
 
+  it('blocks demo user (gate added with the DI migration — the legacy registrar missed it)', async () => {
+    process.env.DEMO_MODE = 'true';
+    const { user } = createUser(testDb, { email: 'demo@nomad.app' });
+    const trip = createTrip(testDb, user.id);
+    const pollId = (testDb.prepare(
+      `INSERT INTO collab_polls (trip_id, user_id, question, options, created_at) VALUES (?, ?, ?, ?, datetime('now'))`
+    ).run(trip.id, user.id, 'Best city?', JSON.stringify(['Paris', 'Rome'])) as any).lastInsertRowid;
+
+    await withHarness(user.id, async (h) => {
+      const result = await h.client.callTool({
+        name: 'vote_collab_poll',
+        arguments: { tripId: trip.id, pollId: Number(pollId), optionIndex: 0 },
+      });
+      expect(result.isError).toBe(true);
+      expect(testDb.prepare('SELECT COUNT(*) as c FROM collab_poll_votes WHERE poll_id = ?').get(pollId)).toEqual({ c: 0 });
+    });
+  });
+
   it('returns access denied for non-member', async () => {
     const { user } = createUser(testDb);
     const { user: other } = createUser(testDb);

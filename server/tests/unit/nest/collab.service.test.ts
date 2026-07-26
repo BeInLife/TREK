@@ -1,10 +1,12 @@
 /**
- * Unit tests for the DI-native CollabService — COLLAB-SVC-001 to COLLAB-SVC-033
+ * Unit tests for the DI-native CollabService — COLLAB-SVC-001 to COLLAB-SVC-038
  * (001–030 moved 1:1 from the legacy tests/unit/services/collabService.test.ts;
- * 031–033 pin the collab.bridge delegation). Covers votePoll edge cases,
- * listMessages pagination, deleteMessage ownership, updateNote partial fields,
- * linkPreview, avatarUrl, createMessage reply validation. Uses a real in-memory
- * SQLite DB so SQL logic is exercised faithfully.
+ * 031–033 pin the collab.bridge delegation; 034–038 pin the post-migration
+ * hardening: transactional writes, trip-scoped getFormattedNoteById, the
+ * integer vote guard and malformed-URL absorption). Covers votePoll edge
+ * cases, listMessages pagination, deleteMessage ownership, updateNote partial
+ * fields, linkPreview, avatarUrl, createMessage reply validation. Uses a real
+ * in-memory SQLite DB so SQL logic is exercised faithfully.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 
@@ -432,3 +434,72 @@ describe('collab.bridge', () => {
   });
 });
 
+// ── Post-migration hardening (transactions, scoping, guards) ──────────────────
+
+describe('hardening', () => {
+  it('COLLAB-SVC-034: votePoll switch is atomic — prior vote survives a failed INSERT', () => {
+    const { user1, trip } = setup();
+    const dbs = new DatabaseService(testDb);
+    const failing = new CollabService(dbs);
+    const poll = failing.createPoll(trip.id, user1.id, { question: 'Q?', options: ['A', 'B'] });
+    failing.votePoll(trip.id, poll!.id, user1.id, 0);
+
+    const realRun = dbs.run.bind(dbs);
+    const spy = vi.spyOn(dbs, 'run').mockImplementation((sql: string, ...params: unknown[]) => {
+      if (sql.includes('INSERT INTO collab_poll_votes')) throw new Error('boom');
+      return realRun(sql, ...params);
+    });
+    // Single-choice switch: DELETE prior votes, then the INSERT fails — the
+    // transaction must roll the DELETE back too.
+    expect(() => failing.votePoll(trip.id, poll!.id, user1.id, 1)).toThrow('boom');
+    spy.mockRestore();
+
+    const votes = testDb.prepare('SELECT option_index FROM collab_poll_votes WHERE poll_id = ?').all(poll!.id) as { option_index: number }[];
+    expect(votes).toEqual([{ option_index: 0 }]);
+  });
+
+  it('COLLAB-SVC-035: deleteNote is atomic — trip_files rows survive a failed note DELETE', () => {
+    const { user1, trip } = setup();
+    const dbs = new DatabaseService(testDb);
+    const failing = new CollabService(dbs);
+    const note = failing.createNote(trip.id, user1.id, { title: 'With file' });
+    testDb.prepare('INSERT INTO trip_files (trip_id, note_id, filename, original_name) VALUES (?, ?, ?, ?)')
+      .run(trip.id, note.id, 'files/a.pdf', 'a.pdf');
+
+    const realRun = dbs.run.bind(dbs);
+    const spy = vi.spyOn(dbs, 'run').mockImplementation((sql: string, ...params: unknown[]) => {
+      if (sql.includes('DELETE FROM collab_notes')) throw new Error('boom');
+      return realRun(sql, ...params);
+    });
+    expect(() => failing.deleteNote(trip.id, note.id)).toThrow('boom');
+    spy.mockRestore();
+
+    expect(testDb.prepare('SELECT COUNT(*) as c FROM trip_files WHERE note_id = ?').get(note.id)).toEqual({ c: 1 });
+    expect(testDb.prepare('SELECT COUNT(*) as c FROM collab_notes WHERE id = ?').get(note.id)).toEqual({ c: 1 });
+  });
+
+  it('COLLAB-SVC-036: getFormattedNoteById is trip-scoped and null-safe', () => {
+    const { user1, trip } = setup();
+    const otherTrip = createTrip(testDb, user1.id);
+    const note = svc.createNote(trip.id, user1.id, { title: 'Scoped' });
+
+    expect(svc.getFormattedNoteById(trip.id, note.id)!.title).toBe('Scoped');
+    expect(svc.getFormattedNoteById(otherTrip.id, note.id)).toBeNull();
+    expect(svc.getFormattedNoteById(trip.id, 9999)).toBeNull();
+  });
+
+  it('COLLAB-SVC-037: votePoll rejects a non-integer option index with "invalid_index"', () => {
+    const { user1, trip } = setup();
+    const poll = svc.createPoll(trip.id, user1.id, { question: 'Q?', options: ['A', 'B'] });
+
+    expect(svc.votePoll(trip.id, poll!.id, user1.id, '0' as unknown as number).error).toBe('invalid_index');
+    expect(svc.votePoll(trip.id, poll!.id, user1.id, 0.5).error).toBe('invalid_index');
+    expect(testDb.prepare('SELECT COUNT(*) as c FROM collab_poll_votes WHERE poll_id = ?').get(poll!.id)).toEqual({ c: 0 });
+  });
+
+  it('COLLAB-SVC-038: linkPreview returns the fallback for a malformed URL without throwing', async () => {
+    const result = await svc.linkPreview('not a url');
+    expect(result).toEqual({ title: null, description: null, image: null, url: 'not a url' });
+    expect(mockCheckSsrf).not.toHaveBeenCalled();
+  });
+});

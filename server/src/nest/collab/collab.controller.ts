@@ -66,7 +66,9 @@ const NOTE_UPLOAD = {
  * (400 with the standard `{ error }` envelope on mismatch — this replaced the
  * legacy bespoke 'Title is required' / 'Question is required' / '... 2 options
  * ...' / 5000-char / 'Emoji is required' checks; the whitespace-only 'Message
- * text is required' check stays, since min(1) doesn't trim).
+ * text is required' check stays, since min(1) doesn't trim). One deliberate
+ * deviation from the legacy route: link-preview now verifies trip access (404)
+ * like every sibling handler.
  */
 @Controller('api/trips/:tripId/collab')
 @UseGuards(JwtAuthGuard)
@@ -154,7 +156,7 @@ export class CollabController {
     if (!result) {
       throw new HttpException({ error: 'Note not found' }, 404);
     }
-    this.collab.broadcast(tripId, 'collab:note:updated', { note: this.collab.getFormattedNoteById(id) }, socketId);
+    this.collab.broadcast(tripId, 'collab:note:updated', { note: this.collab.getFormattedNoteById(tripId, id) }, socketId);
     return result;
   }
 
@@ -165,7 +167,7 @@ export class CollabController {
     if (!this.collab.deleteNoteFile(tripId, id, fileId)) {
       throw new HttpException({ error: 'File not found' }, 404);
     }
-    this.collab.broadcast(tripId, 'collab:note:updated', { note: this.collab.getFormattedNoteById(id) }, socketId);
+    this.collab.broadcast(tripId, 'collab:note:updated', { note: this.collab.getFormattedNoteById(tripId, id) }, socketId);
     return { success: true };
   }
 
@@ -281,8 +283,9 @@ export class CollabController {
   // ── Link preview ──────────────────────────────────────────────────────────
   @Get('link-preview')
   async linkPreview(@CurrentUser() user: User, @Param('tripId') tripId: string, @Query('url') url?: string) {
-    // NB: the legacy route does not verify trip access on link-preview; kept 1:1.
-    void user; void tripId;
+    // Unlike the legacy route, this verifies trip access — any authed user
+    // could otherwise drive the SSRF-guarded fetcher through arbitrary trip URLs.
+    this.requireTrip(tripId, user);
     if (!url) {
       throw new HttpException({ error: 'URL is required' }, 400);
     }
