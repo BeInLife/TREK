@@ -25,7 +25,8 @@ import { JourneyService } from './journey.service';
 import { JourneyAddonGuard } from './journey-addon.guard';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { getAllowedExtensions, isVideoMime, isVideoExtension, MAX_VIDEO_SIZE } from '../../services/fileService';
+import { isVideoMime, isVideoExtension, MAX_VIDEO_SIZE } from '../files/files.constants';
+import { getAllowedExtensions } from '../files/files.bridge';
 
 const uploadsBase = path.join(__dirname, '../../../uploads/journey');
 const IMAGE_UPLOAD = {

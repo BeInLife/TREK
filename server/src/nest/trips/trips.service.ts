@@ -10,7 +10,7 @@ import { PackingService } from '../packing/packing.service';
 import { TodoService } from '../todo/todo.service';
 import { listBudgetItems, rebaseTripCurrency } from '../../services/budgetService';
 import { listReservations } from '../../services/reservationService';
-import { listFiles } from '../../services/fileService';
+import { FilesService } from '../files/files.service';
 import { searchUnsplashPhotos, getUnsplashKey } from '../../services/unsplashService';
 
 /**
@@ -26,6 +26,7 @@ export class TripsService {
     private readonly dbs: DatabaseService,
     private readonly todo: TodoService,
     private readonly packing: PackingService,
+    private readonly files: FilesService,
   ) {}
 
   private get db() {
@@ -143,7 +144,7 @@ export class TripsService {
       todoItems: this.todo.listItems(tripId),
       budgetItems: listBudgetItems(tripId),
       reservations: listReservations(tripId),
-      files: listFiles(tripId, false),
+      files: this.files.listFiles(tripId, false),
       accommodations: listAccommodations(tripId),
       members: [owner, ...(members || [])].filter(Boolean),
     };

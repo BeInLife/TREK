@@ -27,12 +27,10 @@ vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: (
 
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn(() => true) }));
 vi.mock('../../src/services/adminService', () => ({ isAddonEnabled }));
-vi.mock('../../src/services/fileService', () => ({
-  getAllowedExtensions: () => '*',
-  MAX_VIDEO_SIZE: 500 * 1024 * 1024,
-  isVideoExtension: (ext: string) => ['mp4', 'm4v', 'webm', 'mov'].includes(String(ext).toLowerCase().replace(/^\./, '')),
-  isVideoMime: (m?: string) => !!m && m.startsWith('video/'),
-}));
+// The controller's pure helpers (isVideoExtension/isVideoMime/MAX_VIDEO_SIZE)
+// now come from the real files.constants; only the request-time app_settings
+// read is mocked, preserving the old '*'-allowlist semantics for the fixtures.
+vi.mock('../../src/nest/files/files.bridge', () => ({ getAllowedExtensions: () => '*' }));
 vi.mock('../../src/services/memories/immichService', () => ({ uploadToImmich: vi.fn(), streamImmichAsset: vi.fn() }));
 vi.mock('../../src/services/memories/photoResolverService', () => ({ streamPhoto: vi.fn() }));
 

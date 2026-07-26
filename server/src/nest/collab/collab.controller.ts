@@ -23,7 +23,7 @@ import type { User } from '../../types';
 import { CollabService } from './collab.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { BLOCKED_EXTENSIONS } from '../../services/fileService';
+import { BLOCKED_EXTENSIONS } from '../files/files.constants';
 
 const MAX_NOTE_FILE_SIZE = 50 * 1024 * 1024;
 const filesDir = path.join(__dirname, '../../../uploads/files');

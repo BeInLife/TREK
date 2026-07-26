@@ -18,7 +18,8 @@ const { db } = vi.hoisted(() => {
   const tmp = new Database(':memory:');
   tmp.exec('PRAGMA journal_mode = WAL');
   tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0);`);
+    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
+    avatar TEXT);`);
   tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT);');
   // bundle()'s todoItems now runs TodoService's real SQL (DI-injected, no mock).
   tmp.exec(`CREATE TABLE todo_items (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
@@ -34,6 +35,16 @@ const { db } = vi.hoisted(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
   tmp.exec(`CREATE TABLE packing_item_recipients (item_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     PRIMARY KEY (item_id, user_id));`);
+  // bundle()'s files now runs FilesService's real SQL (DI-injected, no mock) —
+  // empty tables satisfy the FILE_SELECT joins and the file_links batch.
+  tmp.exec(`CREATE TABLE trip_files (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
+    place_id INTEGER, reservation_id INTEGER, filename TEXT NOT NULL, original_name TEXT NOT NULL,
+    file_size INTEGER, mime_type TEXT, description TEXT, uploaded_by INTEGER, starred INTEGER DEFAULT 0,
+    deleted_at DATETIME, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  tmp.exec(`CREATE TABLE file_links (id INTEGER PRIMARY KEY AUTOINCREMENT, file_id INTEGER NOT NULL,
+    reservation_id INTEGER, assignment_id INTEGER, place_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  tmp.exec('CREATE TABLE IF NOT EXISTS reservations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER, title TEXT);');
   return { db: tmp };
 });
 
@@ -62,7 +73,6 @@ vi.mock('../../src/services/dayService', () => ({ listDays: () => ({ days: [] })
 vi.mock('../../src/services/placeService', () => ({ listPlaces: () => [] }));
 vi.mock('../../src/services/budgetService', () => ({ listBudgetItems: () => [] }));
 vi.mock('../../src/services/reservationService', () => ({ listReservations: () => [] }));
-vi.mock('../../src/services/fileService', () => ({ listFiles: () => [] }));
 
 import { TripsModule } from '../../src/nest/trips/trips.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';

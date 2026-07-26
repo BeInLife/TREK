@@ -13,6 +13,7 @@ import { DayNotesService } from '../../src/nest/days/day-notes.service';
 import { AssignmentsService } from '../../src/nest/assignments/assignments.service';
 import { LlmConfigResolver } from '../../src/nest/llm-parse/llm-config.resolver';
 import { SettingsService } from '../../src/nest/settings/settings.service';
+import { FilesService } from '../../src/nest/files/files.service';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -33,6 +34,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     new AssignmentsService(dbs),
     new LlmConfigResolver(new SettingsService(dbs), dbs),
     dbs,
+    new FilesService(dbs),
   );
 }
 

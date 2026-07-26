@@ -25,7 +25,9 @@ import type { User } from '../../types';
 import { FilesService } from './files.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { MAX_FILE_SIZE, MAX_VIDEO_SIZE, BLOCKED_EXTENSIONS, filesDir, getAllowedExtensions, isVideoExtension } from '../../services/fileService';
+import { MAX_FILE_SIZE, MAX_VIDEO_SIZE, BLOCKED_EXTENSIONS, filesDir, isVideoExtension } from './files.constants';
+import { getAllowedExtensions } from './files.bridge';
+import { FileUploadDto, FileUpdateDto, FileLinkDto } from './files.dto';
 import { isDemoEmail } from '../../services/demo';
 
 const UPLOAD = {
@@ -80,7 +82,7 @@ export class FilesController {
   // A file may only point at reservations/assignments/places from its own trip.
   // Reject cross-trip ids before they are stored — the reservation JOIN would
   // otherwise leak the foreign reservation's title back to the caller.
-  private assertLinkTargets(tripId: string, body: { reservation_id?: string | null; assignment_id?: string | null; place_id?: string | null }) {
+  private assertLinkTargets(tripId: string, body: { reservation_id?: string | number | null; assignment_id?: string | number | null; place_id?: string | number | null }) {
     if (this.files.findForeignLinkTarget(tripId, body)) {
       throw new HttpException({ error: 'Linked item does not belong to this trip' }, 400);
     }
@@ -98,7 +100,7 @@ export class FilesController {
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Body() body: { place_id?: string; description?: string; reservation_id?: string },
+    @Body() body: FileUploadDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
     // multer (diskStorage) has already written the upload by the time we get here,
@@ -144,7 +146,7 @@ export class FilesController {
   }
 
   @Put(':id')
-  update(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body() body: { description?: string; place_id?: string | null; reservation_id?: string | null }, @Headers('x-socket-id') socketId?: string) {
+  update(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body() body: FileUpdateDto, @Headers('x-socket-id') socketId?: string) {
     const trip = this.requireTrip(tripId, user);
     if (!this.files.can('file_edit', trip, user)) {
       throw new HttpException({ error: 'No permission to edit files' }, 403);
@@ -232,7 +234,7 @@ export class FilesController {
 
   @Post(':id/link')
   @HttpCode(200) // Express answers link with res.json (200).
-  link(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body() body: { reservation_id?: string | null; assignment_id?: string | null; place_id?: string | null }) {
+  link(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Body() body: FileLinkDto) {
     const trip = this.requireTrip(tripId, user);
     if (!this.files.can('file_edit', trip, user)) {
       throw new HttpException({ error: 'No permission' }, 403);

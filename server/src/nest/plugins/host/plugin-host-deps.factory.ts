@@ -4,7 +4,7 @@ import { broadcast, broadcastToUser } from '../../../websocket';
 import { listBudgetItems } from '../../../services/budgetService';
 import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
-import { listFiles, createFile, createFileLink, getFileById, updateFile, softDeleteFile, findForeignLinkTarget, resolveFilePath, BLOCKED_EXTENSIONS, filesDir } from '../../../services/fileService';
+import { BLOCKED_EXTENSIONS, filesDir } from '../../files/files.constants';
 import { createNote as createCollabNoteSvc, createPoll as createCollabPollSvc, votePoll as voteCollabPollSvc, createMessage as createCollabMessageSvc, listNotes as listCollabNotesSvc, listPolls as listCollabPollsSvc, listMessages as listCollabMessagesSvc } from '../../../services/collabService';
 import { getRates as getExchangeRates } from '../../../services/exchangeRateService';
 import { joinTripAsMember } from '../../../services/tripMembership';
@@ -36,6 +36,7 @@ import { DayNotesService } from '../../days/day-notes.service';
 import { AssignmentsService } from '../../assignments/assignments.service';
 import { LlmConfigResolver } from '../../llm-parse/llm-config.resolver';
 import { DatabaseService } from '../../database/database.service';
+import { FilesService } from '../../files/files.service';
 import { notifyBookingChange } from '../../../services/reservationService';
 import { PluginRpcHost, ForbiddenResource, BadParams } from './rpc-host';
 import { appendAudit } from './plugin-audit';
@@ -136,8 +137,8 @@ export interface PluginCallRouter {
  * `plugin:{id}:{event}` so a plugin can't forge a core event.
  *
  * DI-native domain services (budget, reservations, tags, categories, todo,
- * packing, day-notes, assignments, oauth, the LLM config resolver) and the
- * DatabaseService (all inline SQL + the trip-access helper) are
+ * packing, day-notes, assignments, oauth, files, the LLM config resolver) and
+ * the DatabaseService (all inline SQL + the trip-access helper) are
  * constructor-injected; legacy `services/*` domains stay plain function
  * imports until their own migration lands (DI-MIGRATION.md), at which point
  * each swaps one import for one injected service.
@@ -156,6 +157,7 @@ export class PluginHostDepsFactory {
     private readonly assignments: AssignmentsService,
     private readonly llmConfig: LlmConfigResolver,
     private readonly db: DatabaseService,
+    private readonly files: FilesService,
   ) {}
 
   /**
@@ -217,16 +219,16 @@ export class PluginHostDepsFactory {
       // --- Read scopes (packing/files). Membership is checked by the host (tripRead);
       // these just delegate to the same services the REST paths use. ---
       listPackingItems: (tripId, userId) => this.packing.listItems(tripId, userId),
-      listTripFiles: (tripId) => listFiles(tripId, false),
+      listTripFiles: (tripId) => this.files.listFiles(tripId, false),
       // A file's bytes as base64, size-capped BEFORE the read so a 500MB video can't
       // be pulled (~667MB base64) through the IPC pipe. 10MB matches the plugin upload
       // cap; trashed files (deleted_at set) are refused like the download path.
       getTripFileContent: async (tripId, fileId) => {
         const CONTENT_MAX = 10 * 1024 * 1024;
-        const file = getFileById(fileId, tripId) as { filename: string; original_name: string; mime_type: string | null; file_size: number | null; deleted_at: string | null } | undefined;
+        const file = this.files.getFileById(fileId, tripId) as { filename: string; original_name: string; mime_type: string | null; file_size: number | null; deleted_at: string | null } | undefined;
         if (!file || file.deleted_at) throw new ForbiddenResource(`no file ${fileId} on trip ${tripId}`);
         if ((file.file_size ?? 0) > CONTENT_MAX) throw new BadParams(`file too large to read (>${CONTENT_MAX} bytes); use the download UI`);
-        const { resolved, safe } = resolveFilePath(file.filename);
+        const { resolved, safe } = this.files.resolveFilePath(file.filename);
         if (!safe) throw new ForbiddenResource('file path is not accessible');
         // Read off the event loop — a 10MB read + base64 on the host thread would
         // otherwise stall every other plugin RPC and request for its duration.
@@ -256,12 +258,12 @@ export class PluginHostDepsFactory {
         const buf = Buffer.from(i.content_base64, 'base64');
         if (buf.length === 0) throw new BadParams('file content is empty');
         if (buf.length > 10 * 1024 * 1024) throw new BadParams('file exceeds the 10MB plugin upload cap');
-        const foreign = findForeignLinkTarget(tripId, { reservation_id: i.reservation_id ?? null, place_id: i.place_id ?? null });
+        const foreign = this.files.findForeignLinkTarget(tripId, { reservation_id: i.reservation_id ?? null, place_id: i.place_id ?? null });
         if (foreign) throw new ForbiddenResource(`${foreign} does not belong to trip ${tripId}`);
         const filename = `${randomUUID()}${ext}`;
         fsMod.mkdirSync(filesDir, { recursive: true });
         fsMod.writeFileSync(pathMod.join(filesDir, filename), buf);
-        const file = createFile(
+        const file = this.files.createFile(
           tripId,
           { filename, originalname: original, size: buf.length, mimetype: i.mimetype || 'application/octet-stream' },
           actingUserId,
@@ -271,25 +273,25 @@ export class PluginHostDepsFactory {
         return file;
       },
       createTripFileLink: (tripId, fileId, opts) => {
-        if (!getFileById(fileId, tripId)) throw new ForbiddenResource(`no file ${fileId} on trip ${tripId}`);
+        if (!this.files.getFileById(fileId, tripId)) throw new ForbiddenResource(`no file ${fileId} on trip ${tripId}`);
         const o = opts as { reservation_id?: number; assignment_id?: number; place_id?: number };
-        const foreign = findForeignLinkTarget(tripId, o);
+        const foreign = this.files.findForeignLinkTarget(tripId, o);
         if (foreign) throw new ForbiddenResource(`${foreign} does not belong to trip ${tripId}`);
-        return createFileLink(fileId, { reservation_id: o.reservation_id != null ? String(o.reservation_id) : null, assignment_id: o.assignment_id != null ? String(o.assignment_id) : null, place_id: o.place_id != null ? String(o.place_id) : null });
+        return this.files.createFileLink(fileId, { reservation_id: o.reservation_id != null ? String(o.reservation_id) : null, assignment_id: o.assignment_id != null ? String(o.assignment_id) : null, place_id: o.place_id != null ? String(o.place_id) : null });
       },
       updateTripFile: (tripId, fileId, input) => {
-        const current = getFileById(fileId, tripId);
+        const current = this.files.getFileById(fileId, tripId);
         if (!current) throw new ForbiddenResource(`no file ${fileId} on trip ${tripId}`);
         const i = input as { description?: string; place_id?: number | null; reservation_id?: number | null };
-        const foreign = findForeignLinkTarget(tripId, { reservation_id: i.reservation_id ?? null, place_id: i.place_id ?? null });
+        const foreign = this.files.findForeignLinkTarget(tripId, { reservation_id: i.reservation_id ?? null, place_id: i.place_id ?? null });
         if (foreign) throw new ForbiddenResource(`${foreign} does not belong to trip ${tripId}`);
-        const file = updateFile(fileId, current, { description: i.description, place_id: i.place_id != null ? String(i.place_id) : i.place_id === null ? null : undefined, reservation_id: i.reservation_id != null ? String(i.reservation_id) : i.reservation_id === null ? null : undefined });
+        const file = this.files.updateFile(fileId, current, { description: i.description, place_id: i.place_id != null ? String(i.place_id) : i.place_id === null ? null : undefined, reservation_id: i.reservation_id != null ? String(i.reservation_id) : i.reservation_id === null ? null : undefined });
         broadcast(tripId, 'file:updated', { file }, undefined);
         return file;
       },
       softDeleteTripFile: (tripId, fileId) => {
-        if (!getFileById(fileId, tripId)) throw new ForbiddenResource(`no file ${fileId} on trip ${tripId}`);
-        softDeleteFile(fileId);
+        if (!this.files.getFileById(fileId, tripId)) throw new ForbiddenResource(`no file ${fileId} on trip ${tripId}`);
+        this.files.softDeleteFile(fileId);
         broadcast(tripId, 'file:deleted', { fileId }, undefined);
         return { deleted: true };
       },

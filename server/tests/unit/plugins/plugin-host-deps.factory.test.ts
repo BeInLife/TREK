@@ -4,7 +4,7 @@
  * per-plugin data db is cached, a granted db:own call works through the wired
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
  * DI-native domains (budget/reservations/tags/categories/todo/packing/
- * day-notes/assignments/oauth/llm-config) are constructor-injected stubs;
+ * day-notes/assignments/oauth/llm-config/files) are constructor-injected stubs;
  * legacy services/* domains stay path-mocked until their own DI migration lands.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
@@ -177,10 +177,17 @@ const { testFilesDir } = vi.hoisted(() => {
   const pm = require('node:path') as typeof import('node:path');
   return { testFilesDir: pm.join(osm.tmpdir(), 'trek-crh-files-test') };
 });
-vi.mock('../../../src/services/fileService', () => ({
-  listFiles: vi.fn((tid: number, trash: boolean) => [{ id: 2, trip_id: tid, trash }]),
+// The load-time constants the factory imports from files.constants — mocked so
+// createTripFile's mkdirSync/writeFileSync land in the tmpdir, never in the
+// real server/uploads/files (same redirection the old fileService path mock did).
+vi.mock('../../../src/nest/files/files.constants', () => ({
   filesDir: testFilesDir,
   BLOCKED_EXTENSIONS: ['.exe', '.bat', '.sh'],
+}));
+// Files: injected stub since the fileService DI migration (same behaviors as
+// the old path mock).
+const filesStub = {
+  listFiles: vi.fn((tid: number, trash: boolean) => [{ id: 2, trip_id: tid, trash }]),
   createFile: vi.fn((tid: number, file: { filename: string; originalname: string; size: number }, uploadedBy: number) => ({ id: 130, trip_id: Number(tid), ...file, uploaded_by: uploadedBy })),
   createFileLink: vi.fn(() => [{ file_id: 130 }]),
   getFileById: vi.fn((id: number) => (Number(id) === 404 ? undefined : Number(id) === 500 ? { id: 500, filename: 'huge.mp4', original_name: 'huge.mp4', mime_type: 'video/mp4', file_size: 400 * 1024 * 1024, deleted_at: null } : { id: Number(id), filename: 'visa.pdf', original_name: 'visa.pdf', mime_type: 'application/pdf', file_size: 3, deleted_at: null, description: 'old', place_id: null, reservation_id: null })),
@@ -190,7 +197,7 @@ vi.mock('../../../src/services/fileService', () => ({
   // reservation_id/place_id 999 = belongs to another trip
   findForeignLinkTarget: vi.fn((_tid: number, opts: { reservation_id?: number | null; place_id?: number | null }) =>
     (Number(opts.reservation_id) === 999 ? 'reservation_id' : Number(opts.place_id) === 999 ? 'place_id' : null)),
-}));
+} as unknown as FilesService;
 vi.mock('../../../src/services/collabService', () => ({
   listNotes: vi.fn((tid: number) => [{ id: 1, trip_id: Number(tid), title: 'Note' }]),
   listPolls: vi.fn((tid: number) => [{ id: 2, trip_id: Number(tid), question: 'Q?' }]),
@@ -301,12 +308,13 @@ import type { DayNotesService } from '../../../src/nest/days/day-notes.service';
 import type { AssignmentsService } from '../../../src/nest/assignments/assignments.service';
 import type { PluginOAuthService } from '../../../src/nest/plugins/plugin-oauth.service';
 import type { LlmConfigResolver } from '../../../src/nest/llm-parse/llm-config.resolver';
+import type { FilesService } from '../../../src/nest/files/files.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb));
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 
