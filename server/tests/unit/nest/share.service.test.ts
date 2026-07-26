@@ -155,17 +155,23 @@ describe('createOrUpdate', () => {
     expect(shareRow(trip.id).share_budget).toBe(1);
   });
 
-  it('SHARE-SVC-006: the update path re-applies the defaults for omitted flags and never touches expires_at', () => {
+  it('SHARE-SVC-006: the update path re-applies the defaults for omitted flags and renews the 90-day expiry', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     svc.createOrUpdate(String(trip.id), user.id, { share_packing: true });
-    testDb.prepare('UPDATE share_tokens SET expires_at = ? WHERE trip_id = ?').run('2099-01-01T00:00:00.000Z', trip.id);
+    // Simulate a legacy pre-TTL row (NULL expiry): an explicit update moves it
+    // onto the 90-day clock.
+    testDb.prepare('UPDATE share_tokens SET expires_at = NULL WHERE trip_id = ?').run(trip.id);
+    const before = Date.now();
     svc.createOrUpdate(String(trip.id), user.id, {});
     const row = shareRow(trip.id);
     // Omitted share_packing fell back to its default (off) — destructuring
     // defaults apply on every call, not only on create.
     expect(row.share_packing).toBe(0);
-    expect(row.expires_at).toBe('2099-01-01T00:00:00.000Z');
+    const ninetyDays = 90 * 24 * 60 * 60 * 1000;
+    const expires = new Date(row.expires_at).getTime();
+    expect(expires).toBeGreaterThanOrEqual(before + ninetyDays - 5000);
+    expect(expires).toBeLessThanOrEqual(Date.now() + ninetyDays + 5000);
   });
 });
 

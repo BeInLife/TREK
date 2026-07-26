@@ -367,12 +367,10 @@ export function registerTripTools(server: McpServer, userId: number, scopes: str
       if (isDemoUser(userId)) return demoDenied();
       if (!canAccessTrip(tripId, userId)) return noAccess();
       if (!hasTripPermission('share_manage', tripId, userId)) return permissionDenied();
+      // The zod .default()s above fill omitted flags, and ShareService applies
+      // the same defaults again for undefined — no re-defaulting needed here.
       const { token, created } = createOrUpdateShareLink(String(tripId), userId, {
-        share_map: share_map ?? true,
-        share_bookings: share_bookings ?? true,
-        share_packing: share_packing ?? false,
-        share_budget: share_budget ?? false,
-        share_collab: share_collab ?? false,
+        share_map, share_bookings, share_packing, share_budget, share_collab,
       });
       return ok({ token, created });
     }
