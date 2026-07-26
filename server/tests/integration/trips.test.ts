@@ -1245,4 +1245,19 @@ describe('Trip bundle', () => {
 
     expect(res.status).toBe(401);
   });
+
+  it('BUNDLE-006 — packingItems are scoped to the viewer: another member\'s private item stays out (#858)', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: member } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(trip.id, member.id);
+    testDb.prepare('INSERT INTO packing_items (trip_id, name, checked, sort_order) VALUES (?, ?, 0, 0)').run(trip.id, 'Tent');
+    testDb.prepare('INSERT INTO packing_items (trip_id, name, checked, sort_order, is_private, owner_id) VALUES (?, ?, 0, 1, 1, ?)').run(trip.id, 'Secret gift', owner.id);
+
+    const ownerView = await request(app).get(`/api/trips/${trip.id}/bundle`).set('Cookie', authCookie(owner.id));
+    expect(ownerView.body.packingItems.map((i: { name: string }) => i.name).sort()).toEqual(['Secret gift', 'Tent']);
+
+    const memberView = await request(app).get(`/api/trips/${trip.id}/bundle`).set('Cookie', authCookie(member.id));
+    expect(memberView.body.packingItems.map((i: { name: string }) => i.name)).toEqual(['Tent']);
+  });
 });

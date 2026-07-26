@@ -40,7 +40,8 @@ import type { PackingService } from '../../../src/nest/packing/packing.service';
 import { rebaseTripCurrency } from '../../../src/services/budgetService';
 
 const todoStub = { listItems: () => [] } as unknown as TodoService;
-const packingStub = { listItems: () => [] } as unknown as PackingService;
+const packingListItems = vi.fn(() => []);
+const packingStub = { listItems: packingListItems } as unknown as PackingService;
 function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub); }
 beforeEach(() => vi.clearAllMocks());
 
@@ -99,14 +100,16 @@ describe('TripsService (wrapper delegation + bundle/copy/notify helpers)', () =>
     expect(dbMock.prepare).toHaveBeenCalledWith(expect.stringContaining('SELECT * FROM trips t'));
   });
 
-  it('bundle aggregates every sub-collection + the member list', () => {
-    const result = svc().bundle('9', { user_id: 1 });
+  it('bundle aggregates every sub-collection + the member list, scoping packing to the viewer (#858)', () => {
+    const result = svc().bundle('9', { user_id: 1 }, 7);
     expect(result).toMatchObject({ trip: { user_id: 1 }, days: [1], places: [], members: [{ id: 1 }] });
+    // The viewer id is forwarded so other members' private items stay out of the offline cache.
+    expect(packingListItems).toHaveBeenCalledWith('9', 7);
   });
 
   it('bundle tolerates a null member list', () => {
     tripSvc.listMembers.mockReturnValueOnce({ owner: { id: 1 }, members: null });
-    const result = svc().bundle('9', { user_id: 1 });
+    const result = svc().bundle('9', { user_id: 1 }, 1);
     expect(result).toMatchObject({ members: [{ id: 1 }] });
   });
 
