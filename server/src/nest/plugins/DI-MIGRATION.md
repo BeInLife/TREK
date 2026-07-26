@@ -88,18 +88,18 @@ injects it) and binds `this.hostDeps.create(id, granted, this)` in the
 supervisor field initializer.
 
 **Module wiring:** `TagsModule`/`CategoriesModule`/`BudgetModule`/
-`ReservationsModule` gained `exports: [XService]` (`TodoModule` already
-exported), and `PluginsModule` imports all five. The dependency graph moved
-from hidden (bridge files) to explicit (the container). `DatabaseModule` is
-`@Global`, so no import needed for it.
+`ReservationsModule`/`PackingModule` gained `exports: [XService]` (`TodoModule`
+already exported), and `PluginsModule` imports all six. The dependency graph
+moved from hidden (bridge files) to explicit (the container). `DatabaseModule`
+is `@Global`, so no import needed for it.
 
 **Interaction with the service-migration track:** legacy `services/*` functions
-(place, day, packing, files, collab, …) stay as plain imports inside the
+(place, day, files, collab, …) stay as plain imports inside the
 factory *until their own domain migrates*. Each future migration then swaps one
 import for one injected service (+ module export/import) — **no more bridge
 files for the plugin host, ever**. The factory's import list shrinks
-monotonically as the recipe in `src/nest/README.md` proceeds (next up:
-packingService).
+monotonically as the recipe in `src/nest/README.md` proceeds (packing swapped
+in 2026-07; next up: dayNoteService).
 
 ### Test impact (as landed)
 
@@ -215,10 +215,11 @@ none of it is throwaway.
 1. ~~**Now / opportunistically — Option A.**~~ **Done (2026-07).** Injectable
    factory, tags/categories bridges deleted, wiring test rewritten against
    stubs (see §2).
-2. **Per domain, as the service migrations proceed** (`packingService` next,
-   per `src/nest/README.md`): migrate the service to DI as usual; the factory
-   swaps one legacy import for one injected service. Optionally pilot
-   `tags.rpc.ts` here — tags is small and already fully DI on HTTP + MCP.
+2. **Per domain, as the service migrations proceed** (`packingService` done
+   2026-07; `dayNoteService` next, per `src/nest/README.md`): migrate the
+   service to DI as usual; the factory swaps one legacy import for one
+   injected service. Optionally pilot `tags.rpc.ts` here — tags is small and
+   already fully DI on HTTP + MCP.
 3. **Once ~half the domains are DI-native — commit to Option B.** Build the
    registry package, validate() against `envelope.ts`, then drain the method
    map domain by domain — the same strangler pattern that retired the Express

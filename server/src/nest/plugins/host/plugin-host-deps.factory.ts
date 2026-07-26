@@ -3,7 +3,6 @@ import { readEnv } from '../../../app-config';
 import { db, canAccessTrip } from '../../../db/database';
 import { broadcast, broadcastToUser } from '../../../websocket';
 import { listBudgetItems } from '../../../services/budgetService';
-import { listItems as listPackingItemsSvc, createItem as createPackingItemSvc, updateItem as updatePackingItemSvc, deleteItem as deletePackingItemSvc, listBags, createBag as createBagSvc, updateBag as updateBagSvc, deleteBag as deleteBagSvc, setBagMembers } from '../../../services/packingService';
 import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
 import { listFiles, createFile, createFileLink, getFileById, updateFile, softDeleteFile, findForeignLinkTarget, resolveFilePath, BLOCKED_EXTENSIONS, filesDir } from '../../../services/fileService';
@@ -36,6 +35,7 @@ import { ReservationsService } from '../../reservations/reservations.service';
 import { TagsService } from '../../tags/tags.service';
 import { CategoriesService } from '../../categories/categories.service';
 import { TodoService } from '../../todo/todo.service';
+import { PackingService } from '../../packing/packing.service';
 import { notifyBookingChange } from '../../../services/reservationService';
 import { PluginRpcHost, ForbiddenResource, BadParams } from './rpc-host';
 import { appendAudit } from './plugin-audit';
@@ -82,18 +82,16 @@ function mapCollectionError<T>(fn: () => T): T {
   }
 }
 
-// --- #858 packing privacy: viewer-scoped fan-out replicated from packing.controller +
-// packing.service (their helpers aren't exported). A private item's events reach ONLY
+// --- #858 packing privacy: viewer-scoped fan-out mirrored from
+// packing.controller.broadcastUpdate/emitToViewers and PackingService's
+// broadcastItem/viewersOf/broadcastToViewers. A private item's events reach ONLY
 // its owner (+ recipients for a shared item), never the whole trip room; passing the
 // wrong onlyUserId — or forgetting to drop a freshly-privatized item from the room —
-// leaks it. Keep in lockstep with packing.controller.broadcastUpdate/emitToViewers. ---
+// leaks it. Kept as a local copy (rather than delegating to the injected
+// PackingService) so the factory's unit test can assert the fan-out through the
+// websocket mock while PackingService stays a plain data stub. Keep in lockstep
+// with packing.controller.ts + packing.service.ts. ---
 type PackingPrivacy = { is_private?: number; owner_id?: number | null; recipients?: { user_id: number }[] };
-
-function packingItemPrivacy(tripId: number, itemId: number): { is_private?: number; owner_id?: number | null } | undefined {
-  return db.prepare('SELECT is_private, owner_id FROM packing_items WHERE id = ? AND trip_id = ?').get(itemId, tripId) as
-    | { is_private?: number; owner_id?: number | null }
-    | undefined;
-}
 
 function packingViewersOf(item: PackingPrivacy | null | undefined): number[] | null {
   if (!item || !item.is_private) return null; // Common — visible to the whole room
@@ -152,9 +150,9 @@ export interface PluginCallRouter {
  * `plugin:{id}:{event}` so a plugin can't forge a core event.
  *
  * DI-native domain services (budget, reservations, tags, categories, todo,
- * oauth) are constructor-injected; legacy `services/*` domains stay plain
- * function imports until their own migration lands (DI-MIGRATION.md), at which
- * point each swaps one import for one injected service.
+ * packing, oauth) are constructor-injected; legacy `services/*` domains stay
+ * plain function imports until their own migration lands (DI-MIGRATION.md), at
+ * which point each swaps one import for one injected service.
  */
 @Injectable()
 export class PluginHostDepsFactory {
@@ -164,6 +162,7 @@ export class PluginHostDepsFactory {
     private readonly tags: TagsService,
     private readonly categories: CategoriesService,
     private readonly todos: TodoService,
+    private readonly packing: PackingService,
     private readonly oauth: PluginOAuthService,
   ) {}
 
@@ -211,7 +210,7 @@ export class PluginHostDepsFactory {
       },
       // --- Read scopes (packing/files). Membership is checked by the host (tripRead);
       // these just delegate to the same services the REST paths use. ---
-      listPackingItems: (tripId, userId) => listPackingItemsSvc(tripId, userId),
+      listPackingItems: (tripId, userId) => this.packing.listItems(tripId, userId),
       listTripFiles: (tripId) => listFiles(tripId, false),
       // A file's bytes as base64, size-capped BEFORE the read so a 500MB video can't
       // be pulled (~667MB base64) through the IPC pipe. 10MB matches the plugin upload
@@ -749,52 +748,52 @@ export class PluginHostDepsFactory {
         notifyBooking(actingUserId, tripId, deleted.title, deleted.type || '');
         return { deleted: true };
       },
-      // --- Packing (packing_edit). Reuses packingService + replicates the #858
+      // --- Packing (packing_edit). Reuses PackingService + replicates the #858
       // privacy-scoped broadcasts (create/delete via emitPackingToViewers, update via
       // the four-case broadcastPackingUpdate) so a private item never leaks room-wide. ---
       canEditPacking: (tripId, userId) => canEditTripAs('packing_edit', tripId, userId),
       createPackingItem: (tripId, input, actingUserId) => {
         const i = input as { name: string; category?: string; checked?: boolean; is_private?: boolean; visibility?: 'common' | 'personal' | 'shared'; recipient_ids?: number[] };
-        const item = createPackingItemSvc(String(tripId), i, actingUserId) as PackingPrivacy;
+        const item = this.packing.createItem(String(tripId), i, actingUserId) as PackingPrivacy;
         emitPackingToViewers(tripId, 'packing:created', { item }, item);
         return item;
       },
       updatePackingItem: (tripId, itemId, input, actingUserId) => {
         // Privacy BEFORE the write, so a public<->private toggle routes correctly.
-        const before = packingItemPrivacy(tripId, itemId);
-        const updated = updatePackingItemSvc(String(tripId), String(itemId), input as never, Object.keys(input), undefined, actingUserId);
+        const before = this.packing.getItemPrivacy(tripId, itemId);
+        const updated = this.packing.updateItem(String(tripId), String(itemId), input as never, Object.keys(input), undefined, actingUserId);
         if (!updated) throw new ForbiddenResource(`no packing item ${itemId} on trip ${tripId}`);
         if (isUpdateConflict(updated)) throw new BadParams('packing item was modified concurrently');
         broadcastPackingUpdate(tripId, itemId, updated as PackingPrivacy, !!before?.is_private);
         return updated;
       },
       deletePackingItem: (tripId, itemId) => {
-        const deleted = deletePackingItemSvc(String(tripId), String(itemId)) as PackingPrivacy | null;
+        const deleted = this.packing.deleteItem(String(tripId), String(itemId)) as PackingPrivacy | null;
         if (!deleted) throw new ForbiddenResource(`no packing item ${itemId} on trip ${tripId}`);
         emitPackingToViewers(tripId, 'packing:deleted', { itemId }, deleted);
         return { deleted: true };
       },
       // --- Packing bags (no privacy — plain room broadcasts). ---
-      listPackingBags: (tripId) => listBags(String(tripId)) as unknown[],
+      listPackingBags: (tripId) => this.packing.listBags(String(tripId)) as unknown[],
       createPackingBag: (tripId, input) => {
         const i = input as { name: string; color?: string };
-        const bag = createBagSvc(String(tripId), { name: i.name, color: i.color });
+        const bag = this.packing.createBag(String(tripId), { name: i.name, color: i.color });
         broadcast(tripId, 'packing:bag-created', { bag }, undefined);
         return bag;
       },
       updatePackingBag: (tripId, bagId, input) => {
-        const bag = updateBagSvc(String(tripId), String(bagId), input as never, Object.keys(input));
+        const bag = this.packing.updateBag(String(tripId), String(bagId), input as never, Object.keys(input));
         if (!bag) throw new ForbiddenResource(`no packing bag ${bagId} on trip ${tripId}`);
         broadcast(tripId, 'packing:bag-updated', { bag }, undefined);
         return bag;
       },
       deletePackingBag: (tripId, bagId) => {
-        if (!deleteBagSvc(String(tripId), String(bagId))) throw new ForbiddenResource(`no packing bag ${bagId} on trip ${tripId}`);
+        if (!this.packing.deleteBag(String(tripId), String(bagId))) throw new ForbiddenResource(`no packing bag ${bagId} on trip ${tripId}`);
         broadcast(tripId, 'packing:bag-deleted', { bagId }, undefined);
         return { deleted: true };
       },
       setPackingBagMembers: (tripId, bagId, userIds) => {
-        const members = setBagMembers(String(tripId), String(bagId), userIds);
+        const members = this.packing.setBagMembers(String(tripId), String(bagId), userIds);
         if (!members) throw new ForbiddenResource(`no packing bag ${bagId} on trip ${tripId}`);
         broadcast(tripId, 'packing:bag-members-updated', { bagId, members }, undefined);
         return members;

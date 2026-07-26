@@ -8,6 +8,7 @@ import { ReservationsService } from '../../src/nest/reservations/reservations.se
 import { TagsService } from '../../src/nest/tags/tags.service';
 import { CategoriesService } from '../../src/nest/categories/categories.service';
 import { TodoService } from '../../src/nest/todo/todo.service';
+import { PackingService } from '../../src/nest/packing/packing.service';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -22,6 +23,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     new TagsService(dbs),
     new CategoriesService(dbs),
     new TodoService(dbs),
+    new PackingService(dbs),
     new PluginOAuthService(dbs),
   );
 }

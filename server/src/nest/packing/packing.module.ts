@@ -1,10 +1,14 @@
 import { Module } from '@nestjs/common';
 import { PackingController } from './packing.controller';
+import { PackingMcp } from './packing.mcp';
 import { PackingService } from './packing.service';
 
-/** Packing domain (S2 — Phase 2 trip sub-domain). Registered in AppModule. */
+/** Packing domain (S2 — Phase 2 trip sub-domain). Registered in AppModule.
+ *  Exports PackingService for in-container consumers (TripsService bundle,
+ *  PluginHostDepsFactory). */
 @Module({
   controllers: [PackingController],
-  providers: [PackingService],
+  providers: [PackingService, PackingMcp],
+  exports: [PackingService],
 })
 export class PackingModule {}

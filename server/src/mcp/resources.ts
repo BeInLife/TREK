@@ -4,7 +4,6 @@ import { listTrips, getTrip, getTripOwner, listMembers } from '../services/tripS
 import { listDays, listAccommodations } from '../services/dayService';
 import { listPlaces } from '../services/placeService';
 import { listBudgetItems, getPerPersonSummary, calculateSettlement } from '../services/budgetService';
-import { listItems as listPackingItems, listBags } from '../services/packingService';
 import { listReservations } from '../services/reservationService';
 import { listNotes as listDayNotes } from '../services/dayNoteService';
 import { listNotes as listCollabNotes, listPolls, listMessages } from '../services/collabService';
@@ -117,19 +116,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // Packing checklist
-  if (isAddonEnabled(ADDON_IDS.PACKING) && canRead(scopes, 'packing')) server.registerResource(
-    'trip-packing',
-    new ResourceTemplate('trek://trips/{tripId}/packing', { list: undefined }),
-    { description: 'Packing checklist for a trip', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      // Hide other members' private items (#858) from the requesting user.
-      const items = listPackingItems(id, userId);
-      return jsonContent(uri.href, items);
-    }
-  );
+  // The trip-packing resource moved to the DI-discovered
+  // src/nest/packing/packing.mcp.ts (@ResourceTemplate).
 
   // Reservations (flights, hotels, restaurants)
   if (canRead(scopes, 'reservations')) server.registerResource(
@@ -256,18 +244,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // Packing bags
-  if (isAddonEnabled(ADDON_IDS.PACKING) && canRead(scopes, 'packing')) server.registerResource(
-    'trip-packing-bags',
-    new ResourceTemplate('trek://trips/{tripId}/packing/bags', { list: undefined }),
-    { description: 'All packing bags for a trip with their members', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const bags = listBags(id);
-      return jsonContent(uri.href, bags);
-    }
-  );
+  // The trip-packing-bags resource moved to the DI-discovered
+  // src/nest/packing/packing.mcp.ts (@ResourceTemplate).
 
   // In-app notifications
   if (canRead(scopes, 'notifications')) server.registerResource(

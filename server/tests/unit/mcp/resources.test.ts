@@ -1,9 +1,10 @@
 /**
  * Unit tests for MCP resources (resources.ts).
- * Tests all 12 legacy-registrar resources via InMemoryTransport + Client
+ * Tests all 10 legacy-registrar resources via InMemoryTransport + Client
  * (trek://categories moved to the DI-discovered CategoriesMcp — see
  * tools-categories.test.ts; trek://trips/{tripId}/todos moved to TodoMcp —
- * see tools-todos.test.ts).
+ * see tools-todos.test.ts; trek://trips/{tripId}/packing and .../packing/bags
+ * moved to PackingMcp — see tools-packing.test.ts).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 
@@ -42,7 +43,7 @@ vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
-import { createUser, createTrip, createDay, createPlace, addTripMember, createBudgetItem, createPackingItem, createReservation, createDayNote, createCollabNote, createBucketListItem, createVisitedCountry, createDayAssignment, createDayAccommodation } from '../../helpers/factories';
+import { createUser, createTrip, createDay, createPlace, addTripMember, createBudgetItem, createReservation, createDayNote, createCollabNote, createBucketListItem, createVisitedCountry, createDayAssignment, createDayAccommodation } from '../../helpers/factories';
 import { createMcpHarness, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
 
 beforeAll(() => {
@@ -237,32 +238,8 @@ describe('Resource: trek://trips/{tripId}/budget', () => {
   });
 });
 
-describe('Resource: trek://trips/{tripId}/packing', () => {
-  it('returns packing items for a trip', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    createPackingItem(testDb, trip.id, { name: 'Passport' });
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/packing` });
-      const items = parseResourceResult(result) as any[];
-      expect(items).toHaveLength(1);
-      expect(items[0].name).toBe('Passport');
-    });
-  });
-
-  it('returns access denied for unauthorized trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/packing` });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-});
+// The trek://trips/{tripId}/packing and .../packing/bags resources moved to the
+// DI-discovered PackingMcp — see tools-packing.test.ts.
 
 describe('Resource: trek://trips/{tripId}/reservations', () => {
   it('returns reservations for a trip', async () => {

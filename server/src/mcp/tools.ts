@@ -9,7 +9,6 @@ import { registerPlaceTools } from './tools/places';
 import { registerCollectionTools } from './tools/collections';
 import { registerDayTools } from './tools/days';
 import { registerBudgetTools } from './tools/budget';
-import { registerPackingTools } from './tools/packing';
 import { registerCollabTools } from './tools/collab';
 import { registerTripTools } from './tools/trips';
 import { registerTransportTools } from './tools/transports';
@@ -27,7 +26,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
 
   registerBudgetTools(server, userId, scopes);
 
-  registerPackingTools(server, userId, scopes);
+  // The packing tools moved to the DI-discovered src/nest/packing/packing.mcp.ts
+  // (@McpController, attached via the nest-mcp registry below).
 
   registerReservationTools(server, userId, scopes);
 

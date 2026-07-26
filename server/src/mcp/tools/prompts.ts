@@ -2,7 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { z } from 'zod';
 import { canAccessTrip } from '../../db/database';
 import { getTripSummary } from '../../services/tripService';
-import { listItems as listPackingItems } from '../../services/packingService';
+import { listItems as listPackingItems } from '../../nest/packing/packing.bridge';
 import { isAddonEnabled } from '../../services/adminService';
 import { ADDON_IDS } from '../../addons';
 

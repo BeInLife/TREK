@@ -27,7 +27,6 @@ const { tripSvc } = vi.hoisted(() => ({
 vi.mock('../../../src/services/tripService', () => tripSvc);
 vi.mock('../../../src/services/dayService', () => ({ listDays: () => ({ days: [1] }), listAccommodations: () => [] }));
 vi.mock('../../../src/services/placeService', () => ({ listPlaces: () => [] }));
-vi.mock('../../../src/services/packingService', () => ({ listItems: () => [] }));
 vi.mock('../../../src/services/budgetService', () => ({
   listBudgetItems: () => [],
   rebaseTripCurrency: vi.fn(async () => {}),
@@ -37,10 +36,12 @@ vi.mock('../../../src/services/fileService', () => ({ listFiles: () => [] }));
 
 import { TripsService } from '../../../src/nest/trips/trips.service';
 import type { TodoService } from '../../../src/nest/todo/todo.service';
+import type { PackingService } from '../../../src/nest/packing/packing.service';
 import { rebaseTripCurrency } from '../../../src/services/budgetService';
 
 const todoStub = { listItems: () => [] } as unknown as TodoService;
-function svc() { return new TripsService(new DatabaseService(dbConn), todoStub); }
+const packingStub = { listItems: () => [] } as unknown as PackingService;
+function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub); }
 beforeEach(() => vi.clearAllMocks());
 
 describe('TripsService (wrapper delegation + bundle/copy/notify helpers)', () => {

@@ -3,8 +3,8 @@
  * capability host to the real privileged modules (#plugins, M1). Verifies the
  * per-plugin data db is cached, a granted db:own call works through the wired
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
- * DI-native domains (budget/reservations/tags/categories/todo/oauth) are
- * constructor-injected stubs; legacy services/* domains stay path-mocked
+ * DI-native domains (budget/reservations/tags/categories/todo/packing/oauth)
+ * are constructor-injected stubs; legacy services/* domains stay path-mocked
  * until their own DI migration lands.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
@@ -126,26 +126,33 @@ vi.mock('../../../src/services/budgetService', () => ({
   deleteBudgetItem: vi.fn(),
   linkBudgetItemToReservation: vi.fn(),
 }));
-vi.mock('../../../src/services/packingService', () => ({
-  listItems: vi.fn((tid: number, userId: number) => [{ id: 1, trip_id: tid, name: 'Socks', _uid: userId }]),
+// Packing is a constructor-injected stub (same behaviors as the old path mock).
+const packingStub = {
+  listItems: vi.fn((tid: number | string, userId?: number) => [{ id: 1, trip_id: tid, name: 'Socks', _uid: userId }]),
   // Return the item with the #858 privacy fields the host deps scope on.
-  createItem: vi.fn((tid: number, input: { name: string; visibility?: string; recipient_ids?: number[] }, ownerId?: number) => {
+  createItem: vi.fn((tid: number | string, input: { name: string; visibility?: string; recipient_ids?: number[] }, ownerId?: number) => {
     if (input.visibility === 'personal') return { id: 70, trip_id: Number(tid), name: input.name, is_private: 1, owner_id: ownerId, recipients: [] };
     if (input.visibility === 'shared') return { id: 70, trip_id: Number(tid), name: input.name, is_private: 1, owner_id: ownerId, recipients: (input.recipient_ids || []).map((id) => ({ user_id: id })) };
     return { id: 70, trip_id: Number(tid), name: input.name, is_private: 0, owner_id: ownerId };
   }),
   // itemId 99 => a stale-write conflict result; otherwise the after-state (is_private per input).
-  updateItem: vi.fn((tid: number, id: string, input: { is_private?: boolean }) =>
+  updateItem: vi.fn((tid: number | string, id: string, input: { is_private?: boolean }) =>
     Number(id) === 99 ? { conflict: true, server: { id: 99 } } : { id: Number(id), trip_id: Number(tid), is_private: input.is_private ? 1 : 0, owner_id: 5 },
   ),
   // The raw deleted row (owner-only for a private item, no recipients — #858).
-  deleteItem: vi.fn((_tid: number, id: string) => (Number(id) === 404 ? null : Number(id) === 71 ? { id: 71, is_private: 1, owner_id: 5 } : { id: Number(id), is_private: 0 })),
-  listBags: vi.fn((tid: number) => [{ id: 80, trip_id: Number(tid), name: 'Backpack' }]),
-  createBag: vi.fn((tid: number, data: { name: string }) => ({ id: 80, trip_id: Number(tid), name: data.name })),
-  updateBag: vi.fn((_tid: number, bagId: string) => (Number(bagId) === 404 ? null : { id: Number(bagId), name: 'Renamed' })),
-  deleteBag: vi.fn((_tid: number, bagId: string) => Number(bagId) !== 404),
-  setBagMembers: vi.fn((_tid: number, bagId: string, userIds: number[]) => (Number(bagId) === 404 ? null : userIds.map((u) => ({ user_id: u })))),
-}));
+  deleteItem: vi.fn((_tid: number | string, id: string) => (Number(id) === 404 ? null : Number(id) === 71 ? { id: 71, is_private: 1, owner_id: 5 } : { id: Number(id), is_private: 0 })),
+  // Mirrors the packing_items rows seeded above: 70 = public, 71 = private (was
+  // the inline packingItemPrivacy SQL before the DI move).
+  getItemPrivacy: vi.fn((tid: number | string, id: number | string) =>
+    Number(tid) === 1 && Number(id) === 70 ? { is_private: 0, owner_id: 5 }
+      : Number(tid) === 1 && Number(id) === 71 ? { is_private: 1, owner_id: 5 }
+        : undefined),
+  listBags: vi.fn((tid: number | string) => [{ id: 80, trip_id: Number(tid), name: 'Backpack' }]),
+  createBag: vi.fn((tid: number | string, data: { name: string }) => ({ id: 80, trip_id: Number(tid), name: data.name })),
+  updateBag: vi.fn((_tid: number | string, bagId: string) => (Number(bagId) === 404 ? null : { id: Number(bagId), name: 'Renamed' })),
+  deleteBag: vi.fn((_tid: number | string, bagId: string) => Number(bagId) !== 404),
+  setBagMembers: vi.fn((_tid: number | string, bagId: string, userIds: number[]) => (Number(bagId) === 404 ? null : userIds.map((u) => ({ user_id: u })))),
+} as unknown as PackingService;
 vi.mock('../../../src/services/conflictResult', () => ({ isUpdateConflict: (r: unknown) => !!(r as { conflict?: boolean })?.conflict }));
 vi.mock('../../../src/services/weatherService', () => ({ getWeather: vi.fn(async (lat: string, lng: string) => ({ lat, lng, temp: 20 })) }));
 const categoriesStub = { list: vi.fn(() => [{ id: 1, name: 'Food' }]) } as unknown as CategoriesService;
@@ -283,12 +290,13 @@ import type { ReservationsService } from '../../../src/nest/reservations/reserva
 import type { TagsService } from '../../../src/nest/tags/tags.service';
 import type { CategoriesService } from '../../../src/nest/categories/categories.service';
 import type { TodoService } from '../../../src/nest/todo/todo.service';
+import type { PackingService } from '../../../src/nest/packing/packing.service';
 import type { PluginOAuthService } from '../../../src/nest/plugins/plugin-oauth.service';
 
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, oauthStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 

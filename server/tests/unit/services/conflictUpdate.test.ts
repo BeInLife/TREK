@@ -39,8 +39,11 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip } from '../../helpers/factories';
 import { updatePlace, createPlace } from '../../../src/services/placeService';
-import { createItem, updateItem } from '../../../src/services/packingService';
 import { isUpdateConflict } from '../../../src/services/conflictResult';
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { PackingService } from '../../../src/nest/packing/packing.service';
+
+const packing = new PackingService(new DatabaseService(testDb));
 
 beforeAll(() => {
   createTables(testDb);
@@ -110,19 +113,19 @@ describe('updateItem (packing) — optimistic concurrency', () => {
 
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createItem(trip.id, { name: 'Socks' }) as { id: number; updated_at: string | null };
+    const item = packing.createItem(trip.id, { name: 'Socks' }) as { id: number; updated_at: string | null };
     expect(item.updated_at).toBeTruthy();
   });
 
   it('returns a conflict when the packing token is stale', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    const item = createItem(trip.id, { name: 'Socks' }) as { id: number; updated_at: string };
+    const item = packing.createItem(trip.id, { name: 'Socks' }) as { id: number; updated_at: string };
 
-    const stale = updateItem(trip.id, item.id, { name: 'Mine' }, ['name'], '1999-01-01 00:00:00');
+    const stale = packing.updateItem(trip.id, item.id, { name: 'Mine' }, ['name'], '1999-01-01 00:00:00');
     expect(isUpdateConflict(stale)).toBe(true);
 
-    const fresh = updateItem(trip.id, item.id, { name: 'Edited' }, ['name'], item.updated_at);
+    const fresh = packing.updateItem(trip.id, item.id, { name: 'Edited' }, ['name'], item.updated_at);
     expect(isUpdateConflict(fresh)).toBe(false);
     expect((fresh as { name: string }).name).toBe('Edited');
   });

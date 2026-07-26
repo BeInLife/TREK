@@ -6,7 +6,7 @@ import type { User } from '../../types';
 import * as tripSvc from '../../services/tripService';
 import { listDays, listAccommodations } from '../../services/dayService';
 import { listPlaces } from '../../services/placeService';
-import { listItems as listPackingItems } from '../../services/packingService';
+import { PackingService } from '../packing/packing.service';
 import { TodoService } from '../todo/todo.service';
 import { listBudgetItems, rebaseTripCurrency } from '../../services/budgetService';
 import { listReservations } from '../../services/reservationService';
@@ -25,6 +25,7 @@ export class TripsService {
   constructor(
     private readonly dbs: DatabaseService,
     private readonly todo: TodoService,
+    private readonly packing: PackingService,
   ) {}
 
   private get db() {
@@ -136,7 +137,7 @@ export class TripsService {
       trip,
       days,
       places: listPlaces(String(tripId), {}),
-      packingItems: listPackingItems(tripId),
+      packingItems: this.packing.listItems(tripId),
       todoItems: this.todo.listItems(tripId),
       budgetItems: listBudgetItems(tripId),
       reservations: listReservations(tripId),

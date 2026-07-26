@@ -1,9 +1,10 @@
 /**
- * Unit tests for MCP packing advanced tools:
+ * Unit tests for the advanced packing MCP tools (PackingMcp, DI-discovered):
  * reorder_packing_items, list_packing_bags, create_packing_bag, update_packing_bag,
  * delete_packing_bag, set_bag_members, get_packing_category_assignees,
  * set_packing_category_assignees, apply_packing_template, save_packing_template,
- * bulk_import_packing.
+ * bulk_import_packing. The basic item tools + scope/addon gating + resources
+ * live in tools-packing.test.ts.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
