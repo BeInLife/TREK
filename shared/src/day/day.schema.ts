@@ -68,18 +68,21 @@ export const dayUpdateRequestSchema = z.object({
 });
 export type DayUpdateRequest = z.infer<typeof dayUpdateRequestSchema>;
 
+// `time`/`icon` accept null on the wire: the client's moveDayNote re-sends the
+// entity fields (both nullable on dayNoteSchema) through create, and an explicit
+// null time on update means "clear" (the legacy raw-body route accepted both).
 export const dayNoteCreateRequestSchema = z.object({
   text: z.string().min(1).max(500),
-  time: z.string().max(250).optional(),
-  icon: z.string().optional(),
+  time: z.string().max(250).nullable().optional(),
+  icon: z.string().nullable().optional(),
   sort_order: z.number().optional(),
 });
 export type DayNoteCreateRequest = z.infer<typeof dayNoteCreateRequestSchema>;
 
 export const dayNoteUpdateRequestSchema = z.object({
   text: z.string().max(500).optional(),
-  time: z.string().max(250).optional(),
-  icon: z.string().optional(),
+  time: z.string().max(250).nullable().optional(),
+  icon: z.string().nullable().optional(),
   sort_order: z.number().optional(),
 });
 export type DayNoteUpdateRequest = z.infer<typeof dayNoteUpdateRequestSchema>;

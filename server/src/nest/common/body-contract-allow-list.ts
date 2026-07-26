@@ -76,8 +76,6 @@ export const BODY_CONTRACT_ALLOW_LIST: string[] = [
   'CollectionsController.reorder',
   'DayAssignmentsController.create',
   'DayAssignmentsController.reorder',
-  'DayNotesController.create',
-  'DayNotesController.update',
   'DaysController.create',
   'DaysController.reorder',
   'DaysController.transport',
