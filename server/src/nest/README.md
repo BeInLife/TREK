@@ -27,8 +27,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
   categories, tags, notifications, atlas.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
-  todo, packing, day-notes, trip-invite, assignments, share, settings — see the
-  migration recipe below.
+  todo, packing, day-notes, trip-invite, assignments, share, settings, files —
+  see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -118,9 +118,15 @@ fold plus a 3-export `share.bridge.ts` for `mcp/tools/trips.ts`); settings
 followed (no MCP surface, no bridge, and the first migration that converted an
 in-container plain-function consumer into a provider instead of bridging it:
 `llm-parse/llm-config.resolver.ts` became the injectable `LlmConfigResolver`,
-injected by `LlmParseService` and `PluginHostDepsFactory`). Repeat these
+injected by `LlmParseService` and `PluginHostDepsFactory`); files followed (no
+MCP surface and no addon gate; the load-time constants + pure helpers consumed
+by three controllers' module-scope multer configs moved to
+`files.constants.ts`, and `files.bridge.ts` survives with a single export —
+the request-time `getAllowedExtensions` app_settings read those configs need
+outside DI — while every function consumer, including the plugin host and
+`TripsService`, injects `FilesService`). Repeat these
 steps per
-service (next up: fileService). This is a **pure relocation** — byte-identical
+service (next up: collabService). This is a **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it
 injects domain services via `PluginHostDepsFactory`, so a migrated domain adds

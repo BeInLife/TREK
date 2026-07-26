@@ -105,8 +105,9 @@ factory — it was never imported here; assignments swapped in 2026-07; share
 migrated 2026-07 without touching the factory — it was never imported here
 either; settings swapped in 2026-07 indirectly — the factory never imported it,
 but its `resolveLlmConfig` import became the injected `LlmConfigResolver`;
-next factory swap: whichever Wave-3 domain the factory imports migrates
-next — fileService/collabService are both imported here).
+fileService swapped in 2026-07 — its ten imported symbols became the injected
+`FilesService` plus the load-time constants from `files.constants.ts`; next
+factory swap: collabService, the last Wave-3 domain imported here).
 
 ### Test impact (as landed)
 
@@ -257,7 +258,7 @@ none of it is throwaway.
 | `src/nest/plugins/protocol/envelope.ts` | Single source of truth for methods/permissions — must stay zero-import; B validates against it |
 | `src/nest/plugins/plugin-runtime.service.ts` | The provider that owns the factory call site (supervisor field initializer) |
 | `src/nest/plugins/supervisor/plugin-supervisor.ts` | Sandbox lifecycle — untouched by both options |
-| `src/nest/todo/todo.bridge.ts` | The one surviving bridge — kept only for the legacy `get_trip_summary` MCP registrar |
+| `src/nest/todo/todo.bridge.ts` | Surviving bridge — kept only for the legacy `get_trip_summary` MCP registrar (`src/nest/files/files.bridge.ts` also survives, but for module-scope multer configs, not the plugin host) |
 | `src/mcp/registry-handoff.ts` | The MCP precedent for non-container code — **not needed here**; documented to explain why |
 | `nest-mcp/` (`@trek/nest-mcp`) | The proven decorator/registry/discovery blueprint Option B mirrors |
 | `src/nest/README.md` | The per-service DI migration recipe this roadmap rides on |
