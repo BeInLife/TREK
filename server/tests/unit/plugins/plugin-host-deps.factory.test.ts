@@ -4,8 +4,9 @@
  * per-plugin data db is cached, a granted db:own call works through the wired
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
  * DI-native domains (budget/reservations/tags/categories/todo/packing/
- * day-notes/assignments/oauth/llm-config/files) are constructor-injected stubs;
- * legacy services/* domains stay path-mocked until their own DI migration lands.
+ * day-notes/assignments/oauth/llm-config/files/collab/vacay) are
+ * constructor-injected stubs; legacy services/* domains stay path-mocked until
+ * their own DI migration lands.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
@@ -268,12 +269,6 @@ vi.mock('../../../src/services/atlasService', () => ({
   createBucketItem: vi.fn((uid: number, data: { name: string }) => ({ id: 110, user_id: uid, name: data.name })),
   deleteBucketItem: vi.fn((_uid: number, itemId: number) => Number(itemId) !== 404),
 }));
-vi.mock('../../../src/services/vacayService', () => ({
-  getPlanData: vi.fn((uid: number) => ({ plan: { id: 1, owner: uid } })),
-  getActivePlanId: vi.fn(() => 77),
-  toggleEntry: vi.fn((uid: number, planId: number) => ({ action: 'added', uid, planId })),
-  toggleCompanyHoliday: vi.fn((planId: number) => ({ action: 'added', planId })),
-}));
 vi.mock('../../../src/services/collectionsService', () => {
   const httpError = (status: number, message: string) => { const e = new Error(message) as Error & { status: number }; e.status = status; throw e; };
   return {
@@ -297,6 +292,14 @@ const dayNotesStub = {
   dayExists: vi.fn((dayId: number) => dayId === 3),
 } as unknown as DayNotesService;
 
+// Vacay is a constructor-injected stub (same behaviors as the old path mock).
+const vacayStub = {
+  getPlanData: vi.fn((uid: number) => ({ plan: { id: 1, owner: uid } })),
+  getActivePlanId: vi.fn(() => 77),
+  toggleEntry: vi.fn((uid: number, planId: number) => ({ action: 'added', uid, planId })),
+  toggleCompanyHoliday: vi.fn((planId: number) => ({ action: 'added', planId })),
+} as unknown as VacayService;
+
 import { PluginHostDepsFactory, type PluginCallRouter } from '../../../src/nest/plugins/host/plugin-host-deps.factory';
 import { getPluginDataDb, closePluginDataDb } from '../../../src/nest/plugins/host/plugin-host-state';
 import { db as mockDb } from '../../../src/db/database';
@@ -312,12 +315,13 @@ import type { PluginOAuthService } from '../../../src/nest/plugins/plugin-oauth.
 import type { LlmConfigResolver } from '../../../src/nest/llm-parse/llm-config.resolver';
 import type { FilesService } from '../../../src/nest/files/files.service';
 import type { CollabService } from '../../../src/nest/collab/collab.service';
+import type { VacayService } from '../../../src/nest/vacay/vacay.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 

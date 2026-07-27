@@ -23,7 +23,6 @@ import { isDemoEmail } from '../../../services/demo';
 import { ADDON_IDS } from '../../../addons';
 import { listJourneys, listEntries as listJournalEntriesSvc, createEntry as createJournalEntrySvc, updateEntry as updateJournalEntrySvc, deleteEntry as deleteJournalEntrySvc, createJourney as createJourneySvc, deleteJourney as deleteJourneySvc } from '../../../services/journeyService';
 import { listVisitedCountries, listManuallyVisitedRegions, listBucketList, markCountryVisited, unmarkCountryVisited, markRegionVisited, unmarkRegionVisited, createBucketItem as createBucketItemSvc, deleteBucketItem as deleteBucketItemSvc } from '../../../services/atlasService';
-import { getPlanData, getActivePlanId, toggleEntry as vacayToggleEntrySvc, toggleCompanyHoliday as vacayToggleCompanyHolidaySvc } from '../../../services/vacayService';
 import { listCollections, getCollection, createCollection, updateCollection, savePlace as saveCollectionPlaceSvc, copyToTrip as copyCollectionToTripSvc, deletePlace as deleteCollectionPlaceSvc } from '../../../services/collectionsService';
 import { BudgetService } from '../../budget/budget.service';
 import { ReservationsService } from '../../reservations/reservations.service';
@@ -37,6 +36,7 @@ import { LlmConfigResolver } from '../../llm-parse/llm-config.resolver';
 import { DatabaseService } from '../../database/database.service';
 import { FilesService } from '../../files/files.service';
 import { CollabService } from '../../collab/collab.service';
+import { VacayService } from '../../vacay/vacay.service';
 import { notifyBookingChange } from '../../../services/reservationService';
 import { PluginRpcHost, ForbiddenResource, BadParams } from './rpc-host';
 import { appendAudit } from './plugin-audit';
@@ -137,8 +137,8 @@ export interface PluginCallRouter {
  * `plugin:{id}:{event}` so a plugin can't forge a core event.
  *
  * DI-native domain services (budget, reservations, tags, categories, todo,
- * packing, day-notes, assignments, oauth, files, collab, the LLM config
- * resolver) and
+ * packing, day-notes, assignments, oauth, files, collab, vacay, the LLM
+ * config resolver) and
  * the DatabaseService (all inline SQL + the trip-access helper) are
  * constructor-injected; legacy `services/*` domains stay plain function
  * imports until their own migration lands (DI-MIGRATION.md), at which point
@@ -160,6 +160,7 @@ export class PluginHostDepsFactory {
     private readonly db: DatabaseService,
     private readonly files: FilesService,
     private readonly collab: CollabService,
+    private readonly vacay: VacayService,
   ) {}
 
   /**
@@ -625,7 +626,7 @@ export class PluginHostDepsFactory {
         return { countries: listVisitedCountries(userId), regions: listManuallyVisitedRegions(userId) };
       },
       atlasBucketForUser: (userId) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); return listBucketList(userId) as unknown[]; },
-      vacayForUser: (userId) => { requireAddon(ADDON_IDS.VACAY, 'vacay'); return getPlanData(userId); },
+      vacayForUser: (userId) => { requireAddon(ADDON_IDS.VACAY, 'vacay'); return this.vacay.getPlanData(userId); },
       listCollectionsForUser: (userId) => { requireAddon(ADDON_IDS.COLLECTIONS, 'collections'); return listCollections(userId); },
       getCollectionForUser: (userId, id) => { requireAddon(ADDON_IDS.COLLECTIONS, 'collections'); return getCollection(userId, id); },
       // --- Collections write. The service self-gates per-collection role (assertAccess/
@@ -668,10 +669,10 @@ export class PluginHostDepsFactory {
       },
       // --- Vacay write: the plan is the ACTING USER's active plan (resolved host-side);
       // the service broadcasts to plan users itself. ---
-      vacayToggleEntry: (userId, date) => { requireAddon(ADDON_IDS.VACAY, 'vacay'); return vacayToggleEntrySvc(userId, getActivePlanId(userId), date, 1, 'vacation', undefined); },
+      vacayToggleEntry: (userId, date) => { requireAddon(ADDON_IDS.VACAY, 'vacay'); return this.vacay.toggleEntry(userId, this.vacay.getActivePlanId(userId), date, 1, 'vacation', undefined); },
       vacayToggleCompanyHoliday: (userId, date, note) => {
         requireAddon(ADDON_IDS.VACAY, 'vacay');
-        return vacayToggleCompanyHolidaySvc(getActivePlanId(userId), date, note, undefined);
+        return this.vacay.toggleCompanyHoliday(this.vacay.getActivePlanId(userId), date, note, undefined);
       },
       // --- Journal write: journeyService.canEdit self-gates each call (owner/contributor). ---
       createJournalEntry: (userId, journeyId, input) => {

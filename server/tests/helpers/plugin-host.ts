@@ -15,6 +15,7 @@ import { LlmConfigResolver } from '../../src/nest/llm-parse/llm-config.resolver'
 import { SettingsService } from '../../src/nest/settings/settings.service';
 import { FilesService } from '../../src/nest/files/files.service';
 import { CollabService } from '../../src/nest/collab/collab.service';
+import { VacayService } from '../../src/nest/vacay/vacay.service';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -37,6 +38,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     dbs,
     new FilesService(dbs),
     new CollabService(dbs),
+    new VacayService(dbs),
   );
 }
 

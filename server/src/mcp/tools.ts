@@ -11,7 +11,6 @@ import { registerBudgetTools } from './tools/budget';
 import { registerTripTools } from './tools/trips';
 import { registerTransportTools } from './tools/transports';
 import { registerTransitTools } from './tools/transit';
-import { registerVacayTools } from './tools/vacay';
 import { registerMcpPrompts } from './tools/prompts';
 import { getMcpRegistry } from './registry-handoff';
 
@@ -49,7 +48,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
 
   registerJourneyTools(server, userId, scopes);
 
-  registerVacayTools(server, userId, scopes);
+  // The vacay tools moved to the DI-discovered src/nest/vacay/vacay.mcp.ts
+  // (@McpController, attached via the nest-mcp registry below).
 
   // The todo tools moved to the DI-discovered src/nest/todo/todo.mcp.ts
   // (@McpController, attached via the nest-mcp registry below).

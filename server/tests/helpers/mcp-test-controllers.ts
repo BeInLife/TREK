@@ -16,6 +16,8 @@ import { TagsMcp } from '../../src/nest/tags/tags.mcp';
 import { TagsService } from '../../src/nest/tags/tags.service';
 import { TodoMcp } from '../../src/nest/todo/todo.mcp';
 import { TodoService } from '../../src/nest/todo/todo.service';
+import { VacayMcp } from '../../src/nest/vacay/vacay.mcp';
+import { VacayService } from '../../src/nest/vacay/vacay.service';
 
 /**
  * Hand-wired counterpart of the boot-time discovery in McpRegistryService,
@@ -35,6 +37,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new DayNotesMcp(new DayNotesService(dbService)),
       new AssignmentsMcp(new AssignmentsService(dbService)),
       new CollabMcp(new CollabService(dbService)),
+      new VacayMcp(new VacayService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy },
   );

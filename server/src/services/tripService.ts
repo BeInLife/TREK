@@ -11,7 +11,7 @@ import { listBudgetItems, removeUserFromBudgetItems } from './budgetService';
 import { listItems as listPackingItems } from '../nest/packing/packing.bridge';
 import { listReservations, loadEndpointsByTrip, resyncReservationDays } from './reservationService';
 import { listNotes as listCollabNotes } from '../nest/collab/collab.bridge';
-import { shiftOwnerEntriesForTripWindow } from './vacayService';
+import { shiftOwnerEntriesForTripWindow } from '../nest/vacay/vacay.bridge';
 import { resolveTimeZone } from './timezoneService';
 
 export const MS_PER_DAY = 86400000;

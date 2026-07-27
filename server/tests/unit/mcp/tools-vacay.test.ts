@@ -1,12 +1,15 @@
 /**
- * Unit tests for MCP vacay tools (vacay addon-gated):
+ * Unit tests for MCP vacay tools (vacay addon-gated, VacayMcp — DI-discovered
+ * via the hand-built test registry in tests/helpers/mcp-test-controllers.ts):
  * get_vacay_plan, update_vacay_plan, set_vacay_color,
  * list_vacay_years, add_vacay_year, delete_vacay_year,
  * get_vacay_entries, toggle_vacay_entry, toggle_company_holiday,
  * get_vacay_stats, update_vacay_stats,
  * add_holiday_calendar, update_holiday_calendar, delete_holiday_calendar,
  * list_holiday_countries, list_holidays.
- * Resources: trek://vacay/plan, trek://vacay/entries/{year}.
+ * Resources: trek://vacay/plan, trek://vacay/entries/{year},
+ * trek://vacay/holidays/{year} — these ride the registry too (attached inside
+ * registerTools), so `withTools` must stay on even for resource reads.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -44,19 +47,6 @@ vi.mock('../../../src/services/adminService', () => ({
   getCollabFeatures: vi.fn().mockReturnValue({ chat: true, notes: true, polls: true, whatsnext: true }),
 }));
 
-// Mock async service functions that make external calls
-vi.mock('../../../src/services/vacayService', async (importOriginal) => {
-  const original = await importOriginal() as Record<string, unknown>;
-  return {
-    ...original,
-    updatePlan: vi.fn().mockResolvedValue({
-      plan: { id: 1, block_weekends: true, holidays_enabled: false, company_holidays_enabled: false, carry_over_enabled: false, holiday_calendars: [] },
-    }),
-    getCountries: vi.fn().mockResolvedValue({ data: [{ code: 'US', name: 'United States' }] }),
-    getHolidays: vi.fn().mockResolvedValue({ data: [{ date: '2025-01-01', name: 'New Year' }] }),
-  };
-});
-
 // share_vacay_calendar fires a user notification after inserting; stub it out
 vi.mock('../../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
@@ -65,6 +55,16 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
+import { VacayService } from '../../../src/nest/vacay/vacay.service';
+
+// Stub the async methods that make external calls (VacayService is DI-native;
+// the registry constructs a real instance, so spy on the prototype — the
+// successor of the legacy path-level partial mock of services/vacayService).
+vi.spyOn(VacayService.prototype, 'updatePlan').mockResolvedValue({
+  plan: { id: 1, block_weekends: true, holidays_enabled: false, company_holidays_enabled: false, carry_over_enabled: false, holiday_calendars: [] },
+} as never);
+vi.spyOn(VacayService.prototype, 'getCountries').mockResolvedValue({ data: [{ code: 'US', name: 'United States' }] });
+vi.spyOn(VacayService.prototype, 'getHolidays').mockResolvedValue({ data: [{ date: '2025-01-01', name: 'New Year' }] });
 
 beforeAll(() => {
   createTables(testDb);
@@ -599,6 +599,17 @@ describe('Resource: trek://vacay/entries/{year}', () => {
       const data = parseResourceResult(result) as any;
       expect(data).toBeDefined();
       expect(Array.isArray(data.entries)).toBe(true);
+    });
+  });
+});
+
+describe('Resource: trek://vacay/holidays/{year}', () => {
+  it('returns [] while public holidays are disabled or no region is set', async () => {
+    const { user } = createUser(testDb);
+    await withResourceHarness(user.id, async (h) => {
+      const result = await h.client.readResource({ uri: 'trek://vacay/holidays/2025' });
+      const data = parseResourceResult(result) as unknown[];
+      expect(data).toEqual([]);
     });
   });
 });

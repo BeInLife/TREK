@@ -28,7 +28,7 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
-  collab — see the migration recipe below.
+  collab, vacay — see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -129,9 +129,15 @@ outside DI — while every function consumer, including the plugin host and
 addon AND the per-sub-feature `getCollabFeatures()` flags (notes/polls/chat)
 that the legacy registrar and resources checked at registration time — plus
 the plugin-host swap and a 3-export `collab.bridge.ts` for the two remaining
-legacy consumers, `tripService`'s trip summary and `mcp/tools/trips.ts`).
+legacy consumers, `tripService`'s trip summary and `mcp/tools/trips.ts`);
+vacay followed (the largest MCP port yet — a 26-tool + 3-resource
+`vacay.mcp.ts`, including the first fixed-URI `@Resource` behind a `when`
+addon gate — plus the plugin-host swap and a 1-export `vacay.bridge.ts` for
+`tripService`'s trip-window entry shift; the DTO ratchet for its 13
+grandfathered body contracts landed as a sibling commit).
 Repeat these steps per
-service (next up: vacayService). This is a **pure relocation** — byte-identical
+service (next up: reservationService, the residue fold). This is a **pure
+relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it
 injects domain services via `PluginHostDepsFactory`, so a migrated domain adds

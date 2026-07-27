@@ -108,8 +108,10 @@ but its `resolveLlmConfig` import became the injected `LlmConfigResolver`;
 fileService swapped in 2026-07 — its ten imported symbols became the injected
 `FilesService` plus the load-time constants from `files.constants.ts`;
 collabService swapped in 2026-07 — its seven imported symbols became the
-injected `CollabService`, completing Wave 3; the remaining factory imports are
-all Wave-4+ domains: trips, places, days, journeys, atlas, vacay, collections).
+injected `CollabService`, completing Wave 3; vacayService swapped in 2026-07 —
+its four imported symbols became the injected `VacayService`; the remaining
+factory imports are all Wave-4+ domains: trips, places, days, journeys, atlas,
+collections).
 
 ### Test impact (as landed)
 
@@ -117,7 +119,7 @@ all Wave-4+ domains: trips, places, days, journeys, atlas, vacay, collections).
   `PluginRpcHost` directly with hand-built `HostDeps`).
 - `tests/unit/plugins/plugin-host-deps.factory.test.ts` (was
   `create-rpc-host.test.ts`) — the six DI-domain path mocks became constructor
-  stubs (nine stubs as of the 2026-07 assignments migration); the ~25
+  stubs (eleven stubs as of the 2026-07 vacay migration); the ~24
   legacy-service path mocks remain; a file-local shim keeps the
   historical `createRealRpcHost(id, granted)` call sites and supplies a default
   no-op router.

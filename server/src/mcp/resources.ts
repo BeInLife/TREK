@@ -7,7 +7,6 @@ import { listBudgetItems, getPerPersonSummary, calculateSettlement } from '../se
 import { listReservations } from '../services/reservationService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
-import { getActivePlanId, getActivePlan, getPlanData, getEntries as getVacayEntries, getHolidays } from '../services/vacayService';
 import { isAddonEnabled } from '../services/adminService';
 import { ADDON_IDS } from '../addons';
 import { canAccessJourney, getJourneyFull, listEntries, listJourneys } from '../services/journeyService';
@@ -258,42 +257,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     );
   }
 
-  // Vacay resources (addon-gated)
-  if (isAddonEnabled(ADDON_IDS.VACAY) && canRead(scopes, 'vacay')) {
-    server.registerResource(
-      'vacay-plan',
-      'trek://vacay/plan',
-      { description: "Full snapshot of the user's active vacation plan (members, years, settings)", mimeType: 'application/json' },
-      async (uri) => {
-        const plan = getPlanData(userId);
-        return jsonContent(uri.href, plan);
-      }
-    );
-
-    server.registerResource(
-      'vacay-entries',
-      new ResourceTemplate('trek://vacay/entries/{year}', { list: undefined }),
-      { description: 'All vacation entries for the active plan and a specific year', mimeType: 'application/json' },
-      async (uri, { year }) => {
-        const planId = getActivePlanId(userId);
-        const entries = getVacayEntries(planId, Array.isArray(year) ? year[0] : year, userId);
-        return jsonContent(uri.href, entries);
-      }
-    );
-
-    server.registerResource(
-      'vacay-holidays',
-      new ResourceTemplate('trek://vacay/holidays/{year}', { list: undefined }),
-      { description: "Cached public holidays for the plan's configured region and year", mimeType: 'application/json' },
-      async (uri, { year }) => {
-        const plan = getActivePlan(userId);
-        if (!plan.holidays_enabled || !plan.holidays_region) return jsonContent(uri.href, []);
-        const yearStr = Array.isArray(year) ? year[0] : year;
-        const result = await getHolidays(yearStr, plan.holidays_region);
-        return jsonContent(uri.href, result.data ?? []);
-      }
-    );
-  }
+  // The vacay resources moved to the DI-discovered src/nest/vacay/vacay.mcp.ts
+  // (@McpController, attached via the nest-mcp registry in tools.ts).
 
   // Journey resources (Journey addon)
   if (isAddonEnabled(ADDON_IDS.JOURNEY) && canRead(scopes, 'journey')) {

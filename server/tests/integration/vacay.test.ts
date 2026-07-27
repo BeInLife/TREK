@@ -51,15 +51,13 @@ vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
   ]),
 }));
 
-// Mock vacayService.getCountries to avoid real HTTP call to nager.at
-vi.mock('../../src/services/vacayService', async () => {
-  const actual = await vi.importActual<typeof import('../../src/services/vacayService')>('../../src/services/vacayService');
-  return {
-    ...actual,
-    getCountries: vi.fn().mockResolvedValue({
-      data: [{ countryCode: 'DE', name: 'Germany' }, { countryCode: 'FR', name: 'France' }],
-    }),
-  };
+import { VacayService } from '../../src/nest/vacay/vacay.service';
+
+// Stub VacayService.getCountries to avoid a real HTTP call to nager.at (the
+// legacy path-level partial mock; the service is DI-native now, so spy on the
+// prototype instead).
+vi.spyOn(VacayService.prototype, 'getCountries').mockResolvedValue({
+  data: [{ countryCode: 'DE', name: 'Germany' }, { countryCode: 'FR', name: 'France' }],
 });
 
 import { buildApp } from '../../src/bootstrap';
