@@ -20,14 +20,17 @@ describe('reservationCreateRequestSchema', () => {
 });
 
 describe('reservationPositionsRequestSchema', () => {
-  it('requires positions with id + day_plan_position', () => {
+  it('requires positions with an id; day_plan_position stays optional (legacy wire tolerance)', () => {
     expect(
       reservationPositionsRequestSchema.safeParse({
         positions: [{ id: 1, day_plan_position: 0 }],
         day_id: 3,
       }).success,
     ).toBe(true);
-    expect(reservationPositionsRequestSchema.safeParse({ positions: [{ id: 1 }] }).success).toBe(false);
+    // The legacy route accepted items without day_plan_position (binds NULL) —
+    // RESV-006 pins this on the server side.
+    expect(reservationPositionsRequestSchema.safeParse({ positions: [{ id: 1 }] }).success).toBe(true);
+    expect(reservationPositionsRequestSchema.safeParse({ positions: [{}] }).success).toBe(false);
   });
 });
 

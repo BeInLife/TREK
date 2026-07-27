@@ -162,7 +162,10 @@ export const reservationTravelersRequestSchema = z.object({
 export type ReservationTravelersRequest = z.infer<typeof reservationTravelersRequestSchema>;
 
 export const reservationPositionsRequestSchema = z.object({
-  positions: z.array(z.object({ id: z.number(), day_plan_position: z.number() })),
+  // day_plan_position is optional on the wire: the legacy route never
+  // validated position items, and an absent value binds NULL (clears the
+  // stored position) — pinned by the server integration suite (RESV-006).
+  positions: z.array(z.object({ id: z.number(), day_plan_position: z.number().optional() })),
   day_id: z.union([z.number(), z.string()]).nullable().optional(),
 });
 export type ReservationPositionsRequest = z.infer<typeof reservationPositionsRequestSchema>;

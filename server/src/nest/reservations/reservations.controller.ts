@@ -15,6 +15,12 @@ import { ReservationsService } from './reservations.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { pushReservationToAirtrail } from '../../services/airtrail/airtrailSync';
+import {
+  ReservationCreateDto,
+  ReservationUpdateDto,
+  ReservationPositionsDto,
+  ReservationTravelersDto,
+} from './reservations.dto';
 
 type ReservationBody = Record<string, unknown> & {
   title?: string;
@@ -27,9 +33,11 @@ type ReservationBody = Record<string, unknown> & {
  *
  * Byte-identical to the legacy Express route (server/src/routes/reservations.ts):
  * trip access (404), 'reservation_edit' permission (403), create 201 / rest 200,
- * the bespoke 400/404 bodies, the accommodation + budget side effects, the
- * booking notifications, and all WebSocket broadcasts with the forwarded
- * X-Socket-Id. /positions is declared before /:id so it wins over the param.
+ * the bespoke 404 bodies, the accommodation + budget side effects, the booking
+ * notifications, and all WebSocket broadcasts with the forwarded X-Socket-Id.
+ * Invalid bodies (missing title, non-array positions/user_ids) now 400 through
+ * the global ZodValidationPipe envelope instead of the bespoke strings.
+ * /positions is declared before /:id so it wins over the param.
  */
 @Controller('api/trips/:tripId/reservations')
 @UseGuards(JwtAuthGuard)
@@ -60,14 +68,12 @@ export class ReservationsController {
   create(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
-    @Body() body: ReservationBody,
+    @Body() rawBody: ReservationCreateDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
+    const body = rawBody as ReservationBody & { title: string };
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
-    if (!body.title) {
-      throw new HttpException({ error: 'Title is required' }, 400);
-    }
     const { reservation, accommodationCreated } = this.reservations.create(tripId, body as never);
     if (accommodationCreated) {
       this.reservations.broadcast(tripId, 'accommodation:created', {}, socketId);
@@ -82,15 +88,14 @@ export class ReservationsController {
   updatePositions(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
-    @Body() body: { positions?: unknown; day_id?: unknown },
+    @Body() body: ReservationPositionsDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
-    if (!Array.isArray(body.positions)) {
-      throw new HttpException({ error: 'positions must be an array' }, 400);
-    }
-    this.reservations.updatePositions(tripId, body.positions, body.day_id);
+    // The legacy signature declares day_plan_position required, but the wire
+    // contract tolerates absent values (bind NULL) — see the shared schema.
+    this.reservations.updatePositions(tripId, body.positions as { id: number; day_plan_position: number }[], body.day_id);
     this.reservations.broadcast(tripId, 'reservation:positions', { positions: body.positions, day_id: body.day_id }, socketId);
     return { success: true };
   }
@@ -100,9 +105,10 @@ export class ReservationsController {
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Param('id') id: string,
-    @Body() body: ReservationBody,
+    @Body() rawBody: ReservationUpdateDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
+    const body = rawBody as ReservationBody;
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
     const current = this.reservations.getReservation(id, tripId);
@@ -130,15 +136,12 @@ export class ReservationsController {
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Param('id') id: string,
-    @Body('user_ids') userIds: unknown,
+    @Body() body: ReservationTravelersDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
     const trip = this.requireTrip(tripId, user);
     this.requireEdit(trip, user);
-    if (!Array.isArray(userIds)) {
-      throw new HttpException({ error: 'user_ids must be an array' }, 400);
-    }
-    const result = this.reservations.setTravelers(id, tripId, userIds as number[]);
+    const result = this.reservations.setTravelers(id, tripId, body.user_ids);
     if (!result) {
       throw new HttpException({ error: 'Reservation not found' }, 404);
     }
