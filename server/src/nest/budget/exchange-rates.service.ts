@@ -12,32 +12,53 @@ import { Injectable } from '@nestjs/common';
  * callers get `null`/identity conversion and amounts are treated as already in
  * the base currency rather than throwing.
  *
- * Moved 1:1 from the legacy `services/exchangeRateService.ts` (the budget-domain
- * fold): identical fetch, cache/coalescing behavior, `||` falsy-coercion
- * defaults and null degradation. The cache and inflight maps are deliberately
- * MODULE-scoped, not instance fields — the DI singleton and the
- * exchange-rates.bridge instance wrap the same upstream feed, so they must
- * share one cache (same reasoning as the permissions.service.ts cache).
+ * Moved from the legacy `services/exchangeRateService.ts` (the budget-domain
+ * fold): identical cache/coalescing behavior, `||` falsy-coercion defaults and
+ * null degradation. The cache and inflight maps are deliberately MODULE-scoped,
+ * not instance fields — the DI singleton and the exchange-rates.bridge instance
+ * wrap the same upstream feed, so they must share one cache (same reasoning as
+ * the permissions.service.ts cache).
+ *
+ * Post-migration fixes on top of the relocated legacy behavior: the outbound
+ * fetch carries an AbortSignal timeout and a response-size cap, the response is
+ * boundary-validated instead of `as`-cast, failures are logged instead of
+ * silently swallowed (callers still get null), and the inflight cleanup is
+ * rejection-proof. Kept on purpose: the stale-cache fallback on upstream
+ * failure (stale beats nothing) and the ">1 keys" empty-response heuristic.
  */
 
 const TTL_MS = 6 * 60 * 60 * 1000; // 6h
+const FETCH_TIMEOUT_MS = 10_000;
+// Frankfurter quotes a few dozen currencies (~2 KB); anything near this cap is
+// not the API we think it is.
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 const cache = new Map<string, { rates: Record<string, number>; ts: number }>();
 const inflight = new Map<string, Promise<Record<string, number> | null>>();
 
+const isRateEntry = (v: unknown): v is { quote: string; rate: number } =>
+  typeof v === 'object' && v !== null &&
+  typeof (v as { quote?: unknown }).quote === 'string' &&
+  typeof (v as { rate?: unknown }).rate === 'number';
+
 async function fetchRates(base: string): Promise<Record<string, number> | null> {
   try {
-    const res = await fetch(`https://api.frankfurter.dev/v2/rates?base=${encodeURIComponent(base)}`);
+    const res = await fetch(`https://api.frankfurter.dev/v2/rates?base=${encodeURIComponent(base)}`, {
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
     if (!res.ok) return null;
+    const text = await res.text();
+    if (text.length > MAX_RESPONSE_BYTES) return null;
     // Frankfurter returns an array of { date, base, quote, rate } and omits the
     // base's own self-rate, so seed the map with `base = 1` then index by quote.
-    const data = (await res.json()) as Array<{ quote?: string; rate?: number }>;
+    const data: unknown = JSON.parse(text);
     if (!Array.isArray(data)) return null;
     const rates: Record<string, number> = { [base.toUpperCase()]: 1 };
     for (const r of data) {
-      if (r && typeof r.quote === 'string' && typeof r.rate === 'number') rates[r.quote] = r.rate;
+      if (isRateEntry(r)) rates[r.quote] = r.rate;
     }
     return Object.keys(rates).length > 1 ? rates : null;
-  } catch {
+  } catch (err) {
+    console.error('[exchange-rates] rates fetch failed for', base, err);
     return null;
   }
 }
@@ -54,34 +75,19 @@ export class ExchangeRatesService {
     // Coalesce concurrent fetches for the same base.
     let p = inflight.get(key);
     if (!p) {
-      p = fetchRates(key).then(rates => {
-        if (rates) cache.set(key, { rates, ts: Date.now() });
-        inflight.delete(key);
-        return rates;
-      });
+      p = fetchRates(key)
+        .then(rates => {
+          if (rates) cache.set(key, { rates, ts: Date.now() });
+          return rates;
+        })
+        .finally(() => {
+          inflight.delete(key);
+        });
       inflight.set(key, p);
     }
     const rates = await p;
     // On failure fall back to the last cached value if we have one.
     if (!rates && hit) return hit.rates;
     return rates;
-  }
-
-  /**
-   * Convert `amount` from `from` currency into `base` using a rates map obtained
-   * from getRates(base). Identity when same currency or the rate is missing.
-   */
-  convertWithRates(
-    amount: number,
-    from: string | null | undefined,
-    base: string,
-    rates: Record<string, number> | null,
-  ): number {
-    const fromCur = (from || base).toUpperCase();
-    const baseCur = base.toUpperCase();
-    if (fromCur === baseCur || !rates) return amount;
-    const r = rates[fromCur];
-    if (!r || r <= 0) return amount;
-    return amount / r;
   }
 }
