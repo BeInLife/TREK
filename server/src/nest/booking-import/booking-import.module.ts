@@ -7,9 +7,10 @@ import { FeaturesController } from './features.controller';
 import { LlmParseModule } from '../llm-parse/llm-parse.module';
 import { ReservationsModule } from '../reservations/reservations.module';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { BudgetModule } from '../budget/budget.module';
 
 @Module({
-  imports: [LlmParseModule, ReservationsModule, PermissionsModule],
+  imports: [LlmParseModule, ReservationsModule, PermissionsModule, BudgetModule],
   controllers: [BookingImportController, FeaturesController],
   providers: [BookingImportService, KitineraryExtractorService, ImportJobsService],
 })

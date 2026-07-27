@@ -4,7 +4,7 @@ import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { ReservationsService } from '../reservations/reservations.service';
 import { createPlace } from '../../services/placeService';
-import { createBudgetItem, freezeForeignRate } from '../../services/budgetService';
+import { BudgetService } from '../budget/budget.service';
 import { isAddonEnabled } from '../../services/adminService';
 import { ADDON_IDS } from '../../addons';
 import { searchNominatim } from '../../services/mapsService';
@@ -25,6 +25,7 @@ export class BookingImportService {
     private readonly dbs: DatabaseService,
     private readonly reservations: ReservationsService,
     private readonly permissions: PermissionsService,
+    private readonly budget: BudgetService,
   ) {}
 
   private get db() {
@@ -251,8 +252,8 @@ export class BookingImportService {
               };
               // Freeze the live FX rate for a foreign-currency booking price so a
               // settled position isn't re-opened when live rates drift (#1445).
-              await freezeForeignRate(tripId, budgetData);
-              const budgetItem = createBudgetItem(tripId, budgetData);
+              await this.budget.freezeForeignRate(tripId, budgetData);
+              const budgetItem = this.budget.createBudgetItem(tripId, budgetData);
               broadcast(tripId, 'budget:created', { item: budgetItem }, socketId);
             } catch (err) {
               console.error(

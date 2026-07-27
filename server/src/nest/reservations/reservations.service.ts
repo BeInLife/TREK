@@ -5,7 +5,7 @@ import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { avatarUrl } from '../../services/avatarUrl';
 import type { Reservation, User } from '../../types';
-import { createBudgetItem, updateBudgetItem, deleteBudgetItem, linkBudgetItemToReservation } from '../../services/budgetService';
+import { BudgetService } from '../budget/budget.service';
 import { typeToCostCategory } from '@trek/shared';
 
 type Trip = NonNullable<ReturnType<typeof verifyTripAccess>>;
@@ -132,6 +132,7 @@ export class ReservationsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly permissions: PermissionsService,
+    private readonly budget: BudgetService,
   ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
@@ -739,7 +740,7 @@ export class ReservationsService {
   syncBudgetOnCreate(tripId: string, reservationId: number, title: string, type: string | undefined, entry: BudgetEntry, socketId: string | undefined): void {
     if (!entry || !(Number(entry.total_price) > 0)) return;
     try {
-      const item = linkBudgetItemToReservation(tripId, reservationId, {
+      const item = this.budget.linkBudgetItemToReservation(tripId, reservationId, {
         name: title,
         category: entry.category || type || 'Other',
         total_price: entry.total_price!,
@@ -761,7 +762,7 @@ export class ReservationsService {
         const oldCat = typeToCostCategory(currentType);
         const newCat = typeToCostCategory(type);
         if (oldCat !== newCat && linked.category === oldCat) {
-          const updated = updateBudgetItem(linked.id, tripId, { category: newCat });
+          const updated = this.budget.updateBudgetItem(linked.id, tripId, { category: newCat });
           broadcast(tripId, 'budget:updated', { item: updated }, socketId);
         }
       }
@@ -776,7 +777,7 @@ export class ReservationsService {
       // Explicit clear (total_price 0/empty) — drop the linked item.
       const linked = this.db.get<{ id: number }>('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?', tripId, id);
       if (linked) {
-        deleteBudgetItem(linked.id, tripId);
+        this.budget.deleteBudgetItem(linked.id, tripId);
         broadcast(tripId, 'budget:deleted', { itemId: linked.id }, socketId);
       }
       return;
@@ -787,10 +788,10 @@ export class ReservationsService {
       const category = entry.category || type || currentType || 'Other';
       const existing = this.db.get<{ id: number }>('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?', tripId, id);
       if (existing) {
-        const updated = updateBudgetItem(existing.id, tripId, { name: itemName, category, total_price: entry.total_price });
+        const updated = this.budget.updateBudgetItem(existing.id, tripId, { name: itemName, category, total_price: entry.total_price });
         broadcast(tripId, 'budget:updated', { item: updated }, socketId);
       } else {
-        const item = createBudgetItem(tripId, { name: itemName, category, total_price: entry.total_price });
+        const item = this.budget.createBudgetItem(tripId, { name: itemName, category, total_price: entry.total_price });
         this.db.run('UPDATE budget_items SET reservation_id = ? WHERE id = ?', id, item.id);
         item.reservation_id = Number(id);
         broadcast(tripId, 'budget:created', { item }, socketId);

@@ -3,6 +3,9 @@ import { db } from '../../src/db/database';
 import { trekMcpAccessPolicy } from '../../src/mcp/nest-mcp-policy';
 import { AssignmentsMcp } from '../../src/nest/assignments/assignments.mcp';
 import { AssignmentsService } from '../../src/nest/assignments/assignments.service';
+import { BudgetMcp } from '../../src/nest/budget/budget.mcp';
+import { BudgetService } from '../../src/nest/budget/budget.service';
+import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.service';
 import { CategoriesMcp } from '../../src/nest/categories/categories.mcp';
 import { CategoriesService } from '../../src/nest/categories/categories.service';
 import { CollabMcp } from '../../src/nest/collab/collab.mcp';
@@ -35,13 +38,16 @@ export function createMcpTestRegistry(): McpRegistry {
   const dbService = new DatabaseService(db);
   const permissionsService = new PermissionsService(dbService);
   const daysService = new DaysService(dbService, permissionsService);
+  const exchangeRatesService = new ExchangeRatesService();
+  const budgetService = new BudgetService(dbService, permissionsService, exchangeRatesService);
   return createTestRegistry(
     [
       new TagsMcp(new TagsService(dbService)),
       new CategoriesMcp(new CategoriesService(dbService)),
       new TodoMcp(new TodoService(dbService, permissionsService)),
       new PackingMcp(new PackingService(dbService, permissionsService)),
-      new ReservationsMcp(new ReservationsService(dbService, permissionsService), daysService),
+      new BudgetMcp(budgetService, exchangeRatesService, dbService),
+      new ReservationsMcp(new ReservationsService(dbService, permissionsService, budgetService), daysService, budgetService),
       new DayNotesMcp(new DayNotesService(dbService, permissionsService)),
       new DaysMcp(daysService, dbService),
       new AssignmentsMcp(new AssignmentsService(dbService, permissionsService), daysService),

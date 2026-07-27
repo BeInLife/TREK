@@ -1,6 +1,9 @@
 /**
- * DB-backed unit tests for budgetService trip-scoping (BUDGET-SVC-DB-001+).
+ * DB-backed unit tests for BudgetService trip-scoping (BUDGET-SVC-DB-001+).
  * Uses a real in-memory SQLite DB so the SQL WHERE clauses are exercised.
+ * BUDGET-SVC-DB-001 through 014 moved 1:1 from the legacy
+ * tests/unit/services/budgetServiceDb.test.ts; 015–018 pin the budget.bridge
+ * delegation (the bridge instance runs over the same mocked db Proxy).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -27,22 +30,42 @@ vi.mock('../../../src/config', () => ({
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
   updateJwtSecret: () => {},
 }));
+vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 
 // Frozen snapshot of the rates in play in #1543 (rates[X] = units of X per 1 base).
-const RATES: Record<string, Record<string, number>> = {
-  RUB: { RUB: 1, USD: 0.013042, EUR: 0.011412 },
-  EUR: { EUR: 1, USD: 1.1429, RUB: 87.63 },
-};
-vi.mock('../../../src/nest/budget/exchange-rates.bridge', () => ({
-  getRates: vi.fn(async (base: string) => RATES[base.toUpperCase()] ?? null),
+const { RATES } = vi.hoisted(() => ({
+  RATES: {
+    RUB: { RUB: 1, USD: 0.013042, EUR: 0.011412 },
+    EUR: { EUR: 1, USD: 1.1429, RUB: 87.63 },
+  } as Record<string, Record<string, number>>,
+}));
+// Constructor-injected since the fold; the class is mocked at the module path so
+// the budget.bridge instance (which news up its own ExchangeRatesService) sees
+// the same deterministic rates as the SUT.
+vi.mock('../../../src/nest/budget/exchange-rates.service', () => ({
+  ExchangeRatesService: class {
+    async getRates(base: string) {
+      return RATES[base.toUpperCase()] ?? null;
+    }
+  },
 }));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip } from '../../helpers/factories';
-import { createBudgetItem, updateBudgetItem, updateMembers, toggleMemberPaid, calculateSettlement, rebaseTripCurrency } from '../../../src/services/budgetService';
+import { BudgetService } from '../../../src/nest/budget/budget.service';
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
+import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
+import * as bridge from '../../../src/nest/budget/budget.bridge';
 import { createGuest, deleteGuest } from '../../../src/services/tripService';
+
+const budget = new BudgetService(
+  new DatabaseService(testDb),
+  new PermissionsService(new DatabaseService(testDb)),
+  new ExchangeRatesService(),
+);
 
 beforeAll(() => {
   createTables(testDb);
@@ -77,7 +100,7 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     const guests = ['G1', 'G2', 'G3'].map(n => createGuest(trip.id, n, owner.id).member);
-    const item = createBudgetItem(trip.id, {
+    const item = budget.createBudgetItem(trip.id, {
       name: 'Dinner', total_price: 400,
       member_ids: [owner.id, ...guests.map(g => g.id)],
     });
@@ -97,7 +120,7 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
     const trip = createTrip(testDb, owner.id);
     const guest = createGuest(trip.id, 'G1', owner.id).member;
     // No member rows — `persons` is just a number someone typed.
-    const item = createBudgetItem(trip.id, { name: 'Rental', total_price: 300, persons: 6 });
+    const item = budget.createBudgetItem(trip.id, { name: 'Rental', total_price: 300, persons: 6 });
 
     deleteGuest(trip.id, guest.id);
 
@@ -108,7 +131,7 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     const guest = createGuest(trip.id, 'G1', owner.id).member;
-    const item = createBudgetItem(trip.id, { name: 'Taxi', total_price: 50, member_ids: [guest.id] });
+    const item = budget.createBudgetItem(trip.id, { name: 'Taxi', total_price: 50, member_ids: [guest.id] });
 
     deleteGuest(trip.id, guest.id);
 
@@ -120,12 +143,12 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     const guest = createGuest(trip.id, 'G1', owner.id).member;
-    const item = createBudgetItem(trip.id, { name: 'Dinner', total_price: 200, member_ids: [owner.id, guest.id] });
+    const item = budget.createBudgetItem(trip.id, { name: 'Dinner', total_price: 200, member_ids: [owner.id, guest.id] });
 
     deleteGuest(trip.id, guest.id);
 
     // A client that loaded before the deletion still sends the guest back (#1553).
-    const updated = updateBudgetItem(item.id, trip.id, { member_ids: [owner.id, guest.id] });
+    const updated = budget.updateBudgetItem(item.id, trip.id, { member_ids: [owner.id, guest.id] });
 
     expect(updated!.members.map(m => m.user_id)).toEqual([owner.id]);
     expect(personsOf(item.id)).toBe(1);
@@ -135,10 +158,10 @@ describe('deleting a member re-splits their expenses (#1553)', () => {
     const { user: owner } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
     const guest = createGuest(trip.id, 'G1', owner.id).member;
-    const item = createBudgetItem(trip.id, { name: 'Drinks', total_price: 60, member_ids: [owner.id, guest.id] });
+    const item = budget.createBudgetItem(trip.id, { name: 'Drinks', total_price: 60, member_ids: [owner.id, guest.id] });
 
     deleteGuest(trip.id, guest.id);
-    const result = updateMembers(item.id, trip.id, [owner.id, guest.id]);
+    const result = budget.updateMembers(item.id, trip.id, [owner.id, guest.id]);
 
     expect(result!.members.map(m => m.user_id)).toEqual([owner.id]);
     expect(personsOf(item.id)).toBe(1);
@@ -149,10 +172,10 @@ describe('toggleMemberPaid trip-scoping', () => {
   it('BUDGET-SVC-DB-001: toggles paid for an item that belongs to the given trip', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip A' });
-    const item = createBudgetItem(trip.id, { name: 'Hotel', total_price: 100 });
-    updateMembers(item.id, trip.id, [user.id]);
+    const item = budget.createBudgetItem(trip.id, { name: 'Hotel', total_price: 100 });
+    budget.updateMembers(item.id, trip.id, [user.id]);
 
-    const member = toggleMemberPaid(item.id, trip.id, user.id, true);
+    const member = budget.toggleMemberPaid(item.id, trip.id, user.id, true);
 
     expect(member).not.toBeNull();
     expect(paidFlag(item.id, user.id)).toBe(1);
@@ -162,11 +185,11 @@ describe('toggleMemberPaid trip-scoping', () => {
     const { user } = createUser(testDb);
     const tripA = createTrip(testDb, user.id, { title: 'Trip A' });
     const tripB = createTrip(testDb, user.id, { title: 'Trip B' });
-    const itemB = createBudgetItem(tripB.id, { name: 'Foreign expense', total_price: 50 });
-    updateMembers(itemB.id, tripB.id, [user.id]);
+    const itemB = budget.createBudgetItem(tripB.id, { name: 'Foreign expense', total_price: 50 });
+    budget.updateMembers(itemB.id, tripB.id, [user.id]);
 
     // Caller passes a trip they can access (A) but the item lives in trip B.
-    const member = toggleMemberPaid(itemB.id, tripA.id, user.id, true);
+    const member = budget.toggleMemberPaid(itemB.id, tripA.id, user.id, true);
 
     expect(member).toBeNull();
     expect(paidFlag(itemB.id, user.id)).toBe(0); // unchanged
@@ -180,7 +203,7 @@ describe('calculateSettlement custom splits', () => {
     const trip = createTrip(testDb, alice.id, { title: 'Trip' });
 
     // 100 total, custom split: Alice owes 90, Bob owes 10. Alice paid the whole bill.
-    createBudgetItem(trip.id, {
+    budget.createBudgetItem(trip.id, {
       name: 'Dinner',
       payers: [{ user_id: alice.id, amount: 100 }],
       members: [
@@ -189,7 +212,7 @@ describe('calculateSettlement custom splits', () => {
       ],
     });
 
-    const result = calculateSettlement(trip.id);
+    const result = budget.calculateSettlement(trip.id);
 
     // Alice paid 100 but owes 90 → net +10 (creditor); Bob owes 10 → net -10 (debtor).
     // With the equal-split bug both owe 50, so the flow would be 50 instead of 10.
@@ -214,9 +237,9 @@ function seedIssue1543Trip(tripCurrency: string) {
 
   // 9 000 ₽ nobody has paid yet, 9 000 ₽ paid by me, and $100 paid by me. The USD row
   // carries the rate frozen at entry time: units of USD per 1 RUB.
-  createBudgetItem(trip.id, { name: 'Проезд обратно', total_price: 9000, currency: 'RUB', members });
-  createBudgetItem(trip.id, { name: 'Проезд туда', currency: 'RUB', payers: [{ user_id: me.id, amount: 9000 }], members });
-  createBudgetItem(trip.id, {
+  budget.createBudgetItem(trip.id, { name: 'Проезд обратно', total_price: 9000, currency: 'RUB', members });
+  budget.createBudgetItem(trip.id, { name: 'Проезд туда', currency: 'RUB', payers: [{ user_id: me.id, amount: 9000 }], members });
+  budget.createBudgetItem(trip.id, {
     name: 'test', currency: 'USD', exchange_rate: 0.013042,
     payers: [{ user_id: me.id, amount: 100 }], members,
   });
@@ -227,7 +250,7 @@ describe('calculateSettlement with a foreign-currency expense (#1543)', () => {
   it('BUDGET-SVC-DB-004: nets in the trip currency instead of inflating the foreign share ~27x', () => {
     const { trip, me, danil, serega } = seedIssue1543Trip('RUB');
 
-    const result = calculateSettlement(trip.id, { base: 'RUB', tripCurrency: 'RUB', rates: RATES.RUB });
+    const result = budget.calculateSettlement(trip.id, { base: 'RUB', tripCurrency: 'RUB', rates: RATES.RUB });
     const balanceOf = (id: number) => result.balances.find(b => b.user_id === id)!.balance;
 
     // Total spend is 9 000 + 9 000 + $100 (≈7 668 ₽), so each of the three owes a third
@@ -248,7 +271,7 @@ describe('calculateSettlement with a foreign-currency expense (#1543)', () => {
     const { trip, danil } = seedIssue1543Trip('RUB');
 
     // Same trip, viewed in EUR: every balance is the RUB one converted once, at the end.
-    const inEur = calculateSettlement(trip.id, { base: 'EUR', tripCurrency: 'RUB', rates: RATES.EUR });
+    const inEur = budget.calculateSettlement(trip.id, { base: 'EUR', tripCurrency: 'RUB', rates: RATES.EUR });
     const danilEur = inEur.balances.find(b => b.user_id === danil.id)!.balance;
 
     const shareRub = (18000 + 100 / RATES.RUB.USD) / 3;
@@ -269,11 +292,11 @@ describe('rebaseTripCurrency', () => {
 
     // An expense that inherits the trip's base (currency NULL), one booked in USD, and
     // one already in the incoming currency.
-    const implicit = createBudgetItem(trip.id, { name: 'Implicit', total_price: 100, members }) as { id: number };
-    const usd = createBudgetItem(trip.id, { name: 'USD', total_price: 100, currency: 'USD', exchange_rate: 1.1429, members }) as { id: number };
-    const rub = createBudgetItem(trip.id, { name: 'RUB', total_price: 9000, currency: 'RUB', exchange_rate: 87.63, members }) as { id: number };
+    const implicit = budget.createBudgetItem(trip.id, { name: 'Implicit', total_price: 100, members }) as { id: number };
+    const usd = budget.createBudgetItem(trip.id, { name: 'USD', total_price: 100, currency: 'USD', exchange_rate: 1.1429, members }) as { id: number };
+    const rub = budget.createBudgetItem(trip.id, { name: 'RUB', total_price: 9000, currency: 'RUB', exchange_rate: 87.63, members }) as { id: number };
 
-    await rebaseTripCurrency(trip.id, 'RUB');
+    await budget.rebaseTripCurrency(trip.id, 'RUB');
 
     // The implicit row really held euros, so it is stamped EUR rather than silently
     // becoming 100 ₽, and every rate is re-anchored to the new base.
@@ -290,15 +313,15 @@ describe('rebaseTripCurrency', () => {
     testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
     const members = [{ user_id: alice.id }, { user_id: bob.id }];
 
-    createBudgetItem(trip.id, { name: 'Hotel', payers: [{ user_id: alice.id, amount: 100 }], members });
-    createBudgetItem(trip.id, { name: 'Dinner', currency: 'USD', exchange_rate: 1.1429, payers: [{ user_id: bob.id, amount: 60 }], members });
+    budget.createBudgetItem(trip.id, { name: 'Hotel', payers: [{ user_id: alice.id, amount: 100 }], members });
+    budget.createBudgetItem(trip.id, { name: 'Dinner', currency: 'USD', exchange_rate: 1.1429, payers: [{ user_id: bob.id, amount: 60 }], members });
 
-    const before = calculateSettlement(trip.id, { base: 'EUR', tripCurrency: 'EUR', rates: RATES.EUR });
+    const before = budget.calculateSettlement(trip.id, { base: 'EUR', tripCurrency: 'EUR', rates: RATES.EUR });
 
-    await rebaseTripCurrency(trip.id, 'RUB');
+    await budget.rebaseTripCurrency(trip.id, 'RUB');
     testDb.prepare("UPDATE trips SET currency = 'RUB' WHERE id = ?").run(trip.id);
 
-    const after = calculateSettlement(trip.id, { base: 'RUB', tripCurrency: 'RUB', rates: RATES.RUB });
+    const after = budget.calculateSettlement(trip.id, { base: 'RUB', tripCurrency: 'RUB', rates: RATES.RUB });
 
     for (const b of before.balances) {
       const rub = after.balances.find(x => x.user_id === b.user_id)!.balance;
@@ -322,7 +345,7 @@ describe('rebaseTripCurrency', () => {
     const jpy = priced(1500, 'JPY');
     const free = priced(null, null);
 
-    await rebaseTripCurrency(trip.id, 'JPY');
+    await budget.rebaseTripCurrency(trip.id, 'JPY');
 
     const placeRow = (id: number) =>
       testDb.prepare('SELECT price, currency FROM places WHERE id = ?')
@@ -340,10 +363,61 @@ describe('rebaseTripCurrency', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
     testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
-    const item = createBudgetItem(trip.id, { name: 'Implicit', total_price: 100, members: [{ user_id: user.id }] }) as { id: number };
+    const item = budget.createBudgetItem(trip.id, { name: 'Implicit', total_price: 100, members: [{ user_id: user.id }] }) as { id: number };
 
-    await rebaseTripCurrency(trip.id, 'EUR');
+    await budget.rebaseTripCurrency(trip.id, 'EUR');
 
     expect(itemRow(item.id)).toEqual({ currency: null, exchange_rate: 1 });
+  });
+});
+
+describe('budget.bridge delegation', () => {
+  it('BUDGET-SVC-DB-015: listBudgetItems returns the hydrated list through the bridge', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const item = budget.createBudgetItem(trip.id, { name: 'Hotel', total_price: 100, member_ids: [user.id] });
+
+    const items = bridge.listBudgetItems(trip.id);
+
+    expect(items.map(i => i.id)).toEqual([item.id]);
+    expect(items[0].members.map(m => m.user_id)).toEqual([user.id]);
+  });
+
+  it('BUDGET-SVC-DB-016: removeUserFromBudgetItems re-derives persons through the bridge', () => {
+    const { user: owner } = createUser(testDb);
+    const { user: other } = createUser(testDb, { username: 'other' });
+    const trip = createTrip(testDb, owner.id);
+    const item = budget.createBudgetItem(trip.id, { name: 'Dinner', total_price: 80, member_ids: [owner.id, other.id] });
+
+    bridge.removeUserFromBudgetItems(other.id);
+
+    const row = testDb.prepare('SELECT persons FROM budget_items WHERE id = ?').get(item.id) as { persons: number | null };
+    expect(row.persons).toBe(1);
+  });
+
+  it('BUDGET-SVC-DB-017: rebaseTripCurrency pins the implicit currency through the bridge', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    testDb.prepare("UPDATE trips SET currency = 'EUR' WHERE id = ?").run(trip.id);
+    const item = budget.createBudgetItem(trip.id, { name: 'Implicit', total_price: 100, members: [{ user_id: user.id }] });
+
+    await bridge.rebaseTripCurrency(trip.id, 'RUB');
+
+    const row = testDb.prepare('SELECT currency, exchange_rate FROM budget_items WHERE id = ?').get(item.id) as { currency: string | null; exchange_rate: number };
+    expect(row).toEqual({ currency: 'EUR', exchange_rate: RATES.RUB.EUR });
+  });
+
+  it('BUDGET-SVC-DB-018: linkBudgetItemToReservation stamps the reservation id through the bridge', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const reservationId = Number(testDb
+      .prepare("INSERT INTO reservations (trip_id, title, type) VALUES (?, 'Flight', 'flight')")
+      .run(trip.id).lastInsertRowid);
+
+    const item = bridge.linkBudgetItemToReservation(trip.id, reservationId, { name: 'Flight', total_price: 200 });
+
+    expect(item.reservation_id).toBe(reservationId);
+    const row = testDb.prepare('SELECT reservation_id FROM budget_items WHERE id = ?').get(item.id) as { reservation_id: number | null };
+    expect(row.reservation_id).toBe(reservationId);
   });
 });

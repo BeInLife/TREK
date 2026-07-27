@@ -37,10 +37,9 @@ vi.mock('../../../src/websocket', () => ({ broadcast }));
 const checkPermission = vi.fn(() => true);
 const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
-const { budget } = vi.hoisted(() => ({
-  budget: { createBudgetItem: vi.fn(), updateBudgetItem: vi.fn(), deleteBudgetItem: vi.fn(), linkBudgetItemToReservation: vi.fn() },
-}));
-vi.mock('../../../src/services/budgetService', () => budget);
+// Constructor-injected since the budget fold (was a path mock of the deleted
+// services/budgetService).
+const budget = { createBudgetItem: vi.fn(), updateBudgetItem: vi.fn(), deleteBudgetItem: vi.fn(), linkBudgetItemToReservation: vi.fn() };
 
 const { notif } = vi.hoisted(() => ({ notif: { send: vi.fn().mockResolvedValue(undefined) } }));
 vi.mock('../../../src/services/notificationService', () => notif);
@@ -52,9 +51,10 @@ import { createUser, createTrip, createReservation, createBudgetItem, createPlac
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
+import type { BudgetService } from '../../../src/nest/budget/budget.service';
 import * as bridge from '../../../src/nest/reservations/reservations.bridge';
 
-const svc = new ReservationsService(new DatabaseService(testDb), permissionsStub);
+const svc = new ReservationsService(new DatabaseService(testDb), permissionsStub, budget as unknown as BudgetService);
 
 beforeAll(() => { createTables(testDb); runMigrations(testDb); });
 beforeEach(() => {

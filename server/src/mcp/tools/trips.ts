@@ -18,7 +18,7 @@ import { countMessages, listPolls } from '../../nest/collab/collab.bridge';
 import {
   listItems as listTodoItems,
 } from '../../nest/todo/todo.bridge';
-import { rebaseTripCurrency } from '../../services/budgetService';
+import { rebaseTripCurrency } from '../../nest/budget/budget.bridge';
 import {
   safeBroadcast, MAX_MCP_TRIP_DAYS,
   TOOL_ANNOTATIONS_READONLY, TOOL_ANNOTATIONS_WRITE,

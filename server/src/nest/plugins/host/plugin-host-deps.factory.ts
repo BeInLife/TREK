@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { readEnv } from '../../../app-config';
 import { broadcast, broadcastToUser } from '../../../websocket';
-import { listBudgetItems } from '../../../services/budgetService';
 import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
 import { BLOCKED_EXTENSIONS, filesDir } from '../../files/files.constants';
@@ -426,12 +425,12 @@ export class PluginHostDepsFactory {
         const r = this.db.prepare('DELETE FROM plugin_scheduled_tasks WHERE plugin_id = ? AND name = ?').run(id, name);
         return { cancelled: r.changes > 0 };
       },
-      listCostsForTrip: (tripId) => listBudgetItems(tripId),
+      listCostsForTrip: (tripId) => this.budget.listBudgetItems(tripId),
       // Cross-trip: every accessible trip's budget items (membership predicate is
       // baked into listTrips). Reuses the hydrated list so members/payers come too.
       listCostsForUser: (userId) => {
         const trips = listTrips(userId, null) as Array<{ id: number }>;
-        return trips.flatMap((t) => listBudgetItems(t.id));
+        return trips.flatMap((t) => this.budget.listBudgetItems(t.id));
       },
       // Reuses BudgetService.create (frozen FX + members/payers), then broadcasts
       // the same 'budget:created' event the controller emits so the web app updates

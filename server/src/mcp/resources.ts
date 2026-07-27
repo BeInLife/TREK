@@ -2,7 +2,6 @@ import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mc
 import { canAccessTrip } from '../db/database';
 import { listTrips, getTrip, getTripOwner, listMembers } from '../services/tripService';
 import { listPlaces } from '../services/placeService';
-import { listBudgetItems, getPerPersonSummary, calculateSettlement } from '../services/budgetService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
 import { isAddonEnabled } from '../services/adminService';
@@ -87,18 +86,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // Budget items
-  if (isAddonEnabled(ADDON_IDS.BUDGET) && canRead(scopes, 'budget')) server.registerResource(
-    'trip-budget',
-    new ResourceTemplate('trek://trips/{tripId}/budget', { list: undefined }),
-    { description: 'Budget and expense items for a trip', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const items = listBudgetItems(id);
-      return jsonContent(uri.href, items);
-    }
-  );
+  // The trip-budget resource moved to the DI-discovered
+  // src/nest/budget/budget.mcp.ts (@ResourceTemplate).
 
   // The trip-packing resource moved to the DI-discovered
   // src/nest/packing/packing.mcp.ts (@ResourceTemplate).
@@ -161,31 +150,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // Budget per-person summary
-  if (isAddonEnabled(ADDON_IDS.BUDGET) && canRead(scopes, 'budget')) server.registerResource(
-    'trip-budget-per-person',
-    new ResourceTemplate('trek://trips/{tripId}/budget/per-person', { list: undefined }),
-    { description: 'Per-person budget summary for a trip (total spent per member, split breakdown)', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const summary = getPerPersonSummary(id);
-      return jsonContent(uri.href, summary);
-    }
-  );
-
-  // Budget settlement
-  if (isAddonEnabled(ADDON_IDS.BUDGET) && canRead(scopes, 'budget')) server.registerResource(
-    'trip-budget-settlement',
-    new ResourceTemplate('trek://trips/{tripId}/budget/settlement', { list: undefined }),
-    { description: 'Suggested settlement transactions to balance who owes whom', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const settlement = calculateSettlement(id);
-      return jsonContent(uri.href, settlement);
-    }
-  );
+  // The trip-budget-per-person and trip-budget-settlement resources moved to
+  // the DI-discovered src/nest/budget/budget.mcp.ts (@ResourceTemplate).
 
   // The trip-packing-bags resource moved to the DI-discovered
   // src/nest/packing/packing.mcp.ts (@ResourceTemplate).

@@ -8,7 +8,7 @@ import { listPlaces } from '../../services/placeService';
 import { DaysService } from '../days/days.service';
 import { PackingService } from '../packing/packing.service';
 import { TodoService } from '../todo/todo.service';
-import { listBudgetItems, rebaseTripCurrency } from '../../services/budgetService';
+import { BudgetService } from '../budget/budget.service';
 import { ReservationsService } from '../reservations/reservations.service';
 import { FilesService } from '../files/files.service';
 import { searchUnsplashPhotos, getUnsplashKey } from '../../services/unsplashService';
@@ -30,6 +30,7 @@ export class TripsService {
     private readonly reservations: ReservationsService,
     private readonly days: DaysService,
     private readonly permissions: PermissionsService,
+    private readonly budget: BudgetService,
   ) {}
 
   private get db() {
@@ -76,7 +77,7 @@ export class TripsService {
     // Re-anchor the budget while the outgoing currency is still on the trip row,
     // otherwise the frozen FX rates and the currency-less expenses that inherit the
     // trip's base are left pointing at a currency that no longer exists (#1543).
-    await rebaseTripCurrency(tripId, body.currency);
+    await this.budget.rebaseTripCurrency(tripId, body.currency);
     return tripSvc.updateTrip(tripId, userId, body, role);
   }
 
@@ -145,7 +146,7 @@ export class TripsService {
       // (#858) never land in this viewer's offline cache.
       packingItems: this.packing.listItems(tripId, viewerId),
       todoItems: this.todo.listItems(tripId),
-      budgetItems: listBudgetItems(tripId),
+      budgetItems: this.budget.listBudgetItems(tripId),
       reservations: this.reservations.list(tripId),
       files: this.files.listFiles(tripId, false),
       accommodations: this.days.listAccommodations(tripId),

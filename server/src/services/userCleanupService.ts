@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { db } from '../db/database';
 import { pluginsDataRoot } from '../nest/plugins/paths';
-import { removeUserFromBudgetItems } from './budgetService';
+import { removeUserFromBudgetItems } from '../nest/budget/budget.bridge';
 
 /**
  * Erase a user's PLUGIN-held data on account deletion. Two parts:

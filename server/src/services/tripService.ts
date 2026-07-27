@@ -7,7 +7,7 @@ import { erasePluginUserData } from './userCleanupService';
 import { emitUserDeleted } from '../plugin-user-lifecycle';
 import { Trip, User } from '../types';
 import { listDays, listAccommodations, addDays, resyncAccommodationDays, restampReservationDates } from '../nest/days/days.bridge';
-import { listBudgetItems, removeUserFromBudgetItems } from './budgetService';
+import { listBudgetItems, removeUserFromBudgetItems } from '../nest/budget/budget.bridge';
 import { listItems as listPackingItems } from '../nest/packing/packing.bridge';
 import { listReservations, loadEndpointsByTrip, resyncReservationDays } from '../nest/reservations/reservations.bridge';
 import { listNotes as listCollabNotes } from '../nest/collab/collab.bridge';

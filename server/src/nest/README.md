@@ -187,15 +187,25 @@ for real against an `audit_log` table in their temp DBs).
 The exchangeRateService fold followed (the pure-infra FX helper — Frankfurter
 fetch + module-scoped 6h cache, no SQL, no controller, no MCP registrar of its
 own — folded into `nest/budget/` as a dep-free `ExchangeRatesService`, injected
-by `BudgetService` and `PluginHostDepsFactory` (its 17th constructor dep), with
-an `exchange-rates.bridge.ts` for the legacy `services/budgetService.ts` FX
-seams and the `mcp/tools/budget.ts` registrar; the rate **cache stays
-module-scoped** like the permissions cache, so the bridge instance and the
-container singleton share one cached upstream feed).
+by `BudgetService` and `PluginHostDepsFactory` (its 17th constructor dep); the
+rate **cache stays module-scoped** like the permissions cache, so any
+out-of-container instance and the container singleton share one cached
+upstream feed).
+budgetService followed (the 755-line Wave-4 money core folded into the wrapper
+`BudgetService`: items/members/payers CRUD, the FX freeze + rebase paths and
+the settlement maths with `splitEqualShares` gone private; the freeze-then-write
+composites kept their wrapper names while the raw settlement writes became
+`insertSettlement`/`applySettlementUpdate` so the MCP paths keep skipping the
+freeze; the 11-tool `mcp/tools/budget.ts` registrar + 3 `resources.ts` budget
+resources moved to `budget.mcp.ts`; TripsService, ReservationsService (+ its
+MCP class) and BookingImportService inject `BudgetService`; a 4-export
+`budget.bridge.ts` serves the legacy tripService/userCleanupService and the
+trips/transports registrars; `exchange-rates.bridge.ts` was deleted with its
+last consumers, and the controller adopted `budget.dto.ts` — all nine
+allow-list entries removed).
 Repeat these steps per
-service (next up: **budgetService** — frontier-ready now that its
-exchangeRateService dependency is folded, per the dependency-honest order in
-`migration-graph.md`). This is a
+service (next up: **tripService** — the budget fold was its unblock, per the
+dependency-honest order in `migration-graph.md`). This is a
 **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it

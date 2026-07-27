@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BudgetModule } from '../budget/budget.module';
 import { DaysModule } from '../days/days.module';
 import { FilesModule } from '../files/files.module';
 import { PackingModule } from '../packing/packing.module';
@@ -12,7 +13,7 @@ import { TripsService } from './trips.service';
 /** Trips aggregate root (C1 — Phase 3). Uses exact strangler prefixes so it does
  *  not capture the nested sub-domain mounts (collab, files, ...). */
 @Module({
-  imports: [TodoModule, PackingModule, FilesModule, ReservationsModule, DaysModule, PermissionsModule, AuditModule],
+  imports: [TodoModule, PackingModule, FilesModule, ReservationsModule, DaysModule, PermissionsModule, AuditModule, BudgetModule],
   controllers: [TripsController],
   providers: [TripsService],
 })

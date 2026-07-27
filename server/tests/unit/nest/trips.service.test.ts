@@ -27,17 +27,18 @@ const { tripSvc } = vi.hoisted(() => ({
 }));
 vi.mock('../../../src/services/tripService', () => tripSvc);
 vi.mock('../../../src/services/placeService', () => ({ listPlaces: () => [] }));
-vi.mock('../../../src/services/budgetService', () => ({
-  listBudgetItems: () => [],
-  rebaseTripCurrency: vi.fn(async () => {}),
-}));
 import { TripsService } from '../../../src/nest/trips/trips.service';
 import type { TodoService } from '../../../src/nest/todo/todo.service';
 import type { PackingService } from '../../../src/nest/packing/packing.service';
 import type { FilesService } from '../../../src/nest/files/files.service';
 import type { ReservationsService } from '../../../src/nest/reservations/reservations.service';
 import type { DaysService } from '../../../src/nest/days/days.service';
-import { rebaseTripCurrency } from '../../../src/services/budgetService';
+import type { BudgetService } from '../../../src/nest/budget/budget.service';
+
+// Constructor-injected since the budget fold (was a path mock of the deleted
+// services/budgetService).
+const rebaseTripCurrency = vi.fn(async () => {});
+const budgetStub = { listBudgetItems: () => [], rebaseTripCurrency } as unknown as BudgetService;
 
 const todoStub = { listItems: () => [] } as unknown as TodoService;
 const packingListItems = vi.fn(() => []);
@@ -45,7 +46,7 @@ const packingStub = { listItems: packingListItems } as unknown as PackingService
 const filesStub = { listFiles: () => [] } as unknown as FilesService;
 const reservationsStub = { list: () => [] } as unknown as ReservationsService;
 const daysStub = { list: () => ({ days: [1] }), listAccommodations: () => [] } as unknown as DaysService;
-function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub, filesStub, reservationsStub, daysStub, permissionsStub); }
+function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub, filesStub, reservationsStub, daysStub, permissionsStub, budgetStub); }
 beforeEach(() => vi.clearAllMocks());
 
 describe('TripsService (wrapper delegation + bundle/copy/notify helpers)', () => {

@@ -56,6 +56,9 @@ const budgetStub = {
     return id === '404' ? null : { id: Number(id), trip_id: Number(tid), ...input };
   },
   remove(id: string, _tid: string) { return id !== '404'; },
+  // The listCostsForTrip/listCostsForUser closures inject this since the budget
+  // fold (was the legacy listBudgetItems path import).
+  listBudgetItems: vi.fn(() => []),
 } as unknown as BudgetService;
 
 // Edit permission — flip per test to exercise the gates (constructor-injected
@@ -124,16 +127,6 @@ const assignmentsStub = {
   placeExists: vi.fn((placeId: number) => placeId === 7),
   getAssignmentForTrip: vi.fn((id: number) => (id === 99 ? undefined : { id, day_id: 3 })),
 } as unknown as AssignmentsService;
-// The extra named exports satisfy the real reservations.service.ts module (now
-// loaded un-mocked as a factory constructor dep); its instance is stubbed, so
-// these are never called.
-vi.mock('../../../src/services/budgetService', () => ({
-  listBudgetItems: vi.fn(() => []),
-  createBudgetItem: vi.fn(),
-  updateBudgetItem: vi.fn(),
-  deleteBudgetItem: vi.fn(),
-  linkBudgetItemToReservation: vi.fn(),
-}));
 // Packing is a constructor-injected stub (same behaviors as the old path mock).
 const packingStub = {
   listItems: vi.fn((tid: number | string, userId?: number) => [{ id: 1, trip_id: tid, name: 'Socks', _uid: userId }]),

@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BudgetModule } from '../budget/budget.module';
 import { DaysModule } from '../days/days.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { ReservationsController } from './reservations.controller';
@@ -16,7 +17,8 @@ import { UpcomingReservationsController } from './upcoming-reservations.controll
  */
 @Module({
   // DaysModule: AccommodationsService + ReservationsMcp inject DaysService.
-  imports: [DaysModule, PermissionsModule],
+  // BudgetModule: ReservationsService + ReservationsMcp inject BudgetService (budget-sync seam).
+  imports: [DaysModule, PermissionsModule, BudgetModule],
   controllers: [ReservationsController, AccommodationsController, UpcomingReservationsController],
   providers: [ReservationsService, AccommodationsService, ReservationsMcp],
   // For in-container consumers (PluginHostDepsFactory, TripsService, BookingImportService).

@@ -1,7 +1,10 @@
 /**
  * Unit tests for MCP resources (resources.ts).
- * Tests all 7 legacy-registrar resources via InMemoryTransport + Client
- * (trek://categories moved to the DI-discovered CategoriesMcp — see
+ * Tests all 6 legacy-registrar resources via InMemoryTransport + Client
+ * (trek://trips/{tripId}/budget, .../budget/per-person and
+ * .../budget/settlement moved to the DI-discovered BudgetMcp — see
+ * tools-budget.test.ts and tools-budget-advanced.test.ts;
+ * trek://categories moved to the DI-discovered CategoriesMcp — see
  * tools-categories.test.ts; trek://trips/{tripId}/todos moved to TodoMcp —
  * see tools-todos.test.ts; trek://trips/{tripId}/packing and .../packing/bags
  * moved to PackingMcp — see tools-packing.test.ts;
@@ -48,7 +51,7 @@ vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
-import { createUser, createTrip, createPlace, addTripMember, createBudgetItem, createReservation, createCollabNote, createBucketListItem, createVisitedCountry } from '../../helpers/factories';
+import { createUser, createTrip, createPlace, addTripMember, createReservation, createCollabNote, createBucketListItem, createVisitedCountry } from '../../helpers/factories';
 import { createMcpHarness, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
 
 beforeAll(() => {
@@ -186,32 +189,9 @@ describe('Resource: trek://trips/{tripId}/places', () => {
   });
 });
 
-describe('Resource: trek://trips/{tripId}/budget', () => {
-  it('returns budget items for a trip', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    createBudgetItem(testDb, trip.id, { name: 'Hotel', category: 'Accommodation', total_price: 200 });
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/budget` });
-      const items = parseResourceResult(result) as any[];
-      expect(items).toHaveLength(1);
-      expect(items[0].name).toBe('Hotel');
-    });
-  });
-
-  it('returns access denied for unauthorized trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/budget` });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-});
+// The trek://trips/{tripId}/budget resource moved to the DI-discovered
+// src/nest/budget/budget.mcp.ts — its cases live in tools-budget.test.ts (the
+// registry attaches via registerTools, which this withTools:false harness skips).
 
 // The trek://trips/{tripId}/packing and .../packing/bags resources moved to the
 // DI-discovered PackingMcp — see tools-packing.test.ts.

@@ -116,7 +116,9 @@ Wave-2 pair — its `checkPermission` import became the injected
 `PermissionsService` (the auditLog half never touched the factory: the plugin
 host's audit trail is the separate `plugin-audit.ts`); exchangeRateService
 swapped in 2026-07 with the budget-domain fold — its `getRates` import became
-the injected `ExchangeRatesService`; the remaining factory
+the injected `ExchangeRatesService`; budgetService swapped in 2026-07 with the
+budget migration — its `listBudgetItems` import became the already-injected
+`BudgetService`, so no constructor change at all; the remaining factory
 imports are all Wave-4+ domains: trips, places, journeys, atlas, collections).
 
 ### Test impact (as landed)
@@ -126,7 +128,10 @@ imports are all Wave-4+ domains: trips, places, journeys, atlas, collections).
 - `tests/unit/plugins/plugin-host-deps.factory.test.ts` (was
   `create-rpc-host.test.ts`) — the six DI-domain path mocks became constructor
   stubs (sixteen stubs as of the 2026-07 exchange-rates fold); the ~22
-  legacy-service path mocks remain; a file-local shim keeps the
+  legacy-service path mocks shrank by one with the 2026-07 budget migration
+  (the budgetService satisfy-the-import mock died with the legacy file — the
+  `budgetStub` gained `listBudgetItems` for the two swapped closures); a
+  file-local shim keeps the
   historical `createRealRpcHost(id, granted)` call sites and supplies a default
   no-op router.
 - Bridge delegation tests (TAG-SVC-016..020, CAT-SVC-016) — deleted with the

@@ -5,7 +5,7 @@ import {
 } from '@trek/nest-mcp';
 import { z } from 'zod';
 import { isDemoUser } from '../../services/authService';
-import { linkBudgetItemToReservation } from '../../services/budgetService';
+import { BudgetService } from '../budget/budget.service';
 import { placeExists, getAssignmentForTrip } from '../assignments/assignments.bridge';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
 import { ReservationsService } from './reservations.service';
@@ -31,6 +31,7 @@ export class ReservationsMcp {
   constructor(
     private readonly reservations: ReservationsService,
     private readonly days: DaysService,
+    private readonly budget: BudgetService,
   ) {}
 
   @Tool({
@@ -100,7 +101,7 @@ export class ReservationsMcp {
     }
 
     if (price != null && price > 0) {
-      const item = linkBudgetItemToReservation(tripId, reservation.id, {
+      const item = this.budget.linkBudgetItemToReservation(tripId, reservation.id, {
         name: title,
         category: budget_category || type,
         total_price: price,

@@ -45,15 +45,8 @@ import { PermissionsService } from '../../src/nest/permissions/permissions.servi
 // PermissionsService singleton (created in beforeAll, after build()).
 let checkPermission: MockInstance;
 
-const { budget } = vi.hoisted(() => ({
-  budget: {
-    createBudgetItem: vi.fn(),
-    updateBudgetItem: vi.fn(),
-    deleteBudgetItem: vi.fn(),
-    linkBudgetItemToReservation: vi.fn(),
-  },
-}));
-vi.mock('../../src/services/budgetService', () => budget);
+// The budget-sync seam runs the real injected BudgetService (BudgetModule is
+// imported by ReservationsModule since the budget fold) over the same temp db.
 
 import { createTables } from '../../src/db/schema';
 import { runMigrations } from '../../src/db/migrations';

@@ -6,7 +6,7 @@ import {
   createReservation, deleteReservation, getReservation, updateReservation,
   type EndpointInput,
 } from '../../nest/reservations/reservations.bridge';
-import { linkBudgetItemToReservation } from '../../services/budgetService';
+import { linkBudgetItemToReservation } from '../../nest/budget/budget.bridge';
 import { getDay } from '../../nest/days/days.bridge';
 import { findByIata } from '../../services/airportService';
 import {

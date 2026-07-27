@@ -30,9 +30,10 @@ import { AuditService } from '../../src/nest/audit/audit.service';
 export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFactory {
   const permissions = new PermissionsService(dbs);
   const exchangeRates = new ExchangeRatesService();
+  const budget = new BudgetService(dbs, permissions, exchangeRates);
   return new PluginHostDepsFactory(
-    new BudgetService(dbs, permissions, exchangeRates),
-    new ReservationsService(dbs, permissions),
+    budget,
+    new ReservationsService(dbs, permissions, budget),
     new TagsService(dbs),
     new CategoriesService(dbs),
     new TodoService(dbs, permissions),

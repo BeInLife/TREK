@@ -15,8 +15,8 @@ import { Injectable } from '@nestjs/common';
  * Moved from the legacy `services/exchangeRateService.ts` (the budget-domain
  * fold): identical cache/coalescing behavior, `||` falsy-coercion defaults and
  * null degradation. The cache and inflight maps are deliberately MODULE-scoped,
- * not instance fields — the DI singleton and the exchange-rates.bridge instance
- * wrap the same upstream feed, so they must share one cache (same reasoning as
+ * not instance fields — the DI singleton and the budget.bridge instance wrap
+ * the same upstream feed, so they must share one cache (same reasoning as
  * the permissions.service.ts cache).
  *
  * Post-migration fixes on top of the relocated legacy behavior: the outbound

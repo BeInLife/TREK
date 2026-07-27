@@ -103,8 +103,10 @@ vi.mock('../../src/services/tripService', () => tripSvc);
 // bundle()'s days + accommodations now run DaysService's real SQL (DI-injected,
 // no mock) — the days/places/day_accommodations/reservations DDL above serves them.
 vi.mock('../../src/services/placeService', () => ({ listPlaces: () => [] }));
-vi.mock('../../src/services/budgetService', () => ({ listBudgetItems: () => [] }));
+// bundle()'s budget items come from the DI-injected BudgetService since the
+// budget fold — stubbed via a container spy in beforeAll (no budget DDL here).
 
+import { BudgetService } from '../../src/nest/budget/budget.service';
 import { TripsModule } from '../../src/nest/trips/trips.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 
@@ -125,6 +127,8 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
     seedUser(db as never, { id: 1 });
     app = await build();
     checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
+    vi.spyOn(app.get(BudgetService), 'listBudgetItems').mockReturnValue([]);
+    vi.spyOn(app.get(BudgetService), 'rebaseTripCurrency').mockResolvedValue();
     server = app.getHttpServer();
     tripSvc.listTrips.mockReturnValue([{ id: 1, title: 'T' }]);
     tripSvc.createTrip.mockReturnValue({ trip: { id: 9 }, tripId: 9, reminderDays: 0 });
