@@ -1,6 +1,7 @@
 import {
   reservationCreateRequestSchema,
   reservationPositionsRequestSchema,
+  accommodationCreateBodySchema,
   accommodationCreateRequestSchema,
 } from './reservation.schema';
 
@@ -44,5 +45,12 @@ describe('accommodationCreateRequestSchema', () => {
       }).success,
     ).toBe(true);
     expect(accommodationCreateRequestSchema.safeParse({ place_id: 2 }).success).toBe(false);
+  });
+
+  it('body variant keeps missing refs schema-valid (bespoke controller 400)', () => {
+    // The REST endpoint requires all three refs, but their absence is answered
+    // by the controller's bespoke 400 body — the pipe must not pre-empt it.
+    expect(accommodationCreateBodySchema.safeParse({ place_id: 2 }).success).toBe(true);
+    expect(accommodationCreateBodySchema.safeParse({ check_in: 5 }).success).toBe(false);
   });
 });

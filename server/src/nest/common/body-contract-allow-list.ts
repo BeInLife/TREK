@@ -8,8 +8,6 @@
  * here — the gate throws on stale entries, so removal is enforced too.
  */
 export const BODY_CONTRACT_ALLOW_LIST: string[] = [
-  'AccommodationsController.create',
-  'AccommodationsController.update',
   'AdminController.createInvite',
   'AdminController.createPackingTemplate',
   'AdminController.createTemplateCategory',
@@ -64,10 +62,6 @@ export const BODY_CONTRACT_ALLOW_LIST: string[] = [
   'CategoriesController.update',
   'CollectionsController.deleteMany',
   'CollectionsController.reorder',
-  'DaysController.create',
-  'DaysController.reorder',
-  'DaysController.transport',
-  'DaysController.update',
   'ImmichMemoriesController.putSettings',
   'ImmichMemoriesController.search',
   'ImmichMemoriesController.test',

@@ -1,5 +1,7 @@
 import { createZodDto } from 'nestjs-zod';
 import {
+  accommodationCreateBodySchema,
+  accommodationUpdateRequestSchema,
   reservationCreateRequestSchema,
   reservationUpdateRequestSchema,
   reservationPositionsRequestSchema,
@@ -19,3 +21,5 @@ export class ReservationCreateDto extends createZodDto(reservationCreateRequestS
 export class ReservationUpdateDto extends createZodDto(reservationUpdateRequestSchema) {}
 export class ReservationPositionsDto extends createZodDto(reservationPositionsRequestSchema) {}
 export class ReservationTravelersDto extends createZodDto(reservationTravelersRequestSchema) {}
+export class AccommodationCreateDto extends createZodDto(accommodationCreateBodySchema) {}
+export class AccommodationUpdateDto extends createZodDto(accommodationUpdateRequestSchema) {}

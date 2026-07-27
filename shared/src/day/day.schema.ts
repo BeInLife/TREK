@@ -6,11 +6,11 @@ import { z } from 'zod';
  * Day + day-note API contract — single source of truth for the
  * /api/trips/:tripId/days and /api/trips/:tripId/days/:dayId/notes endpoints.
  *
- * Trip-scoped, both gated by the 'day_edit' permission. The legacy routes
- * (server/src/routes/days.ts + routes/dayNotes.ts) wrap dayService /
- * dayNoteService. Day rows (with their assignments) are wide and DB-derived, so
- * list responses stay open. Day notes cap text at 500 and time at 150 chars
- * (the legacy validateStringLengths middleware) — reproduced in the controller.
+ * Trip-scoped, both gated by the 'day_edit' permission. Served by the Nest
+ * DaysController / DayNotesController (server/src/nest/days/). Day rows (with
+ * their assignments) are wide and DB-derived, so list responses stay open. Day
+ * notes cap text at 500 and time at 150 chars (the legacy
+ * validateStringLengths middleware) — reproduced in the controller.
  */
 
 /**
@@ -67,6 +67,16 @@ export const dayUpdateRequestSchema = z.object({
   title: z.string().nullable().optional(),
 });
 export type DayUpdateRequest = z.infer<typeof dayUpdateRequestSchema>;
+
+/**
+ * Whole-day default route mode (#1281). The client always sends
+ * `{ transport_mode: string | null }`; null clears the default. Kept loose (no
+ * enum, no max) — the legacy raw-body route accepted any string.
+ */
+export const dayTransportRequestSchema = z.object({
+  transport_mode: z.string().nullable().optional(),
+});
+export type DayTransportRequest = z.infer<typeof dayTransportRequestSchema>;
 
 // `time`/`icon` accept null on the wire: the client's moveDayNote re-sends the
 // entity fields (both nullable on dayNoteSchema) through create, and an explicit

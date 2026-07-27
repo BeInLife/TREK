@@ -182,6 +182,20 @@ export const accommodationCreateRequestSchema = z.object({
 });
 export type AccommodationCreateRequest = z.infer<typeof accommodationCreateRequestSchema>;
 
+/**
+ * REST body variant of the create contract: the three refs are required by the
+ * endpoint but optional on the wire — their absence answers with the bespoke
+ * controller 400 ('place_id, start_day_id, and end_day_id are required'),
+ * which the validation pipe must not pre-empt. The plugin RPC host keeps the
+ * strict schema above (missing refs are BAD_PARAMS there).
+ */
+export const accommodationCreateBodySchema = accommodationCreateRequestSchema.partial({
+  place_id: true,
+  start_day_id: true,
+  end_day_id: true,
+});
+export type AccommodationCreateBody = z.infer<typeof accommodationCreateBodySchema>;
+
 export const accommodationUpdateRequestSchema = open;
 export type AccommodationUpdateRequest = z.infer<typeof accommodationUpdateRequestSchema>;
 

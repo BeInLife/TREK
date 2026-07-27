@@ -11,8 +11,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { User } from '../../types';
-import { DaysService } from './days.service';
-import { DayReorderError } from '../../services/dayService';
+import { DaysService, DayReorderError } from './days.service';
+import { DayCreateDto, DayReorderDto, DayTransportDto, DayUpdateDto } from './days.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 
@@ -53,7 +53,7 @@ export class DaysController {
   create(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
-    @Body() body: { date?: string; notes?: string; position?: number },
+    @Body() body: DayCreateDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
     const trip = this.requireTrip(tripId, user);
@@ -74,7 +74,7 @@ export class DaysController {
   reorder(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
-    @Body() body: { orderedIds?: number[] },
+    @Body() body: DayReorderDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
     const trip = this.requireTrip(tripId, user);
@@ -99,7 +99,7 @@ export class DaysController {
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Param('id') id: string,
-    @Body() body: { notes?: string; title?: string | null },
+    @Body() body: DayUpdateDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
     const trip = this.requireTrip(tripId, user);
@@ -118,7 +118,7 @@ export class DaysController {
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Param('id') id: string,
-    @Body() body: { transport_mode?: string | null },
+    @Body() body: DayTransportDto,
     @Headers('x-socket-id') socketId?: string,
   ) {
     const trip = this.requireTrip(tripId, user);
