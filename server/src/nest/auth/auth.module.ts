@@ -4,6 +4,7 @@ import { AuthController } from './auth.controller';
 import { PasskeyController } from './passkey.controller';
 import { AuthService } from './auth.service';
 import { RateLimitService } from './rate-limit.service';
+import { AuditModule } from '../audit/audit.module';
 
 /**
  * Auth module — public flows (login/register/reset/mfa-verify/logout) and the
@@ -12,6 +13,7 @@ import { RateLimitService } from './rate-limit.service';
  * sub-paths explicitly rather than claiming all of /api/auth.
  */
 @Module({
+  imports: [AuditModule],
   controllers: [AuthPublicController, AuthController, PasskeyController],
   providers: [AuthService, RateLimitService],
 })

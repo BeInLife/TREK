@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CookieAuthGuard } from '../auth/cookie-auth.guard';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { getClientIp } from '../../services/auditLog';
+import { getClientIp } from '../audit/client-ip';
 import type { User } from '../../types';
 import type { AuthorizeParams } from '../../services/oauthService';
 

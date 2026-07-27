@@ -5,7 +5,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { AirtrailAddonGuard } from './airtrail-addon.guard';
 import { AirtrailSettingsDto } from './airtrail.dto';
-import { getClientIp } from '../../services/auditLog';
+import { getClientIp } from '../audit/client-ip';
 import {
   getConnectionSettings,
   getConnectionStatus,

@@ -4,7 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { readEnv, type AppEnv } from '../app-config';
-import { logDebug, logWarn, logError } from '../services/auditLog';
+import { logDebug, logWarn, logError } from '../nest/audit/audit-log.logger';
 import { enforceGlobalMfaPolicy } from './mfaPolicy';
 
 /**

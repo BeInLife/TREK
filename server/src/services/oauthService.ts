@@ -4,7 +4,7 @@ import { isAddonEnabled } from './adminService';
 import { validateScopes } from '../mcp/scopes';
 import { ADDON_IDS } from '../addons';
 import { User } from '../types';
-import { writeAudit, logWarn } from './auditLog';
+import { writeAudit, logWarn } from '../nest/audit/audit.bridge';
 import { revokeUserSessionsForClient } from '../mcp/sessionManager';
 import { getMcpSafeUrl } from './notifications';
 

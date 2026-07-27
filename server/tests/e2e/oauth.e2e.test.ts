@@ -19,11 +19,18 @@ const { db } = vi.hoisted(() => {
   tmp.exec('PRAGMA journal_mode = WAL');
   tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0);`);
+  // AuditService now runs its real INSERT (DI-injected, no mock) — slim
+  // audit_log mirror (no FKs), same shape as plugin-runtime.test.ts.
+  tmp.exec(`CREATE TABLE audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    user_id INTEGER, action TEXT NOT NULL, resource TEXT, details TEXT, ip TEXT);`);
   return { db: tmp };
 });
 
 vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: () => {} }));
-vi.mock('../../src/services/auditLog', () => ({ writeAudit: vi.fn(), getClientIp: () => '1.2.3.4', logWarn: vi.fn() }));
+// The audit domain is DI-native now: writeAudit runs for real against the temp
+// db's audit_log table; only the file logger is silenced.
+vi.mock('../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
 vi.mock('../../src/services/notifications', () => ({ getMcpSafeUrl: () => 'https://app' }));
 
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn(() => true) }));
@@ -41,6 +48,7 @@ const { oauthSvc } = vi.hoisted(() => ({
 vi.mock('../../src/services/oauthService', () => oauthSvc);
 
 import { OauthModule } from '../../src/nest/oauth/oauth.module';
+import { DatabaseModule } from '../../src/nest/database/database.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 
 describe('OAuth e2e (real guards + temp SQLite)', () => {
@@ -48,7 +56,7 @@ describe('OAuth e2e (real guards + temp SQLite)', () => {
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [OauthModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, OauthModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());

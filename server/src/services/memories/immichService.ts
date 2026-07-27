@@ -2,7 +2,7 @@ import { Response } from 'express';
 import { db } from '../../db/database';
 import { maybe_encrypt_api_key, decrypt_api_key } from '../apiKeyCrypto';
 import { checkSsrf, safeFetch } from '../../utils/ssrfGuard';
-import { writeAudit } from '../auditLog';
+import { writeAudit } from '../../nest/audit/audit.bridge';
 import { addTripPhotos} from './unifiedService';
 import { getAlbumIdFromLink, updateSyncTimeForAlbumLink, Selection, pipeAsset } from './helpersService';
 

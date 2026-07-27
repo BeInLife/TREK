@@ -1,6 +1,6 @@
 import { readEnv } from '../app-config';
 import { db } from '../db/database';
-import { logDebug, logError } from './auditLog';
+import { logDebug, logError } from '../nest/audit/audit-log.logger';
 import {
   getActiveChannels,
   isEnabledForEvent,

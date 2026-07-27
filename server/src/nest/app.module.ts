@@ -43,6 +43,7 @@ import { OidcModule } from './oidc/oidc.module';
 import { OauthModule } from './oauth/oauth.module';
 import { AdminModule } from './admin/admin.module';
 import { AddonsModule } from './addons/addons.module';
+import { AuditModule } from './audit/audit.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { PluginsModule } from './plugins/plugins.module';
 import { McpModule } from '@trek/nest-mcp';
@@ -57,7 +58,7 @@ import { IdempotencyInterceptor } from './common/idempotency.interceptor';
  * migrated.
  */
 @Module({
-  imports: [AppConfigModule, DatabaseModule, McpModule.forRoot({ accessPolicy: trekMcpAccessPolicy }), WeatherModule, HelpModule, AirportsModule, ConfigModule, SystemNoticesModule, MapsModule, CategoriesModule, TagsModule, NotificationsModule, AtlasModule, VacayModule, PackingModule, TodoModule, BudgetModule, ReservationsModule, DaysModule, AssignmentsModule, PlacesModule, TripsModule, CollabModule, FilesModule, PhotosModule, MemoriesModule, AirtrailModule, JourneyModule, CollectionsModule, ShareModule, TripInviteModule, TransitModule, FeedsModule, SettingsModule, BackupModule, AuthModule, OidcModule, OauthModule, AdminModule, AddonsModule, PermissionsModule, PluginsModule, BookingImportModule],
+  imports: [AppConfigModule, DatabaseModule, McpModule.forRoot({ accessPolicy: trekMcpAccessPolicy }), WeatherModule, HelpModule, AirportsModule, ConfigModule, SystemNoticesModule, MapsModule, CategoriesModule, TagsModule, NotificationsModule, AtlasModule, VacayModule, PackingModule, TodoModule, BudgetModule, ReservationsModule, DaysModule, AssignmentsModule, PlacesModule, TripsModule, CollabModule, FilesModule, PhotosModule, MemoriesModule, AirtrailModule, JourneyModule, CollectionsModule, ShareModule, TripInviteModule, TransitModule, FeedsModule, SettingsModule, BackupModule, AuthModule, OidcModule, OauthModule, AdminModule, AddonsModule, AuditModule, PermissionsModule, PluginsModule, BookingImportModule],
   controllers: [HealthController],
   providers: [
     HealthService,

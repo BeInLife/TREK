@@ -4,7 +4,7 @@ import type { User } from '../../types';
 import { MemoriesService } from './memories.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { getClientIp } from '../../services/auditLog';
+import { getClientIp } from '../audit/client-ip';
 
 /**
  * /api/integrations/memories/immich — Immich connection, browse/search, asset

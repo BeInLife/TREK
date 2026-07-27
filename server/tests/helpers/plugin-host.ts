@@ -18,6 +18,7 @@ import { FilesService } from '../../src/nest/files/files.service';
 import { CollabService } from '../../src/nest/collab/collab.service';
 import { VacayService } from '../../src/nest/vacay/vacay.service';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+import { AuditService } from '../../src/nest/audit/audit.service';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -49,5 +50,5 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
 
 /** A PluginRuntimeService constructed the way Nest would: with a real host-deps factory. */
 export function createPluginRuntime(dbs: DatabaseService, registry?: PluginRegistryService): PluginRuntimeService {
-  return new PluginRuntimeService(dbs, registry, createHostDepsFactory(dbs));
+  return new PluginRuntimeService(dbs, new AuditService(dbs), registry, createHostDepsFactory(dbs));
 }

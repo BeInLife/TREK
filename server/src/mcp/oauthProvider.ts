@@ -17,7 +17,7 @@ import {
 } from '../services/oauthService';
 import { ALL_SCOPES } from './scopes';
 import { getMcpSafeUrl } from '../services/notifications';
-import { writeAudit } from '../services/auditLog';
+import { writeAudit } from '../nest/audit/audit.bridge';
 
 // ---------------------------------------------------------------------------
 // DB row type (mirrors oauthService.ts)

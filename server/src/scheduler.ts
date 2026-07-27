@@ -3,7 +3,7 @@ import archiver from 'archiver';
 import { readEnv } from './app-config';
 import path from 'node:path';
 import fs from 'node:fs';
-import { logInfo, logError } from './services/auditLog';
+import { logInfo, logError } from './nest/audit/audit-log.logger';
 
 const dataDir = path.join(__dirname, '../data');
 const backupsDir = path.join(dataDir, 'backups');

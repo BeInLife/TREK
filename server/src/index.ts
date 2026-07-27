@@ -32,7 +32,7 @@ const HOST = readEnv().app.host;
 const APP_VERSION: string = readEnv().app.appVersion || (require('../package.json') as { version: string }).version;
 
 const onListen = () => {
-  const { logInfo: sLogInfo, logWarn: sLogWarn } = require('./services/auditLog');
+  const { logInfo: sLogInfo, logWarn: sLogWarn } = require('./nest/audit/audit-log.logger');
   const env = readEnv();
   const LOG_LVL = (env.app.logLevel || 'info').toLowerCase();
   const tz = env.app.tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -116,7 +116,7 @@ bootstrap().catch((err) => {
 
 // Graceful shutdown
 function shutdown(signal: string): void {
-  const { logInfo: sLogInfo, logError: sLogError } = require('./services/auditLog');
+  const { logInfo: sLogInfo, logError: sLogError } = require('./nest/audit/audit-log.logger');
   const { closeMcpSessions } = require('./mcp');
   sLogInfo(`${signal} received — shutting down gracefully...`);
   scheduler.stop();

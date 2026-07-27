@@ -66,6 +66,11 @@ const { db } = vi.hoisted(() => {
     timezone TEXT, local_time TEXT, local_date TEXT);`);
   tmp.exec(`CREATE TABLE reservation_travelers (reservation_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
     PRIMARY KEY (reservation_id, user_id));`);
+  // AuditService now runs its real INSERT (DI-injected, no mock) — slim
+  // audit_log mirror (no FKs), same shape as plugin-runtime.test.ts.
+  tmp.exec(`CREATE TABLE audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    user_id INTEGER, action TEXT NOT NULL, resource TEXT, details TEXT, ip TEXT);`);
   return { db: tmp };
 });
 
@@ -75,7 +80,9 @@ vi.mock('../../src/db/database', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../../src/services/auditLog', () => ({ writeAudit: vi.fn(), getClientIp: vi.fn(() => '1.2.3.4'), logInfo: vi.fn(), logError: vi.fn() }));
+// The audit domain is DI-native now: writeAudit runs for real against the temp
+// db's audit_log table; only the file logger is silenced.
+vi.mock('../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
 vi.mock('../../src/services/demo', () => ({ isDemoEmail: vi.fn(() => false) }));
 
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
@@ -148,6 +155,9 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
     const ok = await request(server).post('/api/trips').set('Cookie', sessionCookie(1)).send({ title: 'T' });
     expect(ok.status).toBe(201);
     expect(ok.body).toEqual({ trip: { id: 9 } });
+    // The DI-native AuditService wrote the real row (audit_log DDL above).
+    const audit = db.prepare("SELECT user_id FROM audit_log WHERE action = 'trip.create'").get() as { user_id: number };
+    expect(audit).toEqual({ user_id: 1 });
     checkPermission.mockReturnValue(false);
     const forbidden = await request(server).post('/api/trips').set('Cookie', sessionCookie(1)).send({ title: 'T' });
     expect(forbidden.status).toBe(403);

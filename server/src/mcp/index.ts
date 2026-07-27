@@ -11,7 +11,7 @@ import { registerResources } from './resources';
 import { registerTools } from './tools';
 import { McpSession, sessions, revokeUserSessions, revokeUserSessionsForClient, evictOldestSessionForUser } from './sessionManager';
 import { readEnv } from '../app-config';
-import { writeAudit, getClientIp } from '../services/auditLog';
+import { writeAudit, getClientIp } from '../nest/audit/audit.bridge';
 import { getMcpSafeUrl } from '../services/notifications';
 
 export { revokeUserSessions, revokeUserSessionsForClient };

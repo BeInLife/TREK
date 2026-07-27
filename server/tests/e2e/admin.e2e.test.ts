@@ -24,11 +24,18 @@ const { db } = vi.hoisted(() => {
   tmp.exec(`CREATE TABLE settings (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL,
     key TEXT NOT NULL, value TEXT, UNIQUE(user_id, key));`);
   tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
+  // AuditService now runs its real INSERT (DI-injected, no mock) — slim
+  // audit_log mirror (no FKs), same shape as plugin-runtime.test.ts.
+  tmp.exec(`CREATE TABLE audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    user_id INTEGER, action TEXT NOT NULL, resource TEXT, details TEXT, ip TEXT);`);
   return { db: tmp };
 });
 
 vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: () => {} }));
-vi.mock('../../src/services/auditLog', () => ({ writeAudit: vi.fn(), getClientIp: () => '1.2.3.4', logInfo: vi.fn() }));
+// The audit domain is DI-native now: writeAudit runs for real against the temp
+// db's audit_log table; only the file logger is silenced.
+vi.mock('../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
 vi.mock('../../src/mcp', () => ({ invalidateMcpSessions: vi.fn() }));
 vi.mock('../../src/services/notificationPreferencesService', () => ({ getPreferencesMatrix: vi.fn(() => ({})), setAdminPreferences: vi.fn() }));
 vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));

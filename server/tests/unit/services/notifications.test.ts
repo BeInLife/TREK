@@ -7,7 +7,7 @@ vi.mock('../../../src/services/apiKeyCrypto', () => ({
   decrypt_api_key: vi.fn((v) => v),
   maybe_encrypt_api_key: vi.fn((v) => v),
 }));
-vi.mock('../../../src/services/auditLog', () => ({
+vi.mock('../../../src/nest/audit/audit-log.logger', () => ({
   logInfo: vi.fn(),
   logDebug: vi.fn(),
   logError: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('../../../src/utils/ssrfGuard', () => ({
 
 import { getEventText, buildEmailHtml, buildWebhookBody, sendWebhook, sendNtfy, resolveNtfyUrl, resolveAdminNtfyUrl, type NtfyConfig } from '../../../src/services/notifications';
 import { checkSsrf } from '../../../src/utils/ssrfGuard';
-import { logError } from '../../../src/services/auditLog';
+import { logError } from '../../../src/nest/audit/audit-log.logger';
 
 afterEach(() => {
   vi.unstubAllEnvs();

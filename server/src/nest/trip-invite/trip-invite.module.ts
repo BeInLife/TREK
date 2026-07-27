@@ -3,9 +3,10 @@ import { TripInviteLinkController, TripInviteController } from './trip-invite.co
 import { TripInviteService } from './trip-invite.service';
 import { RateLimitService } from '../auth/rate-limit.service';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { AuditModule } from '../audit/audit.module';
 
 @Module({
-  imports: [PermissionsModule],
+  imports: [PermissionsModule, AuditModule],
   controllers: [TripInviteLinkController, TripInviteController],
   providers: [TripInviteService, RateLimitService],
 })

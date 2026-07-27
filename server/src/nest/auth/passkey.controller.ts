@@ -5,7 +5,8 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { PasskeyEnabledGuard } from './passkey-enabled.guard';
 import { CurrentUser } from './current-user.decorator';
 import { setAuthCookie } from '../../services/cookie';
-import { writeAudit, getClientIp } from '../../services/auditLog';
+import { getClientIp } from '../audit/client-ip';
+import { AuditService } from '../audit/audit.service';
 import * as passkey from '../../services/passkeyService';
 import type { User } from '../../types';
 
@@ -27,7 +28,7 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
  */
 @Controller('api/auth/passkey')
 export class PasskeyController {
-  constructor(private readonly rl: RateLimitService) {}
+  constructor(private readonly rl: RateLimitService, private readonly audit: AuditService) {}
 
   private limit(bucket: string, req: Request, max: number): void {
     if (!this.rl.check(bucket, req.ip || 'unknown', max, WINDOW, Date.now())) {
@@ -52,7 +53,7 @@ export class PasskeyController {
   async registerVerify(@CurrentUser() user: User, @Body() body: unknown, @Req() req: Request) {
     const result = await passkey.passkeyRegisterVerify(user.id, body as Parameters<typeof passkey.passkeyRegisterVerify>[1]);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);
-    writeAudit({ userId: user.id, action: 'user.passkey_register', ip: getClientIp(req) });
+    this.audit.writeAudit({ userId: user.id, action: 'user.passkey_register', ip: getClientIp(req) });
     return { success: true, credential: result.credential };
   }
 
@@ -75,14 +76,14 @@ export class PasskeyController {
     const started = Date.now();
     const result = await passkey.passkeyLoginVerify(body as Parameters<typeof passkey.passkeyLoginVerify>[0]);
     if (result.auditAction) {
-      writeAudit({ userId: result.auditUserId ?? null, action: result.auditAction, ip: getClientIp(req) });
+      this.audit.writeAudit({ userId: result.auditUserId ?? null, action: result.auditAction, ip: getClientIp(req) });
     }
     // Pad to the same floor as password login so timing can't distinguish a
     // known credential from an unknown one.
     const elapsed = Date.now() - started;
     if (elapsed < LOGIN_MIN_LATENCY_MS) await delay(LOGIN_MIN_LATENCY_MS - elapsed);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);
-    writeAudit({ userId: result.auditUserId!, action: 'user.login', ip: getClientIp(req), details: { method: 'passkey' } });
+    this.audit.writeAudit({ userId: result.auditUserId!, action: 'user.login', ip: getClientIp(req), details: { method: 'passkey' } });
     setAuthCookie(res, result.token!, req);
     return { token: result.token, user: result.user };
   }
@@ -108,7 +109,7 @@ export class PasskeyController {
     this.limit('login', req, 5);
     const result = passkey.deletePasskey(user.id, id, body?.password);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);
-    writeAudit({ userId: user.id, action: 'user.passkey_delete', resource: String(id), ip: getClientIp(req) });
+    this.audit.writeAudit({ userId: user.id, action: 'user.passkey_delete', resource: String(id), ip: getClientIp(req) });
     return { success: true };
   }
 }

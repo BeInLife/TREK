@@ -2,7 +2,7 @@ import { readEnv } from '../app-config';
 import { db } from '../db/database';
 import { checkSsrf, createPinnedDispatcher } from '../utils/ssrfGuard';
 import { decrypt_api_key } from './apiKeyCrypto';
-import { logInfo, logDebug, logError } from './auditLog';
+import { logInfo, logDebug, logError } from '../nest/audit/audit-log.logger';
 // ── Types ──────────────────────────────────────────────────────────────────
 
 import type { NotifEventType } from './notificationPreferencesService';

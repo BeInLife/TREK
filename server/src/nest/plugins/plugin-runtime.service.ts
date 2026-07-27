@@ -26,7 +26,7 @@ import { pluginCodeDir, pluginDataDir } from './paths';
 import { assertHostCompatible, PluginRegistryService, RegistryError } from './registry/registry.service';
 import { hostSatisfies, hostVersion } from './install/host-compat';
 import { keyFingerprint } from './signature-status';
-import { writeAudit } from '../../services/auditLog';
+import { AuditService } from '../audit/audit.service';
 import { isAddonEnabled } from '../../services/adminService';
 import type { PluginDependency } from './install/manifest';
 import type { VersionMismatch, PluginDepRow } from './dependencies';
@@ -161,9 +161,11 @@ export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
 
   // The registry and host-deps factory stay optional at the type level so tests
   // can construct the service without them; Nest always injects the real ones
-  // (both providers are in the module).
+  // (both providers are in the module). audit sits before the optionals
+  // because a required param cannot follow optional ones.
   constructor(
     private readonly dbs: DatabaseService,
+    private readonly audit: AuditService,
     private readonly registry?: PluginRegistryService,
     private readonly hostDeps?: PluginHostDepsFactory,
   ) {}
@@ -720,7 +722,7 @@ export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
     // reconstructible after an incident. This goes to the ADMIN audit log, not the
     // plugin capability log — that one answers "what have plugins done in my name?"
     // and is shown to end users; a lifecycle action by an admin does not belong there.
-    writeAudit({
+    this.audit.writeAudit({
       userId: actor.userId,
       action: 'admin.plugin_retrust',
       resource: id,
