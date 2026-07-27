@@ -25,8 +25,9 @@ Wave 4 — the coupled cluster (order matters here)
 
 8. dayService → budgetService → reservationService in that order: reservations depend on both (budget-item linking, day resolution), so migrating the dependencies first lets ReservationsService inject the finished versions instead of
    importing legacy functions. — **Correction (migration-graph.md, borne out by the migration): the claimed ordering constraint doesn't exist at the service layer.** reservationService (done 2026-07) imported neither budgetService nor
-   dayService; the budget/day coupling lives in the Nest wrapper's budget-sync seam and the MCP registrars, which keep their legacy imports until those domains migrate. Reservations went first as the frontier residue fold; dayService and
-   budgetService follow.
+   dayService; the budget/day coupling lives in the Nest wrapper's budget-sync seam and the MCP registrars, which keep their legacy imports until those domains migrate. Reservations went first as the frontier residue fold; dayService
+   (done 2026-07 — the 592-line service folded into the wrapper `DaysService`, the accommodations seam in `nest/reservations/` now injects it, and the hand-rolled reorder/insert transactions became `db.transaction()`) followed;
+   budgetService is next in the cluster (after the Wave-2 permissions + auditLog pair per migration-graph.md).
 9. Then placeService (7 internal deps, mostly on things migrated by now) and tripService (10 deps — the biggest hub; last in this wave, since nearly everything it needs will already be injectable).
 
 Wave 5 — the heavyweights, last
