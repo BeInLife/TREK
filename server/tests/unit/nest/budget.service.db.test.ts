@@ -3,7 +3,9 @@
  * Uses a real in-memory SQLite DB so the SQL WHERE clauses are exercised.
  * BUDGET-SVC-DB-001 through 014 moved 1:1 from the legacy
  * tests/unit/services/budgetServiceDb.test.ts; 015–018 pin the budget.bridge
- * delegation (the bridge instance runs over the same mocked db Proxy).
+ * delegation (the bridge instance runs over the same mocked db Proxy);
+ * 019–020 pin the post-fold quirk fixes (COALESCE(display_name) on
+ * settlements, transactional multi-statement writes).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -419,5 +421,32 @@ describe('budget.bridge delegation', () => {
     expect(item.reservation_id).toBe(reservationId);
     const row = testDb.prepare('SELECT reservation_id FROM budget_items WHERE id = ?').get(item.id) as { reservation_id: number | null };
     expect(row.reservation_id).toBe(reservationId);
+  });
+});
+
+describe('post-fold quirk fixes', () => {
+  it('BUDGET-SVC-DB-019: settlements prefer display_name over username (quirk fix)', () => {
+    const { user: alice } = createUser(testDb, { username: 'alice' });
+    const { user: bob } = createUser(testDb, { username: 'bob' });
+    testDb.prepare('UPDATE users SET display_name = ? WHERE id = ?').run('Alice Displayed', alice.id);
+    const trip = createTrip(testDb, alice.id);
+
+    const created = budget.insertSettlement(trip.id, { from_user_id: alice.id, to_user_id: bob.id, amount: 10 }, alice.id);
+
+    expect(created!.from_username).toBe('Alice Displayed');
+    expect(created!.to_username).toBe('bob');
+    expect(budget.listSettlements(trip.id)[0].from_username).toBe('Alice Displayed');
+  });
+
+  it('BUDGET-SVC-DB-020: a failing item insert rolls back the category-order side write (quirk fix)', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    // NOT NULL violation on name fires after the category-order upsert — the
+    // legacy non-transactional create leaked the budget_category_order row.
+    expect(() => budget.createBudgetItem(trip.id, { name: null as unknown as string, category: 'atomic-test' })).toThrow();
+
+    const cat = testDb.prepare("SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = 'atomic-test'").get(trip.id);
+    expect(cat).toBeUndefined();
   });
 });

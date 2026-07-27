@@ -485,9 +485,11 @@ describe('applySettlementUpdate', () => {
         return { get: vi.fn(), all: vi.fn(), run };
       }
       if (sql.includes('FROM budget_settlements')) {
-        return { get: vi.fn(), all: vi.fn(() => [
-          { id: 7, trip_id: 1, from_user_id: 2, to_user_id: 1, amount: 10.13, from_username: 'bob', to_username: 'alice', from_avatar: null, to_avatar: null },
-        ]), run: vi.fn() };
+        // Quirk fix: the re-select is a targeted single-row get, not a full
+        // listSettlements scan.
+        return { get: vi.fn(() => (
+          { id: 7, trip_id: 1, from_user_id: 2, to_user_id: 1, amount: 10.13, from_username: 'bob', to_username: 'alice', from_avatar: null, to_avatar: null }
+        )), all: vi.fn(() => []), run: vi.fn() };
       }
       return { get: vi.fn(), all: vi.fn(() => []), run: vi.fn() };
     });

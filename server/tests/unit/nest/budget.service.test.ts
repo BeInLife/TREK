@@ -150,10 +150,13 @@ describe('BudgetService', () => {
     it('updateSettlement threads the stored currency through the freeze', async () => {
       const s = svc();
       const freezeSpy = vi.spyOn(s, 'freezeForeignRate').mockResolvedValue();
-      vi.spyOn(s, 'listSettlements').mockReturnValue([{ id: 7, currency: 'USD' }] as never);
+      // Quirk fix: the stored-currency lookup is a targeted getSettlement, not
+      // a full listSettlements scan.
+      const getSpy = vi.spyOn(s, 'getSettlement').mockReturnValue({ id: 7, currency: 'USD' } as never);
       const applySpy = vi.spyOn(s, 'applySettlementUpdate').mockReturnValue({ id: 7 } as never);
       await s.updateSettlement('7', '5', { from_user_id: 1, to_user_id: 2, amount: 12, currency: 'USD' });
       // the settlement's stored currency is threaded through so an unchanged-currency edit keeps the frozen rate (#1445)
+      expect(getSpy).toHaveBeenCalledWith('7', '5');
       expect(freezeSpy).toHaveBeenCalledWith('5', { from_user_id: 1, to_user_id: 2, amount: 12, currency: 'USD' }, undefined, 'USD');
       expect(applySpy).toHaveBeenCalledWith('7', '5', { from_user_id: 1, to_user_id: 2, amount: 12, currency: 'USD' });
     });

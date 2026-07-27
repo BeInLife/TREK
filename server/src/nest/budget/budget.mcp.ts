@@ -43,16 +43,24 @@ function resolveMemberIds(tripId: number, member_ids?: number[]): number[] | und
 }
 
 /**
- * Budget MCP surface — ported 1:1 from the legacy registrars: the eleven tools
+ * Budget MCP surface — ported from the legacy registrars: the eleven tools
  * from src/mcp/tools/budget.ts and the trek://trips/{tripId}/budget,
  * …/budget/per-person and …/budget/settlement resources from
- * src/mcp/resources.ts (identical names, descriptions, schemas, annotations,
- * error/payload shapes and broadcasts — including the MCP-specific
- * 'budget:members-updated' { item } and 'budget:member-paid-updated'
- * { itemId, member } payloads, and the settlement writes that do not freeze an
- * FX rate). The registration-time gates map to `when` (the whole-registrar
- * budget-addon check) plus the declarative budget read/write access markers
- * (the legacy `if (R)` / `if (W)` checks, resolved by trekMcpAccessPolicy).
+ * src/mcp/resources.ts (identical names, descriptions, schemas, annotations
+ * and error shapes). The registration-time gates map to `when` (the
+ * whole-registrar budget-addon check) plus the declarative budget read/write
+ * access markers (the legacy `if (R)` / `if (W)` checks, resolved by
+ * trekMcpAccessPolicy).
+ *
+ * Quirk fixes on top of the ported legacy behavior: broadcasts use the REST
+ * payload shapes ('budget:members-updated' { itemId, members, persons } and
+ * 'budget:member-paid-updated' { itemId, userId, paid } — the legacy
+ * MCP-specific { item } / { itemId, member } shapes were silent no-ops in the
+ * client's remoteEventHandler), the mutating settlement/item paths route
+ * through the freeze-then-write composites so REST and MCP can't diverge on
+ * the #1445 FX freeze, and the settlement resource resolves the trip currency
+ * and live rates like get_settlement_summary instead of silently defaulting
+ * to an unconverted EUR base.
  */
 @McpController()
 export class BudgetMcp {
@@ -154,7 +162,9 @@ export class BudgetMcp {
     if (isDemoUser(ctx.userId)) return demoDenied();
     if (!this.budget.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('budget_edit', tripId, ctx.userId)) return permissionDenied();
-    const item = this.budget.updateBudgetItem(itemId, tripId, { name, category, total_price, member_ids, payers, persons, days, note });
+    // Freeze-then-write composite (no-op while the schema has no currency input,
+    // but keeps REST and MCP on one code path for the #1445 freeze).
+    const item = await this.budget.update(itemId, tripId, { name, category, total_price, member_ids, payers, persons, days, note });
     if (!item) return errorResult('Budget item not found.');
     safeBroadcast(tripId, 'budget:updated', { item });
     return ok({ item });
@@ -194,7 +204,7 @@ export class BudgetMcp {
         return this.budget.getBudgetItem(created.id, tripId)!;
       });
       safeBroadcast(tripId, 'budget:created', { item });
-      if (members && members.length > 0) safeBroadcast(tripId, 'budget:members-updated', { item });
+      if (members && members.length > 0) safeBroadcast(tripId, 'budget:members-updated', { itemId: item.id, members: item.members, persons: item.persons });
       return ok({ item });
     } catch {
       return errorResult('Failed to create budget item.');
@@ -220,7 +230,7 @@ export class BudgetMcp {
     const result = this.budget.updateMembers(itemId, tripId, userIds);
     if (!result) return errorResult('Budget item not found.');
     const item = this.budget.getBudgetItem(itemId, tripId);
-    safeBroadcast(tripId, 'budget:members-updated', { item });
+    safeBroadcast(tripId, 'budget:members-updated', { itemId, members: result.members, persons: result.item.persons });
     return ok({ item });
   }
 
@@ -242,7 +252,7 @@ export class BudgetMcp {
     if (!this.budget.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('budget_edit', tripId, ctx.userId)) return permissionDenied();
     const member = this.budget.toggleMemberPaid(itemId, tripId, memberId, paid);
-    safeBroadcast(tripId, 'budget:member-paid-updated', { itemId, member });
+    safeBroadcast(tripId, 'budget:member-paid-updated', { itemId, userId: memberId, paid: paid ? 1 : 0 });
     return ok({ member });
   }
 
@@ -304,7 +314,9 @@ export class BudgetMcp {
     if (isDemoUser(ctx.userId)) return demoDenied();
     if (!this.budget.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('budget_edit', tripId, ctx.userId)) return permissionDenied();
-    const settlement = this.budget.insertSettlement(tripId, { from_user_id, to_user_id, amount }, ctx.userId);
+    // Freeze-then-write composite, same as the REST path (no-op while the
+    // schema has no currency input — see the #1445 note in the class doc).
+    const settlement = await this.budget.createSettlement(tripId, { from_user_id, to_user_id, amount }, ctx.userId);
     safeBroadcast(tripId, 'budget:settlement-created', { settlement });
     return ok({ settlement });
   }
@@ -330,7 +342,8 @@ export class BudgetMcp {
     if (isDemoUser(ctx.userId)) return demoDenied();
     if (!this.budget.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('budget_edit', tripId, ctx.userId)) return permissionDenied();
-    const settlement = this.budget.applySettlementUpdate(settlementId, tripId, { from_user_id, to_user_id, amount });
+    // Freeze-then-write composite, same as the REST path.
+    const settlement = await this.budget.updateSettlement(settlementId, tripId, { from_user_id, to_user_id, amount });
     if (!settlement) return errorResult('Settlement not found.');
     safeBroadcast(tripId, 'budget:settlement-updated', { settlement });
     return ok({ settlement });
@@ -436,7 +449,14 @@ export class BudgetMcp {
         }],
       };
     }
-    const settlement = this.budget.calculateSettlement(id);
+    // Resolve the trip currency + live rates like get_settlement_summary — the
+    // legacy resource called calculateSettlement(id) bare, silently netting a
+    // non-EUR trip in EUR with no FX conversion.
+    const trip = this.db.get<{ currency?: string }>('SELECT currency FROM trips WHERE id = ?', id);
+    const tripCurrency = trip?.currency || 'EUR';
+    const effectiveBase = tripCurrency.toUpperCase();
+    const rates = await this.exchangeRates.getRates(effectiveBase);
+    const settlement = this.budget.calculateSettlement(id, { base: effectiveBase, rates, tripCurrency });
     return {
       contents: [{
         uri: uri.href,

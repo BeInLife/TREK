@@ -18,7 +18,7 @@ type SettlementRow = {
 };
 
 /**
- * Budget domain service — owns the budget SQL (moved 1:1 from the legacy
+ * Budget domain service — owns the budget SQL (moved from the legacy
  * services/budgetService.ts: identical statements, the `||` falsy-coercion
  * defaults, the COALESCE / CASE WHEN sentinel conventions on update and the
  * post-write re-selects). Trip access, the 'budget_edit' permission and the
@@ -26,6 +26,14 @@ type SettlementRow = {
  * legacy tripService/userCleanupService and the legacy MCP trips/transports
  * registrars) go through budget.bridge.ts instead of importing this class
  * directly.
+ *
+ * Quirk fixes on top of the relocated legacy behavior: every multi-statement
+ * write now runs in db.transaction() ("transactions are not optional"),
+ * linkBudgetItemToReservation passes reservation_id through the insert instead
+ * of a redundant second UPDATE, settlement re-selects are targeted single-row
+ * queries instead of a full listSettlements() scan, settlement usernames use
+ * COALESCE(display_name, username) like every item query, and updateMembers no
+ * longer double-applies avatarUrl.
  */
 @Injectable()
 export class BudgetService {
@@ -271,59 +279,61 @@ export class BudgetService {
       reservation_id?: number | null;
     },
   ) {
-    const maxOrder = this.db.get<{ max: number | null }>('SELECT MAX(sort_order) as max FROM budget_items WHERE trip_id = ?', tripId)!;
-    const sortOrder = (maxOrder.max !== null ? maxOrder.max : -1) + 1;
+    return this.db.transaction(() => {
+      const maxOrder = this.db.get<{ max: number | null }>('SELECT MAX(sort_order) as max FROM budget_items WHERE trip_id = ?', tripId)!;
+      const sortOrder = (maxOrder.max !== null ? maxOrder.max : -1) + 1;
 
-    const cat = data.category || 'other';
+      const cat = data.category || 'other';
 
-    // Ensure category has a sort_order entry
-    const catExists = this.db.get('SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = ?', tripId, cat);
-    if (!catExists) {
-      const maxCatOrder = this.db.get<{ max: number | null }>('SELECT MAX(sort_order) as max FROM budget_category_order WHERE trip_id = ?', tripId);
-      const catOrder = (maxCatOrder?.max !== null && maxCatOrder?.max !== undefined ? maxCatOrder.max : -1) + 1;
-      this.db.run('INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)', tripId, cat, catOrder);
-    }
+      // Ensure category has a sort_order entry
+      const catExists = this.db.get('SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = ?', tripId, cat);
+      if (!catExists) {
+        const maxCatOrder = this.db.get<{ max: number | null }>('SELECT MAX(sort_order) as max FROM budget_category_order WHERE trip_id = ?', tripId);
+        const catOrder = (maxCatOrder?.max !== null && maxCatOrder?.max !== undefined ? maxCatOrder.max : -1) + 1;
+        this.db.run('INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)', tripId, cat, catOrder);
+      }
 
-    // total_price is derived from explicit payers when given; otherwise the caller
-    // value (planning entries, or a bill no one has paid yet).
-    const payerTotal = (data.payers || []).reduce((a, p) => a + (p.amount > 0 ? p.amount : 0), 0);
-    const total = data.payers && data.payers.length > 0 ? payerTotal : (data.total_price || 0);
+      // total_price is derived from explicit payers when given; otherwise the caller
+      // value (planning entries, or a bill no one has paid yet).
+      const payerTotal = (data.payers || []).reduce((a, p) => a + (p.amount > 0 ? p.amount : 0), 0);
+      const total = data.payers && data.payers.length > 0 ? payerTotal : (data.total_price || 0);
 
-    const knownMembers = data.members ? this.knownUserIds(data.members.map(m => m.user_id)) : null;
-    const members = data.members && knownMembers ? data.members.filter(m => knownMembers.has(m.user_id)) : undefined;
-    const knownIds = data.member_ids ? this.knownUserIds(data.member_ids) : null;
-    const memberIds = data.member_ids && knownIds ? data.member_ids.filter(uid => knownIds.has(uid)) : undefined;
+      const knownMembers = data.members ? this.knownUserIds(data.members.map(m => m.user_id)) : null;
+      const members = data.members && knownMembers ? data.members.filter(m => knownMembers.has(m.user_id)) : undefined;
+      const knownIds = data.member_ids ? this.knownUserIds(data.member_ids) : null;
+      const memberIds = data.member_ids && knownIds ? data.member_ids.filter(uid => knownIds.has(uid)) : undefined;
 
-    const result = this.db.run(
-      'INSERT INTO budget_items (trip_id, category, name, total_price, currency, exchange_rate, persons, days, note, sort_order, expense_date, reservation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      tripId,
-      cat,
-      data.name,
-      total,
-      data.currency || null,
-      data.exchange_rate != null ? data.exchange_rate : 1,
-      memberIds ? memberIds.length : (data.persons != null ? data.persons : null),
-      data.days !== undefined && data.days !== null ? data.days : null,
-      data.note || null,
-      sortOrder,
-      data.expense_date || null,
-      data.reservation_id != null ? data.reservation_id : null,
-    );
+      const result = this.db.run(
+        'INSERT INTO budget_items (trip_id, category, name, total_price, currency, exchange_rate, persons, days, note, sort_order, expense_date, reservation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        tripId,
+        cat,
+        data.name,
+        total,
+        data.currency || null,
+        data.exchange_rate != null ? data.exchange_rate : 1,
+        memberIds ? memberIds.length : (data.persons != null ? data.persons : null),
+        data.days !== undefined && data.days !== null ? data.days : null,
+        data.note || null,
+        sortOrder,
+        data.expense_date || null,
+        data.reservation_id != null ? data.reservation_id : null,
+      );
 
-    const itemId = result.lastInsertRowid as number;
-    if (data.payers && data.payers.length > 0) this.writeItemPayers(itemId, data.payers);
-    if (members && members.length > 0) {
-      const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, ?)');
-      for (const m of members) insert.run(itemId, m.user_id, m.amount !== undefined && m.amount !== null ? m.amount : null);
-    } else if (memberIds && memberIds.length > 0) {
-      const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, NULL)');
-      for (const uid of memberIds) insert.run(itemId, uid);
-    }
+      const itemId = result.lastInsertRowid as number;
+      if (data.payers && data.payers.length > 0) this.writeItemPayers(itemId, data.payers);
+      if (members && members.length > 0) {
+        const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, ?)');
+        for (const m of members) insert.run(itemId, m.user_id, m.amount !== undefined && m.amount !== null ? m.amount : null);
+      } else if (memberIds && memberIds.length > 0) {
+        const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, NULL)');
+        for (const uid of memberIds) insert.run(itemId, uid);
+      }
 
-    const item = this.db.get<BudgetItem>('SELECT * FROM budget_items WHERE id = ?', itemId)!;
-    item.members = this.loadItemMembers(itemId);
-    item.payers = this.loadItemPayers(itemId);
-    return item;
+      const item = this.db.get<BudgetItem>('SELECT * FROM budget_items WHERE id = ?', itemId)!;
+      item.members = this.loadItemMembers(itemId);
+      item.payers = this.loadItemPayers(itemId);
+      return item;
+    });
   }
 
   /** Fetch a single budget item hydrated with its members and payers, scoped to the trip. */
@@ -340,10 +350,9 @@ export class BudgetService {
     reservationId: number,
     data: { name: string; category?: string; total_price: number },
   ) {
-    const item = this.createBudgetItem(tripId, data) as BudgetItem & { reservation_id?: number | null };
-    this.db.run('UPDATE budget_items SET reservation_id = ? WHERE id = ?', reservationId, item.id);
-    item.reservation_id = reservationId;
-    return item;
+    // createBudgetItem accepts reservation_id directly — the legacy separate
+    // UPDATE after the insert was redundant (and non-atomic).
+    return this.createBudgetItem(tripId, { ...data, reservation_id: reservationId });
   }
 
   updateBudgetItem(
@@ -357,10 +366,11 @@ export class BudgetService {
       persons?: number | null; days?: number | null; note?: string | null; sort_order?: number; expense_date?: string | null;
     },
   ) {
-    const item = this.db.get('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?', id, tripId);
-    if (!item) return null;
+    return this.db.transaction(() => {
+      const item = this.db.get('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?', id, tripId);
+      if (!item) return null;
 
-    this.db.run(`
+      this.db.run(`
     UPDATE budget_items SET
       category = COALESCE(?, category),
       name = COALESCE(?, name),
@@ -374,59 +384,60 @@ export class BudgetService {
       expense_date = CASE WHEN ? THEN ? ELSE expense_date END
     WHERE id = ?
   `,
-      data.category || null,
-      data.name || null,
-      data.total_price !== undefined ? 1 : null, data.total_price !== undefined ? data.total_price : 0,
-      data.currency !== undefined ? 1 : 0, data.currency !== undefined ? (data.currency || null) : null,
-      data.exchange_rate !== undefined ? 1 : null, data.exchange_rate !== undefined ? data.exchange_rate : 1,
-      data.persons !== undefined ? 1 : null, data.persons !== undefined ? data.persons : null,
-      data.days !== undefined ? 1 : 0, data.days !== undefined ? data.days : null,
-      data.note !== undefined ? 1 : 0, data.note !== undefined ? data.note : null,
-      data.sort_order !== undefined ? 1 : null, data.sort_order !== undefined ? data.sort_order : 0,
-      data.expense_date !== undefined ? 1 : 0, data.expense_date !== undefined ? (data.expense_date || null) : null,
-      id,
-    );
+        data.category || null,
+        data.name || null,
+        data.total_price !== undefined ? 1 : null, data.total_price !== undefined ? data.total_price : 0,
+        data.currency !== undefined ? 1 : 0, data.currency !== undefined ? (data.currency || null) : null,
+        data.exchange_rate !== undefined ? 1 : null, data.exchange_rate !== undefined ? data.exchange_rate : 1,
+        data.persons !== undefined ? 1 : null, data.persons !== undefined ? data.persons : null,
+        data.days !== undefined ? 1 : 0, data.days !== undefined ? data.days : null,
+        data.note !== undefined ? 1 : 0, data.note !== undefined ? data.note : null,
+        data.sort_order !== undefined ? 1 : null, data.sort_order !== undefined ? data.sort_order : 0,
+        data.expense_date !== undefined ? 1 : 0, data.expense_date !== undefined ? (data.expense_date || null) : null,
+        id,
+      );
 
-    // Optional inline payer/member replacement (the edit modal saves all at once).
-    if (data.payers !== undefined) {
-      this.writeItemPayers(id, data.payers);
-      // writeItemPayers derives total_price from the payer sum (0 for no payers).
-      // A "recorded total, nobody assigned" expense clears payers but still carries
-      // an explicit total_price — re-apply it so it isn't clobbered to 0.
-      if (data.payers.length === 0 && data.total_price !== undefined) {
-        this.db.run('UPDATE budget_items SET total_price = ? WHERE id = ?', data.total_price, id);
+      // Optional inline payer/member replacement (the edit modal saves all at once).
+      if (data.payers !== undefined) {
+        this.writeItemPayers(id, data.payers);
+        // writeItemPayers derives total_price from the payer sum (0 for no payers).
+        // A "recorded total, nobody assigned" expense clears payers but still carries
+        // an explicit total_price — re-apply it so it isn't clobbered to 0.
+        if (data.payers.length === 0 && data.total_price !== undefined) {
+          this.db.run('UPDATE budget_items SET total_price = ? WHERE id = ?', data.total_price, id);
+        }
       }
-    }
-    if (data.members !== undefined) {
-      const known = this.knownUserIds(data.members.map(m => m.user_id));
-      const members = data.members.filter(m => known.has(m.user_id));
-      this.db.run('DELETE FROM budget_item_members WHERE budget_item_id = ?', id);
-      const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, ?)');
-      for (const m of members) insert.run(id, m.user_id, m.amount !== undefined && m.amount !== null ? m.amount : null);
-      this.db.run('UPDATE budget_items SET persons = ? WHERE id = ?', members.length || null, id);
-    } else if (data.member_ids !== undefined) {
-      const known = this.knownUserIds(data.member_ids);
-      const memberIds = data.member_ids.filter(uid => known.has(uid));
-      this.db.run('DELETE FROM budget_item_members WHERE budget_item_id = ?', id);
-      const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, NULL)');
-      for (const uid of memberIds) insert.run(id, uid);
-      this.db.run('UPDATE budget_items SET persons = ? WHERE id = ?', memberIds.length || null, id);
-    }
-
-    // If category changed, update category order table
-    if (data.category) {
-      const catExists = this.db.get('SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = ?', tripId, data.category);
-      if (!catExists) {
-        const maxCatOrder = this.db.get<{ max: number | null }>('SELECT MAX(sort_order) as max FROM budget_category_order WHERE trip_id = ?', tripId);
-        const catOrder = (maxCatOrder?.max !== null && maxCatOrder?.max !== undefined ? maxCatOrder.max : -1) + 1;
-        this.db.run('INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)', tripId, data.category, catOrder);
+      if (data.members !== undefined) {
+        const known = this.knownUserIds(data.members.map(m => m.user_id));
+        const members = data.members.filter(m => known.has(m.user_id));
+        this.db.run('DELETE FROM budget_item_members WHERE budget_item_id = ?', id);
+        const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, ?)');
+        for (const m of members) insert.run(id, m.user_id, m.amount !== undefined && m.amount !== null ? m.amount : null);
+        this.db.run('UPDATE budget_items SET persons = ? WHERE id = ?', members.length || null, id);
+      } else if (data.member_ids !== undefined) {
+        const known = this.knownUserIds(data.member_ids);
+        const memberIds = data.member_ids.filter(uid => known.has(uid));
+        this.db.run('DELETE FROM budget_item_members WHERE budget_item_id = ?', id);
+        const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, NULL)');
+        for (const uid of memberIds) insert.run(id, uid);
+        this.db.run('UPDATE budget_items SET persons = ? WHERE id = ?', memberIds.length || null, id);
       }
-    }
 
-    const updated = this.db.get<BudgetItem>('SELECT * FROM budget_items WHERE id = ?', id)!;
-    updated.members = this.loadItemMembers(id);
-    updated.payers = this.loadItemPayers(id);
-    return updated;
+      // If category changed, update category order table
+      if (data.category) {
+        const catExists = this.db.get('SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = ?', tripId, data.category);
+        if (!catExists) {
+          const maxCatOrder = this.db.get<{ max: number | null }>('SELECT MAX(sort_order) as max FROM budget_category_order WHERE trip_id = ?', tripId);
+          const catOrder = (maxCatOrder?.max !== null && maxCatOrder?.max !== undefined ? maxCatOrder.max : -1) + 1;
+          this.db.run('INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)', tripId, data.category, catOrder);
+        }
+      }
+
+      const updated = this.db.get<BudgetItem>('SELECT * FROM budget_items WHERE id = ?', id)!;
+      updated.members = this.loadItemMembers(id);
+      updated.payers = this.loadItemPayers(id);
+      return updated;
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -434,13 +445,15 @@ export class BudgetService {
   // -------------------------------------------------------------------------
 
   setItemPayers(id: string | number, tripId: string | number, payers: { user_id: number; amount: number }[]) {
-    const item = this.db.get('SELECT id FROM budget_items WHERE id = ? AND trip_id = ?', id, tripId);
-    if (!item) return null;
-    this.writeItemPayers(id, payers);
-    const updated = this.db.get<BudgetItem>('SELECT * FROM budget_items WHERE id = ?', id)!;
-    updated.members = this.loadItemMembers(id);
-    updated.payers = this.loadItemPayers(id);
-    return updated;
+    return this.db.transaction(() => {
+      const item = this.db.get('SELECT id FROM budget_items WHERE id = ? AND trip_id = ?', id, tripId);
+      if (!item) return null;
+      this.writeItemPayers(id, payers);
+      const updated = this.db.get<BudgetItem>('SELECT * FROM budget_items WHERE id = ?', id)!;
+      updated.members = this.loadItemMembers(id);
+      updated.payers = this.loadItemPayers(id);
+      return updated;
+    });
   }
 
   deleteBudgetItem(id: string | number, tripId: string | number): boolean {
@@ -455,47 +468,52 @@ export class BudgetService {
   // -------------------------------------------------------------------------
 
   updateMembers(id: string | number, tripId: string | number, userIds: number[]) {
-    const item = this.db.get('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?', id, tripId);
-    if (!item) return null;
+    return this.db.transaction(() => {
+      const item = this.db.get('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?', id, tripId);
+      if (!item) return null;
 
-    const existingPaid: Record<number, number> = {};
-    const existing = this.db.all<{ user_id: number; paid: number }>('SELECT user_id, paid FROM budget_item_members WHERE budget_item_id = ?', id);
-    for (const e of existing) existingPaid[e.user_id] = e.paid;
+      const existingPaid: Record<number, number> = {};
+      const existing = this.db.all<{ user_id: number; paid: number }>('SELECT user_id, paid FROM budget_item_members WHERE budget_item_id = ?', id);
+      for (const e of existing) existingPaid[e.user_id] = e.paid;
 
-    this.db.run('DELETE FROM budget_item_members WHERE budget_item_id = ?', id);
+      this.db.run('DELETE FROM budget_item_members WHERE budget_item_id = ?', id);
 
-    const known = this.knownUserIds(userIds);
-    const memberIds = userIds.filter(uid => known.has(uid));
-    if (memberIds.length > 0) {
-      const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, ?)');
-      for (const userId of memberIds) insert.run(id, userId, existingPaid[userId] || 0);
-      this.db.run('UPDATE budget_items SET persons = ? WHERE id = ?', memberIds.length, id);
-    } else {
-      this.db.run('UPDATE budget_items SET persons = NULL WHERE id = ?', id);
-    }
+      const known = this.knownUserIds(userIds);
+      const memberIds = userIds.filter(uid => known.has(uid));
+      if (memberIds.length > 0) {
+        const insert = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, ?)');
+        for (const userId of memberIds) insert.run(id, userId, existingPaid[userId] || 0);
+        this.db.run('UPDATE budget_items SET persons = ? WHERE id = ?', memberIds.length, id);
+      } else {
+        this.db.run('UPDATE budget_items SET persons = NULL WHERE id = ?', id);
+      }
 
-    const members = this.loadItemMembers(id).map(m => ({ ...m, avatar_url: avatarUrl(m) }));
-    const updated = this.db.get<BudgetItem>('SELECT * FROM budget_items WHERE id = ?', id)!;
-    return { members, item: updated };
+      // loadItemMembers already applies avatar_url — the legacy second .map was redundant.
+      const members = this.loadItemMembers(id);
+      const updated = this.db.get<BudgetItem>('SELECT * FROM budget_items WHERE id = ?', id)!;
+      return { members, item: updated };
+    });
   }
 
   removeUserFromBudgetItems(userId: number): void {
-    const itemIds = this.db.all<{ budget_item_id: number }>(
-      'SELECT DISTINCT budget_item_id FROM budget_item_members WHERE user_id = ?',
-      userId,
-    ).map(r => r.budget_item_id);
-    if (itemIds.length === 0) {
-      return;
-    }
+    this.db.transaction(() => {
+      const itemIds = this.db.all<{ budget_item_id: number }>(
+        'SELECT DISTINCT budget_item_id FROM budget_item_members WHERE user_id = ?',
+        userId,
+      ).map(r => r.budget_item_id);
+      if (itemIds.length === 0) {
+        return;
+      }
 
-    this.db.run('DELETE FROM budget_item_members WHERE user_id = ?', userId);
+      this.db.run('DELETE FROM budget_item_members WHERE user_id = ?', userId);
 
-    const remaining = this.db.prepare('SELECT COUNT(*) AS count FROM budget_item_members WHERE budget_item_id = ?');
-    const setPersons = this.db.prepare('UPDATE budget_items SET persons = ? WHERE id = ?');
-    for (const itemId of itemIds) {
-      const { count } = remaining.get(itemId) as { count: number };
-      setPersons.run(count || null, itemId);
-    }
+      const remaining = this.db.prepare('SELECT COUNT(*) AS count FROM budget_item_members WHERE budget_item_id = ?');
+      const setPersons = this.db.prepare('UPDATE budget_items SET persons = ? WHERE id = ?');
+      for (const itemId of itemIds) {
+        const { count } = remaining.get(itemId) as { count: number };
+        setPersons.run(count || null, itemId);
+      }
+    });
   }
 
   toggleMemberPaid(id: string | number, tripId: string | number, userId: string | number, paid: boolean) {
@@ -705,25 +723,44 @@ export class BudgetService {
   // Settlements (persisted settle-up transfers — history + undo)
   // -------------------------------------------------------------------------
 
-  listSettlements(tripId: string | number) {
-    const rows = this.db.all<SettlementRow>(`
+  // Settlement usernames use COALESCE(display_name, username) like every item
+  // query (the legacy raw fu.username was the odd one out).
+  private static readonly SETTLEMENT_SELECT = `
     SELECT s.id, s.trip_id, s.from_user_id, s.to_user_id, s.amount, s.currency, s.exchange_rate, s.created_at, s.created_by_user_id,
-           fu.username AS from_username, fu.avatar AS from_avatar,
-           tu.username AS to_username,   tu.avatar AS to_avatar
+           COALESCE(fu.display_name, fu.username) AS from_username, fu.avatar AS from_avatar,
+           COALESCE(tu.display_name, tu.username) AS to_username,   tu.avatar AS to_avatar
     FROM budget_settlements s
     JOIN users fu ON s.from_user_id = fu.id
     JOIN users tu ON s.to_user_id = tu.id
-    WHERE s.trip_id = ?
-    ORDER BY s.created_at DESC, s.id DESC
-  `, tripId);
-    return rows.map(r => ({
+  `;
+
+  private mapSettlementRow(r: SettlementRow) {
+    return {
       id: r.id, trip_id: r.trip_id,
       from_user_id: r.from_user_id, to_user_id: r.to_user_id,
       amount: r.amount, currency: r.currency ?? null, exchange_rate: r.exchange_rate ?? 1,
       created_at: r.created_at, created_by_user_id: r.created_by_user_id,
       from_username: r.from_username, from_avatar_url: avatarUrl({ avatar: r.from_avatar }),
       to_username: r.to_username, to_avatar_url: avatarUrl({ avatar: r.to_avatar }),
-    }));
+    };
+  }
+
+  listSettlements(tripId: string | number) {
+    const rows = this.db.all<SettlementRow>(
+      `${BudgetService.SETTLEMENT_SELECT}
+    WHERE s.trip_id = ?
+    ORDER BY s.created_at DESC, s.id DESC
+  `, tripId);
+    return rows.map(r => this.mapSettlementRow(r));
+  }
+
+  /** Targeted single-row read (the legacy re-select was a full listSettlements scan). */
+  getSettlement(id: string | number, tripId: string | number) {
+    const row = this.db.get<SettlementRow>(
+      `${BudgetService.SETTLEMENT_SELECT}
+    WHERE s.trip_id = ? AND s.id = ?
+  `, tripId, id);
+    return row ? this.mapSettlementRow(row) : null;
   }
 
   /** Raw settlement insert (no FX freeze) — the REST path wraps it in createSettlement. */
@@ -739,7 +776,7 @@ export class BudgetService {
       data.exchange_rate != null ? data.exchange_rate : 1,
       createdByUserId ?? null,
     );
-    return this.listSettlements(tripId).find(s => s.id === Number(result.lastInsertRowid)) || null;
+    return this.getSettlement(Number(result.lastInsertRowid), tripId);
   }
 
   /** Raw settlement update (no FX freeze) — the REST path wraps it in updateSettlement. */
@@ -762,7 +799,7 @@ export class BudgetService {
       data.exchange_rate !== undefined ? 1 : null, data.exchange_rate !== undefined ? data.exchange_rate : 1,
       id,
     );
-    return this.listSettlements(tripId).find(s => s.id === Number(id)) || null;
+    return this.getSettlement(id, tripId);
   }
 
   deleteSettlement(id: string | number, tripId: string | number): boolean {
@@ -795,7 +832,7 @@ export class BudgetService {
     return this.createBudgetItem(tripId, data);
   }
 
-  async update(id: string, tripId: string, data: Parameters<BudgetService['updateBudgetItem']>[2]) {
+  async update(id: string | number, tripId: string | number, data: Parameters<BudgetService['updateBudgetItem']>[2]) {
     await this.freezeForeignRate(tripId, data, id);
     return this.updateBudgetItem(id, tripId, data);
   }
@@ -808,18 +845,18 @@ export class BudgetService {
     return this.setItemPayers(id, tripId, payers);
   }
 
-  async createSettlement(tripId: string, data: { from_user_id: number; to_user_id: number; amount: number; currency?: string | null }, userId: number) {
+  async createSettlement(tripId: string | number, data: { from_user_id: number; to_user_id: number; amount: number; currency?: string | null }, userId: number) {
     // Freeze the FX rate for the display currency the amount was entered in so the
     // transfer keeps cancelling its expense when live rates drift (#1445).
     await this.freezeForeignRate(tripId, data);
     return this.insertSettlement(tripId, data, userId);
   }
 
-  async updateSettlement(id: string, tripId: string, data: { from_user_id: number; to_user_id: number; amount: number; currency?: string | null }) {
+  async updateSettlement(id: string | number, tripId: string | number, data: { from_user_id: number; to_user_id: number; amount: number; currency?: string | null }) {
     // Pass the settlement's stored currency so an edit that doesn't change it keeps
     // the already-frozen rate (#1445) — otherwise a live-rate drift would re-open a
     // settled position on an unrelated edit.
-    const existing = this.listSettlements(tripId).find((s) => s.id === Number(id));
+    const existing = this.getSettlement(id, tripId);
     await this.freezeForeignRate(tripId, data, undefined, existing?.currency ?? null);
     return this.applySettlementUpdate(id, tripId, data);
   }
