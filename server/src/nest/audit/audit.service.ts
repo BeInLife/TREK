@@ -49,7 +49,7 @@ export class AuditService {
   constructor(private readonly dbs: DatabaseService) {}
 
   private resolveUserEmail(userId: number | null): string {
-    if (!userId) return 'anonymous';
+    if (userId == null) return 'anonymous';
     try {
       const row = this.dbs.get<{ email: string }>('SELECT email FROM users WHERE id = ?', userId);
       return row?.email || `uid:${userId}`;

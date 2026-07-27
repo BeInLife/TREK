@@ -134,16 +134,16 @@ describe('writeAudit', () => {
     expect(logDebug).not.toHaveBeenCalled();
   });
 
-  it('AUDIT-SVC-010: unknown action keeps the raw key; unknown/zero/null userIds degrade', () => {
+  it('AUDIT-SVC-010: unknown action keeps the raw key; empty-email/zero/null userIds resolve', () => {
     seedUser(1, 'a@b.c');
     svc.writeAudit({ userId: 1, action: 'custom.thing', ip: '9.9.9.9' });
     expect(logInfo).toHaveBeenLastCalledWith('a@b.c custom.thing ip=9.9.9.9');
     seedUser(42, ''); // falsy email → the `row?.email || uid:N` fallback
     svc.writeAudit({ userId: 42, action: 'user.login', ip: '9.9.9.9' });
     expect(logInfo).toHaveBeenLastCalledWith('uid:42 logged in ip=9.9.9.9');
-    seedUser(0, 'zero@b.c'); // id 0 is falsy → audits as anonymous despite the real email
+    seedUser(0, 'zero@b.c'); // since the quirk fix, a real id 0 resolves via the DB
     svc.writeAudit({ userId: 0, action: 'user.login', ip: '9.9.9.9' });
-    expect(logInfo).toHaveBeenLastCalledWith('anonymous logged in ip=9.9.9.9');
+    expect(logInfo).toHaveBeenLastCalledWith('zero@b.c logged in ip=9.9.9.9');
     svc.writeAudit({ userId: null, action: 'user.login', ip: '9.9.9.9' });
     expect(logInfo).toHaveBeenLastCalledWith('anonymous logged in ip=9.9.9.9');
   });

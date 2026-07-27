@@ -3,15 +3,20 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * The server's rotating file logger — a plain, deliberately side-effectful
- * module, NOT an injectable. This is a documented parity exception to the
- * "importable without side effects" rule: index.ts lazy-requires it before any
- * Nest container exists (boot ordering), and tests/setup.ts relies on env
- * being read exactly once at first import (the LOG_LEVEL freeze below).
+ * The server's rotating file logger — a plain module, NOT an injectable
+ * (index.ts lazy-requires it before any Nest container exists). Directory
+ * creation is lazy (first write), so importing the module has no disk side
+ * effect; the LOG_LEVEL freeze below is the one deliberate import-time
+ * behavior and is load-bearing for tests/setup.ts.
  */
 
 // Frozen at import on purpose (legacy timing; tests/setup.ts sets it pre-import).
 const LOG_LEVEL = (readEnv().app.logLevel || 'info').toLowerCase();
+// Severity threshold: a level logs only if it is at or above LOG_LEVEL's rank
+// (error < warn < info < debug). Unknown values fall back to 'info', matching
+// the legacy default.
+const LEVEL_RANKS: Record<string, number> = { error: 0, warn: 1, info: 2, debug: 3 };
+const LOG_THRESHOLD = LEVEL_RANKS[LOG_LEVEL] ?? LEVEL_RANKS.info;
 const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10 MB
 const MAX_LOG_FILES = 5;
 
@@ -26,8 +31,18 @@ const C = {
 // ── File logger with rotation ─────────────────────────────────────────────
 
 const logsDir = path.join(process.cwd(), 'data/logs');
-try { fs.mkdirSync(logsDir, { recursive: true }); } catch {}
 const logFilePath = path.join(logsDir, 'trek.log');
+let logsDirReady = false;
+
+function ensureLogsDir(): void {
+  if (logsDirReady) return;
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+    logsDirReady = true;
+  } catch (e) {
+    console.error(`[logger] could not create ${logsDir}: ${e instanceof Error ? e.message : e}`);
+  }
+}
 
 function rotateIfNeeded(): void {
   try {
@@ -40,14 +55,19 @@ function rotateIfNeeded(): void {
       const dst = `${logFilePath}.${i}`;
       if (fs.existsSync(src)) fs.renameSync(src, dst);
     }
-  } catch {}
+  } catch (e) {
+    console.error(`[logger] log rotation failed: ${e instanceof Error ? e.message : e}`);
+  }
 }
 
 function writeToFile(line: string): void {
   try {
+    ensureLogsDir();
     rotateIfNeeded();
     fs.appendFileSync(logFilePath, line + '\n');
-  } catch {}
+  } catch (e) {
+    console.error(`[logger] log file write failed: ${e instanceof Error ? e.message : e}`);
+  }
 }
 
 // ── Public log helpers ────────────────────────────────────────────────────
@@ -58,13 +78,14 @@ function formatTs(): string {
 }
 
 export function logInfo(msg: string): void {
+  if (LOG_THRESHOLD < LEVEL_RANKS.info) return;
   const ts = formatTs();
   console.log(`${C.blue}[INFO]${C.reset} ${ts} ${msg}`);
   writeToFile(`[INFO] ${ts} ${msg}`);
 }
 
 export function logDebug(msg: string): void {
-  if (LOG_LEVEL !== 'debug') return;
+  if (LOG_THRESHOLD < LEVEL_RANKS.debug) return;
   const ts = formatTs();
   console.log(`${C.cyan}[DEBUG]${C.reset} ${ts} ${msg}`);
   writeToFile(`[DEBUG] ${ts} ${msg}`);
@@ -77,6 +98,7 @@ export function logError(msg: string): void {
 }
 
 export function logWarn(msg: string): void {
+  if (LOG_THRESHOLD < LEVEL_RANKS.warn) return;
   const ts = formatTs();
   console.warn(`${C.yellow}[WARN]${C.reset} ${ts} ${msg}`);
   writeToFile(`[WARN] ${ts} ${msg}`);

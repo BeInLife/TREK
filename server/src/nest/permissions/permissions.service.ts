@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { logError } from '../audit/audit-log.logger';
 
 /**
  * Permission levels (hierarchical, higher includes lower):
@@ -78,11 +79,21 @@ export class PermissionsService {
       );
       for (const row of rows) {
         const actionKey = row.key.replace('perm_', '');
-        if (ACTIONS_MAP.has(actionKey)) {
+        const action = ACTIONS_MAP.get(actionKey);
+        // Only cache values the action actually allows: a corrupt/empty stored
+        // level would otherwise deny in checkPermission while getAllPermissions
+        // displays the default — ignoring it makes every reader fall back to
+        // the default consistently.
+        if (action && action.allowedLevels.includes(row.value as PermissionLevel)) {
           cache.set(actionKey, row.value as PermissionLevel);
         }
       }
-    } catch { /* table might not exist yet during init */ }
+    } catch (e) {
+      // Missing table is expected during first-boot init; anything else is a
+      // real DB failure that must not stay invisible (we still serve defaults).
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes('no such table')) logError(`Permissions load failed: ${msg}`);
+    }
     return cache;
   }
 
@@ -109,14 +120,20 @@ export class PermissionsService {
 
   savePermissions(settings: Record<string, string>): { skipped: string[] } {
     const skipped: string[] = [];
+    const valid: Array<[string, string]> = [];
+    for (const [actionKey, level] of Object.entries(settings)) {
+      const action = ACTIONS_MAP.get(actionKey);
+      if (!action || !action.allowedLevels.includes(level as PermissionLevel)) {
+        skipped.push(actionKey);
+        continue;
+      }
+      valid.push([actionKey, level]);
+    }
+    // Nothing valid to write → no prepare, no transaction, no cache flush.
+    if (valid.length === 0) return { skipped };
     const upsert = this.dbs.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)');
     this.dbs.transaction(() => {
-      for (const [actionKey, level] of Object.entries(settings)) {
-        const action = ACTIONS_MAP.get(actionKey);
-        if (!action || !action.allowedLevels.includes(level as PermissionLevel)) {
-          skipped.push(actionKey);
-          continue;
-        }
+      for (const [actionKey, level] of valid) {
         upsert.run(`perm_${actionKey}`, level);
       }
     });

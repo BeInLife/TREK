@@ -1,11 +1,13 @@
 /**
  * Unit tests for the DI-native PermissionsService — PERM-SVC-001 through
- * PERM-SVC-020 (001–013 moved 1:1 from the legacy
+ * PERM-SVC-023 (001–013 moved 1:1 from the legacy
  * tests/unit/services/permissions.test.ts, which had no case IDs — the IDs are
  * introduced with the move; 014–016 pin the cache semantics the real DB now
  * makes testable; 017–020 pin the permissions.bridge delegation and the
- * module-scoped cache shared across the DI and bridge instances). Uses a real
- * in-memory SQLite DB so the app_settings SQL is exercised faithfully.
+ * module-scoped cache shared across the DI and bridge instances; 013 + 021–023
+ * pin the quirk-fix pass: load-time level validation, the narrowed load-error
+ * swallow, and the no-op-save early return). Uses a real in-memory SQLite DB
+ * so the app_settings SQL is exercised faithfully.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -26,9 +28,19 @@ const { testDb, dbMock } = vi.hoisted(() => {
 });
 
 vi.mock('../../../src/db/database', () => dbMock);
+// The service logs unexpected load failures via the plain audit logger.
+vi.mock('../../../src/nest/audit/audit-log.logger', () => ({
+  LOG_LEVEL: 'error',
+  logInfo: vi.fn(),
+  logDebug: vi.fn(),
+  logError: vi.fn(),
+  logWarn: vi.fn(),
+}));
 
+import Database from 'better-sqlite3';
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
+import { logError } from '../../../src/nest/audit/audit-log.logger';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService, PERMISSION_ACTIONS } from '../../../src/nest/permissions/permissions.service';
 import {
@@ -47,6 +59,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  vi.clearAllMocks();
   testDb.prepare("DELETE FROM app_settings WHERE key LIKE 'perm_%'").run();
   svc.invalidatePermissionsCache();
 });
@@ -146,11 +159,55 @@ describe('savePermissions — invalid input is silently skipped', () => {
   });
 });
 
-describe('checkPermission — default case', () => {
-  it('PERM-SVC-013: returns false when permission level is an unrecognized value', () => {
+describe('corrupt stored levels', () => {
+  it('PERM-SVC-013: an unrecognized stored level is ignored — every reader falls back to the default', () => {
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'unknown_level');
+    testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_delete', '');
     svc.invalidatePermissionsCache();
-    expect(svc.checkPermission('trip_edit', 'user', 10, 10, false)).toBe(false);
+    // Since the quirk fix the corrupt rows never enter the cache, so
+    // getPermissionLevel, getAllPermissions and checkPermission agree on the
+    // default instead of the old display-default/deny-in-check split.
+    expect(svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
+    expect(svc.getAllPermissions().trip_edit).toBe('trip_owner');
+    expect(svc.checkPermission('trip_edit', 'user', 10, 10, false)).toBe(true);   // owner passes the default
+    expect(svc.checkPermission('trip_edit', 'user', 10, 20, true)).toBe(false);   // member still denied
+    expect(svc.getPermissionLevel('trip_delete')).toBe('trip_owner');
+  });
+
+  it('PERM-SVC-021: a stored level outside the action\'s allowedLevels is ignored too', () => {
+    // trip_edit only allows trip_owner/trip_member — a raw 'everybody' row must not widen it.
+    testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'everybody');
+    svc.invalidatePermissionsCache();
+    expect(svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
+    expect(svc.checkPermission('trip_edit', 'user', 10, 30, false)).toBe(false);
+  });
+});
+
+describe('load failures', () => {
+  it('PERM-SVC-022: a missing app_settings table stays silent and serves defaults; other DB failures are logged', () => {
+    const bareDb = new Database(':memory:');
+    const bareSvc = new PermissionsService(new DatabaseService(bareDb));
+    bareSvc.invalidatePermissionsCache();
+    expect(bareSvc.getPermissionLevel('trip_edit')).toBe('trip_owner');
+    expect(logError).not.toHaveBeenCalled();
+    // An unexpected failure (closed connection) must leave a trace.
+    bareDb.close();
+    bareSvc.invalidatePermissionsCache();
+    expect(bareSvc.getPermissionLevel('trip_edit')).toBe('trip_owner');
+    expect(logError).toHaveBeenCalledWith(expect.stringMatching(/^Permissions load failed: /));
+    svc.invalidatePermissionsCache(); // don't leak the bare-DB cache to later tests
+  });
+
+  it('PERM-SVC-023: an all-skipped save writes nothing and leaves the cache untouched', () => {
+    expect(svc.getPermissionLevel('trip_edit')).toBe('trip_owner'); // prime the cache
+    testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'trip_member');
+    const result = svc.savePermissions({ bogus: 'trip_member', trip_delete: 'trip_member' });
+    expect(result.skipped).toEqual(['bogus', 'trip_delete']);
+    // No valid entries → no transaction and no cache flush: the raw row above
+    // stays invisible until an explicit invalidation.
+    expect(svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
+    svc.invalidatePermissionsCache();
+    expect(svc.getPermissionLevel('trip_edit')).toBe('trip_member');
   });
 });
 
