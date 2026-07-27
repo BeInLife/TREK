@@ -8,11 +8,12 @@ const { canAccessTrip } = vi.hoisted(() => ({ canAccessTrip: vi.fn(() => ({ user
 vi.mock('../../../src/db/database', () => ({ db: dbMock, canAccessTrip, closeDb: () => {}, reinitialize: () => {} }));
 import { db as dbConn } from '../../../src/db/database';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 
 const { broadcast } = vi.hoisted(() => ({ broadcast: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast }));
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn(() => true) }));
-vi.mock('../../../src/services/permissions', () => ({ checkPermission }));
+const checkPermission = vi.fn(() => true);
+const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
 const { tripSvc } = vi.hoisted(() => ({
   tripSvc: {
@@ -44,7 +45,7 @@ const packingStub = { listItems: packingListItems } as unknown as PackingService
 const filesStub = { listFiles: () => [] } as unknown as FilesService;
 const reservationsStub = { list: () => [] } as unknown as ReservationsService;
 const daysStub = { list: () => ({ days: [1] }), listAccommodations: () => [] } as unknown as DaysService;
-function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub, filesStub, reservationsStub, daysStub); }
+function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub, filesStub, reservationsStub, daysStub, permissionsStub); }
 beforeEach(() => vi.clearAllMocks());
 
 describe('TripsService (wrapper delegation + bundle/copy/notify helpers)', () => {

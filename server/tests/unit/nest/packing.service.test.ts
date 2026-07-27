@@ -45,8 +45,8 @@ vi.mock('../../../src/config', () => ({
 const { broadcastMock } = vi.hoisted(() => ({ broadcastMock: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn(() => true) }));
-vi.mock('../../../src/services/permissions', () => ({ checkPermission }));
+const checkPermission = vi.fn(() => true);
+const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
 const { send } = vi.hoisted(() => ({ send: vi.fn(() => Promise.resolve()) }));
 vi.mock('../../../src/services/notificationService', () => ({ send }));
@@ -56,10 +56,11 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { PackingService } from '../../../src/nest/packing/packing.service';
 import { listItems as bridgeListItems } from '../../../src/nest/packing/packing.bridge';
 
-const svc = new PackingService(new DatabaseService(testDb));
+const svc = new PackingService(new DatabaseService(testDb), permissionsStub);
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 

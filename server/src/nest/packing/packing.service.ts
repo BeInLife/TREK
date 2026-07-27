@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { broadcast } from '../../websocket';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { avatarUrl } from '../../services/avatarUrl';
 import type { UpdateConflict } from '../../services/conflictResult';
@@ -39,7 +39,10 @@ const BAG_COLORS = ['#6366f1', '#ec4899', '#f97316', '#10b981', '#06b6d4', '#8b5
  */
 @Injectable()
 export class PackingService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
     return verifyTripAccess(tripId, userId);
@@ -47,7 +50,7 @@ export class PackingService {
 
   /** Mirrors the inline checkPermission('packing_edit', ...) the legacy route runs. */
   canEdit(trip: Trip, user: User): boolean {
-    return checkPermission('packing_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission('packing_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {

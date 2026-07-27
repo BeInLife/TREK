@@ -4,7 +4,7 @@
  * journeyService, the permission check, canAccessTrip and the WebSocket
  * broadcast are mocked.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
@@ -29,8 +29,11 @@ vi.mock('../../src/db/database', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../src/services/journeyService', () => ({ onPlaceCreated: vi.fn(), onPlaceUpdated: vi.fn(), onPlaceDeleted: vi.fn() }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 const { pl } = vi.hoisted(() => ({
   pl: {
@@ -64,6 +67,7 @@ describe('Places e2e (real auth guard + temp SQLite)', () => {
   beforeAll(async () => {
     seedUser(db as never, { id: 1 });
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
     pl.listPlaces.mockReturnValue([{ id: 1, name: 'Spot' }]);
     pl.createPlace.mockReturnValue({ id: 9, name: 'Spot' });

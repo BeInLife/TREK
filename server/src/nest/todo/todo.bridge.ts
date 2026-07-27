@@ -1,6 +1,7 @@
 import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
 import { TodoService } from './todo.service';
+import { PermissionsService } from '../permissions/permissions.service';
 
 /**
  * Non-Nest entry point for the todo domain — for code running OUTSIDE the
@@ -15,7 +16,7 @@ import { TodoService } from './todo.service';
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.
  */
-const todos = new TodoService(new DatabaseService(db));
+const todos = new TodoService(new DatabaseService(db), new PermissionsService(new DatabaseService(db)));
 
 export function listItems(tripId: string | number) {
   return todos.listItems(tripId);

@@ -14,6 +14,7 @@ import { DaysMcp } from '../../src/nest/days/days.mcp';
 import { DaysService } from '../../src/nest/days/days.service';
 import { PackingMcp } from '../../src/nest/packing/packing.mcp';
 import { PackingService } from '../../src/nest/packing/packing.service';
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { ReservationsMcp } from '../../src/nest/reservations/reservations.mcp';
 import { ReservationsService } from '../../src/nest/reservations/reservations.service';
 import { TagsMcp } from '../../src/nest/tags/tags.mcp';
@@ -32,18 +33,19 @@ import { VacayService } from '../../src/nest/vacay/vacay.service';
  */
 export function createMcpTestRegistry(): McpRegistry {
   const dbService = new DatabaseService(db);
-  const daysService = new DaysService(dbService);
+  const permissionsService = new PermissionsService(dbService);
+  const daysService = new DaysService(dbService, permissionsService);
   return createTestRegistry(
     [
       new TagsMcp(new TagsService(dbService)),
       new CategoriesMcp(new CategoriesService(dbService)),
-      new TodoMcp(new TodoService(dbService)),
-      new PackingMcp(new PackingService(dbService)),
-      new ReservationsMcp(new ReservationsService(dbService), daysService),
-      new DayNotesMcp(new DayNotesService(dbService)),
+      new TodoMcp(new TodoService(dbService, permissionsService)),
+      new PackingMcp(new PackingService(dbService, permissionsService)),
+      new ReservationsMcp(new ReservationsService(dbService, permissionsService), daysService),
+      new DayNotesMcp(new DayNotesService(dbService, permissionsService)),
       new DaysMcp(daysService, dbService),
-      new AssignmentsMcp(new AssignmentsService(dbService), daysService),
-      new CollabMcp(new CollabService(dbService)),
+      new AssignmentsMcp(new AssignmentsService(dbService, permissionsService), daysService),
+      new CollabMcp(new CollabService(dbService, permissionsService)),
       new VacayMcp(new VacayService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy },

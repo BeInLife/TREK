@@ -6,7 +6,7 @@ import { AirtrailAddonGuard } from './airtrail-addon.guard';
 import { AirtrailImportDto } from './airtrail.dto';
 import type { AirtrailImportResult } from '@trek/shared';
 import { verifyTripAccess } from '../../services/tripAccess';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import { importAirtrailFlights } from '../../services/airtrail/airtrailImport';
 
 /**
@@ -17,10 +17,12 @@ import { importAirtrailFlights } from '../../services/airtrail/airtrailImport';
 @Controller('api/trips/:tripId/reservations/import')
 @UseGuards(AirtrailAddonGuard, JwtAuthGuard)
 export class AirtrailImportController {
+  constructor(private readonly permissions: PermissionsService) {}
+
   private requireEdit(tripId: string, user: User): void {
     const trip = verifyTripAccess(tripId, user.id);
     if (!trip) throw new HttpException({ error: 'Trip not found' }, 404);
-    if (!checkPermission('reservation_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id)) {
+    if (!this.permissions.checkPermission('reservation_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id)) {
       throw new HttpException({ error: 'No permission' }, 403);
     }
   }

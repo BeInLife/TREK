@@ -6,7 +6,7 @@
  * canAccessTrip over the temp db. Only the permission check and the WebSocket
  * broadcast stay mocked.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
@@ -73,8 +73,11 @@ vi.mock('../../src/db/database', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 import { DaysModule } from '../../src/nest/days/days.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
@@ -99,6 +102,7 @@ describe('Days + day-notes e2e (real auth guard + temp SQLite, real day SQL)', (
     db.prepare('INSERT INTO trips (id, user_id, title) VALUES (5, 1, ?)').run('Trip');
     db.prepare('INSERT INTO days (id, trip_id, day_number) VALUES (3, 5, 1)').run();
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 

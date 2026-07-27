@@ -6,7 +6,7 @@
  * real-SQL canAccessTrip over the temp db. Only the permission check, the
  * WebSocket broadcast and the notification sender stay mocked.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
@@ -112,8 +112,11 @@ vi.mock('../../src/db/database', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 import { PackingModule } from '../../src/nest/packing/packing.module';
 import { DatabaseModule } from '../../src/nest/database/database.module';
@@ -149,6 +152,7 @@ describe('Packing e2e (real auth guard + real SQL over temp SQLite)', () => {
     seedUser(db as never, { id: 2, email: 'stranger@example.test' });
     seedUser(db as never, { id: 3, email: 'admin@example.test', role: 'admin' });
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 

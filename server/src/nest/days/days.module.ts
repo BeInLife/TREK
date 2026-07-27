@@ -5,6 +5,7 @@ import { DaysMcp } from './days.mcp';
 import { DayNotesController } from './day-notes.controller';
 import { DayNotesService } from './day-notes.service';
 import { DayNotesMcp } from './day-notes.mcp';
+import { PermissionsModule } from '../permissions/permissions.module';
 
 /**
  * Days + day-notes domain (S6 — Phase 2 trip sub-domain). The single prefix
@@ -16,6 +17,7 @@ import { DayNotesMcp } from './day-notes.mcp';
  * controllers).
  */
 @Module({
+  imports: [PermissionsModule],
   controllers: [DaysController, DayNotesController],
   providers: [DaysService, DaysMcp, DayNotesService, DayNotesMcp],
   exports: [DaysService, DayNotesService],

@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { db, canAccessTrip } from '../db/database';
 import { broadcastToUser } from '../websocket';
-import { checkPermission } from './permissions';
+import { checkPermission } from '../nest/permissions/permissions.bridge';
 import { reclaimPlaceImage } from './placeImage';
 import type {
   Collection,

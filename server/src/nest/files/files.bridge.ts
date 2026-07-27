@@ -1,6 +1,7 @@
 import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
 import { FilesService } from './files.service';
+import { PermissionsService } from '../permissions/permissions.service';
 
 /**
  * Non-Nest entry point for the files domain. Unlike todo.bridge.ts this does
@@ -14,7 +15,7 @@ import { FilesService } from './files.service';
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.
  */
-const files = new FilesService(new DatabaseService(db));
+const files = new FilesService(new DatabaseService(db), new PermissionsService(new DatabaseService(db)));
 
 export function getAllowedExtensions(): string {
   return files.getAllowedExtensions();

@@ -6,7 +6,7 @@
  * over the temp db. Only the permission check and the WebSocket broadcast stay
  * mocked.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
@@ -63,8 +63,11 @@ vi.mock('../../src/db/database', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 import { TodoModule } from '../../src/nest/todo/todo.module';
 import { DatabaseModule } from '../../src/nest/database/database.module';
@@ -99,6 +102,7 @@ describe('To-do e2e (real auth guard + real SQL over temp SQLite)', () => {
     seedUser(db as never, { id: 1 });
     seedUser(db as never, { id: 2, email: 'stranger@example.test' });
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 

@@ -50,6 +50,7 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createDay, createPlace, createDayAssignment, createDayAccommodation } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { DaysService, addDays } from '../../../src/nest/days/days.service';
 import {
   getDay as bridgeGetDay,
@@ -59,7 +60,7 @@ import {
   resyncAccommodationDays as bridgeResyncAccommodationDays,
 } from '../../../src/nest/days/days.bridge';
 
-const svc = new DaysService(new DatabaseService(testDb));
+const svc = new DaysService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
 
 beforeAll(() => {
   createTables(testDb);

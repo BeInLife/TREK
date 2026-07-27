@@ -16,7 +16,7 @@ import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
 import request from 'supertest';
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 
 const { db } = vi.hoisted(() => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -39,8 +39,11 @@ vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 const { notificationSend } = vi.hoisted(() => ({ notificationSend: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('../../src/services/notificationService', () => ({ send: notificationSend }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 const { budget } = vi.hoisted(() => ({
   budget: {
@@ -80,6 +83,7 @@ describe('Reservations + accommodations e2e (real auth guard + temp SQLite, real
     ).run();
     tripId = Number(db.prepare("INSERT INTO trips (user_id, title) VALUES (1, 'E2E Trip')").run().lastInsertRowid);
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 

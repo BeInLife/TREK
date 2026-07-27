@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import type { Request } from 'express';
 import { broadcast } from '../../websocket';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import { avatarUrl } from '../../services/avatarUrl';
 import { consumeEphemeralToken } from '../../services/ephemeralTokens';
 import { verifyJwtAndLoadUser } from '../../middleware/auth';
@@ -54,14 +54,17 @@ export interface FileLink {
  */
 @Injectable()
 export class FilesService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
     return this.db.canAccessTrip(tripId, userId);
   }
 
   can(action: FilePermission, trip: Trip, user: User): boolean {
-    return checkPermission(action, user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission(action, user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {

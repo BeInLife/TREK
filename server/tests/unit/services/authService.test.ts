@@ -11,7 +11,7 @@ vi.mock('../../../src/services/apiKeyCrypto', () => ({
   maybe_encrypt_api_key: vi.fn((v) => v),
   encrypt_api_key: vi.fn((v) => v),
 }));
-vi.mock('../../../src/services/permissions', () => ({ getAllPermissions: vi.fn(() => ({})), checkPermission: vi.fn() }));
+vi.mock('../../../src/nest/permissions/permissions.bridge', () => ({ getAllPermissions: vi.fn(() => ({})), checkPermission: vi.fn() }));
 vi.mock('../../../src/services/ephemeralTokens', () => ({ createEphemeralToken: vi.fn() }));
 vi.mock('../../../src/mcp', () => ({ revokeUserSessions: vi.fn() }));
 vi.mock('../../../src/scheduler', () => ({ startTripReminders: vi.fn(), buildCronExpression: vi.fn() }));

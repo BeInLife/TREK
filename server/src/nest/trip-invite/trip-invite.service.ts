@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import crypto from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import type { TripAccess } from '../database/database.service';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import { joinTripAsMember } from '../../services/tripMembership';
 import type { User } from '../../types';
 
@@ -28,14 +28,17 @@ export interface TripInviteInfo {
  */
 @Injectable()
 export class TripInviteService {
-  constructor(private readonly dbs: DatabaseService) {}
+  constructor(
+    private readonly dbs: DatabaseService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   verifyTripAccess(tripId: string, userId: number) {
     return this.dbs.canAccessTrip(tripId, userId);
   }
 
   canManage(trip: Trip, user: User): boolean {
-    return checkPermission('share_manage', user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission('share_manage', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   /** The current invite link for a trip, or null if none exists. */

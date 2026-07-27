@@ -6,7 +6,7 @@ import fs from 'fs';
 import Database from 'better-sqlite3';
 import { db, closeDb, reinitialize } from '../db/database';
 import * as scheduler from '../scheduler';
-import { invalidatePermissionsCache } from './permissions';
+import { invalidatePermissionsCache } from '../nest/permissions/permissions.bridge';
 import { pluginsCodeRoot, pluginsDataRoot } from '../nest/plugins/paths';
 import { stageExtractedPluginTrees, applyStagedRestoreNow } from '../nest/plugins/plugin-backup';
 import { snapshotAllPluginDataDbs } from '../nest/plugins/host/plugin-data.service';

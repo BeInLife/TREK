@@ -4,7 +4,7 @@
  * list-services, auditLog, demo, the permission check, canAccessTrip and the
  * WebSocket broadcast are mocked.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
@@ -78,8 +78,11 @@ vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockRes
 vi.mock('../../src/services/auditLog', () => ({ writeAudit: vi.fn(), getClientIp: vi.fn(() => '1.2.3.4'), logInfo: vi.fn(), logError: vi.fn() }));
 vi.mock('../../src/services/demo', () => ({ isDemoEmail: vi.fn(() => false) }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 const { tripSvc } = vi.hoisted(() => ({
   tripSvc: {
@@ -114,6 +117,7 @@ describe('Trips e2e (real auth guard + temp SQLite)', () => {
   beforeAll(async () => {
     seedUser(db as never, { id: 1 });
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
     tripSvc.listTrips.mockReturnValue([{ id: 1, title: 'T' }]);
     tripSvc.createTrip.mockReturnValue({ trip: { id: 9 }, tripId: 9, reminderDays: 0 });

@@ -49,10 +49,11 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, addTripMember, createDay, createPlace, createDayAssignment, createTag } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { AssignmentsService } from '../../../src/nest/assignments/assignments.service';
 import { createAssignment, dayExists, placeExists, getAssignmentForTrip } from '../../../src/nest/assignments/assignments.bridge';
 
-const svc = new AssignmentsService(new DatabaseService(testDb));
+const svc = new AssignmentsService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
 
 beforeAll(() => {
   createTables(testDb);

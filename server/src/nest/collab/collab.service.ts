@@ -3,7 +3,7 @@ import fs from 'fs';
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { broadcast } from '../../websocket';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { avatarUrl } from '../../services/avatarUrl';
 import { checkSsrf, createPinnedDispatcher } from '../../utils/ssrfGuard';
@@ -62,18 +62,21 @@ export interface LinkPreviewResult {
  */
 @Injectable()
 export class CollabService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
     return verifyTripAccess(tripId, userId);
   }
 
   canEdit(trip: Trip, user: User): boolean {
-    return checkPermission('collab_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission('collab_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   canUploadFiles(trip: Trip, user: User): boolean {
-    return checkPermission('file_upload', user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission('file_upload', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {

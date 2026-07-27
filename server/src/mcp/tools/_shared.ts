@@ -1,6 +1,6 @@
 import { errorResult } from '@trek/nest-mcp';
 import { db } from '../../db/database';
-import { checkPermission } from '../../services/permissions';
+import { checkPermission } from '../../nest/permissions/permissions.bridge';
 import { broadcast } from '../../websocket';
 
 // Generic MCP result helpers and annotation presets live in @trek/nest-mcp

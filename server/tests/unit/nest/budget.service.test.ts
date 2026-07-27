@@ -8,12 +8,13 @@ const { dbMock } = vi.hoisted(() => {
 vi.mock('../../../src/db/database', () => ({ db: dbMock, closeDb: () => {}, reinitialize: () => {} }));
 import { db as dbConn } from '../../../src/db/database';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 
 const { broadcast } = vi.hoisted(() => ({ broadcast: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn(() => true) }));
-vi.mock('../../../src/services/permissions', () => ({ checkPermission }));
+const checkPermission = vi.fn(() => true);
+const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
 const { getRates } = vi.hoisted(() => ({ getRates: vi.fn() }));
 vi.mock('../../../src/services/exchangeRateService', () => ({ getRates }));
@@ -44,7 +45,7 @@ vi.mock('../../../src/services/budgetService', () => budget);
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 
 function svc() {
-  return new BudgetService(new DatabaseService(dbConn));
+  return new BudgetService(new DatabaseService(dbConn), permissionsStub);
 }
 
 beforeEach(() => {

@@ -45,8 +45,8 @@ vi.mock('../../../src/config', () => ({
 }));
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn(() => true) }));
-vi.mock('../../../src/services/permissions', () => ({ checkPermission }));
+const checkPermission = vi.fn(() => true);
+const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
 const { verifyJwtAndLoadUser } = vi.hoisted(() => ({ verifyJwtAndLoadUser: vi.fn() }));
 vi.mock('../../../src/middleware/auth', () => ({ verifyJwtAndLoadUser }));
@@ -60,6 +60,7 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, addTripMember, createPlace, createReservation, createDay, createDayAssignment, setAppSetting } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { FilesService } from '../../../src/nest/files/files.service';
 import { getAllowedExtensions as bridgeGetAllowedExtensions } from '../../../src/nest/files/files.bridge';
 import {
@@ -73,7 +74,7 @@ import {
 } from '../../../src/nest/files/files.constants';
 import type { TripFile, User } from '../../../src/types';
 
-const svc = new FilesService(new DatabaseService(testDb));
+const svc = new FilesService(new DatabaseService(testDb), permissionsStub);
 
 beforeAll(() => {
   createTables(testDb);
@@ -181,7 +182,7 @@ describe('getAllowedExtensions', () => {
   });
 
   it('FILE-SVC-009: returns the default when the query throws (no app_settings table)', () => {
-    const bareSvc = new FilesService(new DatabaseService(bareDb));
+    const bareSvc = new FilesService(new DatabaseService(bareDb), permissionsStub);
     expect(bareSvc.getAllowedExtensions()).toBe(DEFAULT_ALLOWED_EXTENSIONS);
   });
 });

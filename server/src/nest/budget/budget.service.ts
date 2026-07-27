@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { broadcast } from '../../websocket';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import type { User } from '../../types';
 import * as svc from '../../services/budgetService';
 import { getRates } from '../../services/exchangeRateService';
@@ -15,7 +15,10 @@ type Trip = NonNullable<ReturnType<typeof svc.verifyTripAccess>>;
  */
 @Injectable()
 export class BudgetService {
-  constructor(private readonly dbs: DatabaseService) {}
+  constructor(
+    private readonly dbs: DatabaseService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   private get db() {
     return this.dbs.connection;
@@ -26,7 +29,7 @@ export class BudgetService {
   }
 
   canEdit(trip: Trip, user: User): boolean {
-    return checkPermission('budget_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission('budget_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {

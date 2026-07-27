@@ -1,6 +1,6 @@
 import { Injectable, HttpException } from '@nestjs/common';
 import { broadcast } from '../../websocket';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { ReservationsService } from '../reservations/reservations.service';
 import { createPlace } from '../../services/placeService';
@@ -24,6 +24,7 @@ export class BookingImportService {
     private readonly llmParse: LlmParseService,
     private readonly dbs: DatabaseService,
     private readonly reservations: ReservationsService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   private get db() {
@@ -56,7 +57,7 @@ export class BookingImportService {
   }
 
   canEdit(trip: NonNullable<ReturnType<typeof verifyTripAccess>>, user: User): boolean {
-    return checkPermission('reservation_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission('reservation_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   /**

@@ -1,6 +1,7 @@
 import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
 import { AssignmentsService } from './assignments.service';
+import { PermissionsService } from '../permissions/permissions.service';
 
 /**
  * Non-Nest entry point for the assignments domain — for code running OUTSIDE
@@ -25,7 +26,7 @@ import { AssignmentsService } from './assignments.service';
  */
 let instance: AssignmentsService | undefined;
 function assignments(): AssignmentsService {
-  return (instance ??= new AssignmentsService(new DatabaseService(db)));
+  return (instance ??= new AssignmentsService(new DatabaseService(db), new PermissionsService(new DatabaseService(db))));
 }
 
 export function createAssignment(dayId: string | number, placeId: string | number, notes: string | null) {

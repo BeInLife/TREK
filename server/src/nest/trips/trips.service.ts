@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { broadcast } from '../../websocket';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import type { User } from '../../types';
 import * as tripSvc from '../../services/tripService';
 import { listPlaces } from '../../services/placeService';
@@ -29,6 +29,7 @@ export class TripsService {
     private readonly files: FilesService,
     private readonly reservations: ReservationsService,
     private readonly days: DaysService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   private get db() {
@@ -40,7 +41,7 @@ export class TripsService {
   }
 
   can(action: string, role: string, ownerId: number | null, userId: number, isMember: boolean): boolean {
-    return checkPermission(action, role, ownerId, userId, isMember);
+    return this.permissions.checkPermission(action, role, ownerId, userId, isMember);
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {

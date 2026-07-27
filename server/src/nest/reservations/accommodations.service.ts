@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { broadcast } from '../../websocket';
 import { DatabaseService } from '../database/database.service';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import type { User } from '../../types';
 import { DaysService } from '../days/days.service';
 
@@ -18,6 +18,7 @@ export class AccommodationsService {
   constructor(
     private readonly dbs: DatabaseService,
     private readonly days: DaysService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   /** Mirrors the requireTripAccess middleware (owner or member), returning the trip. */
@@ -26,7 +27,7 @@ export class AccommodationsService {
   }
 
   canEdit(trip: Trip, user: User): boolean {
-    return checkPermission('day_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission('day_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {

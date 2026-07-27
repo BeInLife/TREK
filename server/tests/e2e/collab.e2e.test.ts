@@ -6,7 +6,7 @@
  * on auth, trip-access 404, permission 403, the create-201 status codes, the
  * vote/react 200 overrides and the persisted rows.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
@@ -59,8 +59,11 @@ vi.mock('../../src/db/database', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 import { CollabModule } from '../../src/nest/collab/collab.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
@@ -81,6 +84,7 @@ describe('Collab e2e (real auth guard + temp SQLite)', () => {
   beforeAll(async () => {
     seedUser(db as never, { id: 1 });
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 

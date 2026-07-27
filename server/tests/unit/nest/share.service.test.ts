@@ -39,8 +39,8 @@ vi.mock('../../../src/config', () => ({
   updateJwtSecret: () => {},
 }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../../src/services/permissions', () => ({ checkPermission }));
+const checkPermission = vi.fn();
+const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
 const { serveFilePath } = vi.hoisted(() => ({ serveFilePath: vi.fn() }));
 vi.mock('../../../src/services/placePhotoCache', () => ({ serveFilePath }));
@@ -52,12 +52,13 @@ import {
   createUser, createTrip, addTripMember, createDay, createPlace, createDayAssignment,
 } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { ShareService } from '../../../src/nest/share/share.service';
 import { SettingsService } from '../../../src/nest/settings/settings.service';
 import { createOrUpdateShareLink, getShareLink, deleteShareLink } from '../../../src/nest/share/share.bridge';
 import type { User } from '../../../src/types';
 
-const svc = new ShareService(new DatabaseService(testDb), new SettingsService(new DatabaseService(testDb)));
+const svc = new ShareService(new DatabaseService(testDb), new SettingsService(new DatabaseService(testDb)), permissionsStub);
 
 beforeAll(() => {
   createTables(testDb);

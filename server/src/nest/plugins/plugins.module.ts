@@ -36,6 +36,7 @@ import { LlmParseModule } from '../llm-parse/llm-parse.module';
 import { FilesModule } from '../files/files.module';
 import { CollabModule } from '../collab/collab.module';
 import { VacayModule } from '../vacay/vacay.module';
+import { PermissionsModule } from '../permissions/permissions.module';
 
 /**
  * Plugin system (#plugins). M0 read side + M2 isolated runtime + M3 frontend:
@@ -47,7 +48,7 @@ import { VacayModule } from '../vacay/vacay.module';
 @Module({
   // The DI-native domain services the plugin host wiring injects
   // (PluginHostDepsFactory); DatabaseModule is @Global, so not listed.
-  imports: [TagsModule, CategoriesModule, BudgetModule, ReservationsModule, TodoModule, PackingModule, DaysModule, AssignmentsModule, LlmParseModule, FilesModule, CollabModule, VacayModule],
+  imports: [TagsModule, CategoriesModule, BudgetModule, ReservationsModule, TodoModule, PackingModule, DaysModule, AssignmentsModule, LlmParseModule, FilesModule, CollabModule, VacayModule, PermissionsModule],
   controllers: [PluginsController, PluginsFeedController, PluginsProxyController, PluginFrameController, PlaceDetailsController, TripWarningsController, ViewContributionsController, TripCardContributionsController, PluginPhotosController, PluginCalendarController, MapMarkersController, MapLayersController, PluginRoutesController, DayScheduleController, PdfSectionsController, AtlasLayersController, JournalEntryRowsController, PluginUserSettingsController, PluginOAuthController, PluginActivityController],
   providers: [PluginsService, PluginRuntimeService, PluginRegistryService, PluginOAuthService, PluginHostDepsFactory],
   // Exported so the admin addon-toggle handler can cascade-disable plugins whose

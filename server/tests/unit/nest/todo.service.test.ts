@@ -44,10 +44,11 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, addTripMember } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { TodoService } from '../../../src/nest/todo/todo.service';
 import { listItems, createItem, updateItem, deleteItem } from '../../../src/nest/todo/todo.bridge';
 
-const svc = new TodoService(new DatabaseService(testDb));
+const svc = new TodoService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
 
 beforeAll(() => {
   createTables(testDb);

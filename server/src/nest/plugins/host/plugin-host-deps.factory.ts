@@ -14,7 +14,7 @@ import { PluginOAuthService } from '../plugin-oauth.service';
 import fsMod from 'node:fs';
 import pathMod from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { checkPermission } from '../../../services/permissions';
+import { PermissionsService } from '../../permissions/permissions.service';
 import { listTrips, updateTrip, createTrip, removeMember as removeTripMemberSvc, NotFoundError, ValidationError } from '../../../services/tripService';
 import { createPlace, updatePlace, deletePlace } from '../../../services/placeService';
 import { isAddonEnabled } from '../../../services/adminService';
@@ -155,6 +155,7 @@ export class PluginHostDepsFactory {
     private readonly collab: CollabService,
     private readonly vacay: VacayService,
     private readonly days: DaysService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   /**
@@ -168,7 +169,7 @@ export class PluginHostDepsFactory {
     if (!trip) return false;
     const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
     if (!u) return false;
-    return checkPermission(action, u.role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
+    return this.permissions.checkPermission(action, u.role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
   }
 
   // The booking notification the REST controller sends after a create/update/delete
@@ -217,7 +218,7 @@ export class PluginHostDepsFactory {
         if (!trip) return false;
         const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
         if (!u) return false;
-        return checkPermission('budget_edit', u.role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
+        return this.permissions.checkPermission('budget_edit', u.role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
       },
       // --- Read scopes (packing/files). Membership is checked by the host (tripRead);
       // these just delegate to the same services the REST paths use. ---
@@ -521,7 +522,7 @@ export class PluginHostDepsFactory {
       // is only visible to its owner, who refetches (same as the REST POST). ---
       canCreateTrip: (userId) => {
         const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
-        return checkPermission('trip_create', u?.role ?? 'user', null, userId, false);
+        return this.permissions.checkPermission('trip_create', u?.role ?? 'user', null, userId, false);
       },
       createTripForUser: (userId, input) => {
         try {

@@ -11,7 +11,7 @@ import { db } from '../db/database';
 import { JWT_SECRET, SESSION_DURATION_SECONDS, SESSION_DURATION_REMEMBER_SECONDS } from '../config';
 import { validatePassword } from './passwordPolicy';
 import { encryptMfaSecret, decryptMfaSecret } from './mfaCrypto';
-import { getAllPermissions } from './permissions';
+import { getAllPermissions } from '../nest/permissions/permissions.bridge';
 import { decrypt_api_key, maybe_encrypt_api_key, encrypt_api_key } from './apiKeyCrypto';
 import { createEphemeralToken } from './ephemeralTokens';
 // Import from sessionManager directly, NOT the ../mcp barrel: the barrel pulls

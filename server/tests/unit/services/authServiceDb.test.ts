@@ -49,7 +49,7 @@ vi.mock('../../../src/services/apiKeyCrypto', () => ({
   mask_stored_api_key: vi.fn((v: string | null | undefined) => (v ? '••••••••' : null)),
   encrypt_api_key: vi.fn((v) => v),
 }));
-vi.mock('../../../src/services/permissions', () => ({
+vi.mock('../../../src/nest/permissions/permissions.bridge', () => ({
   getAllPermissions: vi.fn(() => ({})),
   checkPermission: vi.fn(),
 }));

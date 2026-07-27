@@ -17,6 +17,7 @@ import { SettingsService } from '../../src/nest/settings/settings.service';
 import { FilesService } from '../../src/nest/files/files.service';
 import { CollabService } from '../../src/nest/collab/collab.service';
 import { VacayService } from '../../src/nest/vacay/vacay.service';
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -25,22 +26,24 @@ import { VacayService } from '../../src/nest/vacay/vacay.service';
  * the container.
  */
 export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFactory {
+  const permissions = new PermissionsService(dbs);
   return new PluginHostDepsFactory(
-    new BudgetService(dbs),
-    new ReservationsService(dbs),
+    new BudgetService(dbs, permissions),
+    new ReservationsService(dbs, permissions),
     new TagsService(dbs),
     new CategoriesService(dbs),
-    new TodoService(dbs),
-    new PackingService(dbs),
+    new TodoService(dbs, permissions),
+    new PackingService(dbs, permissions),
     new PluginOAuthService(dbs),
-    new DayNotesService(dbs),
-    new AssignmentsService(dbs),
+    new DayNotesService(dbs, permissions),
+    new AssignmentsService(dbs, permissions),
     new LlmConfigResolver(new SettingsService(dbs), dbs),
     dbs,
-    new FilesService(dbs),
-    new CollabService(dbs),
+    new FilesService(dbs, permissions),
+    new CollabService(dbs, permissions),
     new VacayService(dbs),
-    new DaysService(dbs),
+    new DaysService(dbs, permissions),
+    permissions,
   );
 }
 

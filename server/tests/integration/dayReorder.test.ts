@@ -29,9 +29,10 @@ import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb } from '../helpers/test-db';
 import { createUser, createTrip, createPlace, createDay, createDayAssignment, createReservation, createDayAccommodation } from '../helpers/factories';
 import { DatabaseService } from '../../src/nest/database/database.service';
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { DaysService, DayReorderError } from '../../src/nest/days/days.service';
 
-const svc = new DaysService(new DatabaseService(testDb));
+const svc = new DaysService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
 const reorderDays = (tripId: number, orderedIds: number[]) => svc.reorder(tripId, orderedIds);
 const insertDay = (tripId: number, position?: number) => svc.insert(tripId, position);
 

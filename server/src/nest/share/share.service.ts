@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import crypto from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import type { TripAccess } from '../database/database.service';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import { loadTagsByPlaceIds } from '../../services/queryHelpers';
 import { serveFilePath } from '../../services/placePhotoCache';
 import { SettingsService } from '../settings/settings.service';
@@ -55,6 +55,7 @@ export class ShareService {
   constructor(
     private readonly dbs: DatabaseService,
     private readonly settings: SettingsService,
+    private readonly permissions: PermissionsService,
   ) {}
 
   verifyTripAccess(tripId: string, userId: number) {
@@ -62,7 +63,7 @@ export class ShareService {
   }
 
   canManage(trip: Trip, user: User): boolean {
-    return checkPermission('share_manage', user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission('share_manage', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   /**

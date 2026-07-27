@@ -7,7 +7,7 @@
  * unguarded download's own token auth), trip-access 404, permission 403, the
  * photo id/access guards and status codes.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
@@ -47,8 +47,11 @@ vi.mock('../../src/db/database', () => ({
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../src/services/demo', () => ({ isDemoEmail: vi.fn(() => false) }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 const { photoSvc, helperSvc } = vi.hoisted(() => ({
   photoSvc: { streamPhoto: vi.fn(), getPhotoInfo: vi.fn(), resolveTrekPhoto: vi.fn() },
@@ -81,6 +84,7 @@ describe('Files + photos e2e (real auth guard + temp SQLite)', () => {
     db.prepare("INSERT INTO trip_files (id, trip_id, filename, original_name, uploaded_by) VALUES (1, 5, 'stored-a.pdf', 'a.pdf', 1)").run();
     db.prepare("INSERT INTO trip_files (id, trip_id, filename, original_name, uploaded_by, starred) VALUES (9, 5, 'stored-b.pdf', 'b.pdf', 1, 0)").run();
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 

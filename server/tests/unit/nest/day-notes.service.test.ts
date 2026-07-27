@@ -47,10 +47,11 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createDay, addTripMember } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { DayNotesService } from '../../../src/nest/days/day-notes.service';
 import type { DayNote } from '../../../src/types';
 
-const svc = new DayNotesService(new DatabaseService(testDb));
+const svc = new DayNotesService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
 
 beforeAll(() => {
   createTables(testDb);

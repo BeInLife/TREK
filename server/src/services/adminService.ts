@@ -15,7 +15,7 @@ import { prepareLlmAddonConfigForWrite, maskLlmAddonConfig } from './llmConfig';
 import { getPhotoProviderConfig } from './memories/helpersService';
 import { send as sendNotification } from './notificationService';
 import { validatePassword } from './passwordPolicy';
-import { getAllPermissions, savePermissions as savePerms, PERMISSION_ACTIONS } from './permissions';
+import { getAllPermissions, savePermissions as savePerms, PERMISSION_ACTIONS } from '../nest/permissions/permissions.bridge';
 import { deleteUserCompletely } from './userCleanupService';
 
 import bcrypt from 'bcryptjs';

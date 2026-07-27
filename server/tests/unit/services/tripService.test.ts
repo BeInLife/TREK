@@ -37,9 +37,10 @@ import { createUser, createTrip, createReservation, createPlace, createDay, crea
 import { exportICS, generateDays, deleteOldCover, updateTrip, transferOwnership, createGuest, renameGuest, deleteGuest, listMembers, addMember } from '../../../src/services/tripService';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { DaysService } from '../../../src/nest/days/days.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import fs from 'fs';
 
-const daysSvc = new DaysService(new DatabaseService(testDb));
+const daysSvc = new DaysService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
 const createAccommodation = daysSvc.createAccommodation.bind(daysSvc);
 
 beforeAll(() => {

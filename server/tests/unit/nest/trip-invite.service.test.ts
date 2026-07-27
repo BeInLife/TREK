@@ -37,9 +37,10 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { TripInviteService } from '../../../src/nest/trip-invite/trip-invite.service';
 
-const svc = new TripInviteService(new DatabaseService(testDb));
+const svc = new TripInviteService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
 
 beforeAll(() => { createTables(testDb); runMigrations(testDb); });
 beforeEach(() => resetTestDb(testDb));

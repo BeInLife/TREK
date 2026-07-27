@@ -4,7 +4,7 @@
  * (DI-injected, no service mock); journeyService, the permission check,
  * canAccessTrip and the WebSocket broadcast stay mocked.
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
@@ -49,8 +49,11 @@ vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 const { reconcileTripSkeletons } = vi.hoisted(() => ({ reconcileTripSkeletons: vi.fn() }));
 vi.mock('../../src/services/journeyService', () => ({ reconcileTripSkeletons }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 import { AssignmentsModule } from '../../src/nest/assignments/assignments.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
@@ -76,6 +79,7 @@ describe('Assignments e2e (real auth guard + temp SQLite)', () => {
     db.prepare('INSERT INTO days (id, trip_id) VALUES (3, 5), (4, 5)').run();
     db.prepare('INSERT INTO places (id, trip_id, name) VALUES (2, 5, ?)').run('Louvre');
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 

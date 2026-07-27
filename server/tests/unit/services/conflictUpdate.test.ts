@@ -42,8 +42,9 @@ import { updatePlace, createPlace } from '../../../src/services/placeService';
 import { isUpdateConflict } from '../../../src/services/conflictResult';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PackingService } from '../../../src/nest/packing/packing.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 
-const packing = new PackingService(new DatabaseService(testDb));
+const packing = new PackingService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
 
 beforeAll(() => {
   createTables(testDb);

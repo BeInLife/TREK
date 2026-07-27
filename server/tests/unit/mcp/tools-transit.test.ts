@@ -1,6 +1,6 @@
 import { runMigrations } from '../../../src/db/migrations';
 import { createTables } from '../../../src/db/schema';
-import { invalidatePermissionsCache, savePermissions } from '../../../src/services/permissions';
+import { invalidatePermissionsCache, savePermissions } from '../../../src/nest/permissions/permissions.bridge';
 import { addTripMember, createDay, createTrip, createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
 import { resetTestDb } from '../../helpers/test-db';

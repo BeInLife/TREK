@@ -59,10 +59,11 @@ import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip } from '../../helpers/factories';
 import { avatarUrl } from '../../../src/services/avatarUrl';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { CollabService } from '../../../src/nest/collab/collab.service';
 import { listNotes as bridgeListNotes, listPolls as bridgeListPolls, countMessages as bridgeCountMessages } from '../../../src/nest/collab/collab.bridge';
 
-const svc = new CollabService(new DatabaseService(testDb));
+const svc = new CollabService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
 
 beforeAll(() => {
   createTables(testDb);
@@ -440,7 +441,7 @@ describe('hardening', () => {
   it('COLLAB-SVC-034: votePoll switch is atomic — prior vote survives a failed INSERT', () => {
     const { user1, trip } = setup();
     const dbs = new DatabaseService(testDb);
-    const failing = new CollabService(dbs);
+    const failing = new CollabService(dbs, new PermissionsService(dbs));
     const poll = failing.createPoll(trip.id, user1.id, { question: 'Q?', options: ['A', 'B'] });
     failing.votePoll(trip.id, poll!.id, user1.id, 0);
 
@@ -461,7 +462,7 @@ describe('hardening', () => {
   it('COLLAB-SVC-035: deleteNote is atomic — trip_files rows survive a failed note DELETE', () => {
     const { user1, trip } = setup();
     const dbs = new DatabaseService(testDb);
-    const failing = new CollabService(dbs);
+    const failing = new CollabService(dbs, new PermissionsService(dbs));
     const note = failing.createNote(trip.id, user1.id, { title: 'With file' });
     testDb.prepare('INSERT INTO trip_files (trip_id, note_id, filename, original_name) VALUES (?, ?, ?, ?)')
       .run(trip.id, note.id, 'files/a.pdf', 'a.pdf');

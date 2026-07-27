@@ -1,6 +1,7 @@
 import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
 import { ReservationsService } from './reservations.service';
+import { PermissionsService } from '../permissions/permissions.service';
 
 export type { EndpointInput, ReservationEndpoint, ReservationTraveler } from './reservations.service';
 
@@ -18,7 +19,7 @@ export type { EndpointInput, ReservationEndpoint, ReservationTraveler } from './
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.
  */
-const reservations = new ReservationsService(new DatabaseService(db));
+const reservations = new ReservationsService(new DatabaseService(db), new PermissionsService(new DatabaseService(db)));
 
 export function listReservations(tripId: string | number) {
   return reservations.list(tripId);

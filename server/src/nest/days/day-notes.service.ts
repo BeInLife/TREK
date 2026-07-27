@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { broadcast } from '../../websocket';
-import { checkPermission } from '../../services/permissions';
+import { PermissionsService } from '../permissions/permissions.service';
 import type { DayNote, User } from '../../types';
 import { DatabaseService, type TripAccess } from '../database/database.service';
 
@@ -13,14 +13,17 @@ import { DatabaseService, type TripAccess } from '../database/database.service';
  */
 @Injectable()
 export class DayNotesService {
-  constructor(private readonly dbs: DatabaseService) {}
+  constructor(
+    private readonly dbs: DatabaseService,
+    private readonly permissions: PermissionsService,
+  ) {}
 
   verifyTripAccess(tripId: string | number, userId: number): TripAccess | undefined {
     return this.dbs.canAccessTrip(tripId, userId);
   }
 
   canEdit(trip: TripAccess, user: User): boolean {
-    return checkPermission('day_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
+    return this.permissions.checkPermission('day_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {

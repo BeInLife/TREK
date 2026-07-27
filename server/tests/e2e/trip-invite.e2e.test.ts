@@ -6,7 +6,7 @@
  * audit log are mocked. Focuses on auth (401), trip-access 404, the
  * share_manage 403, the login-required join, and invalid-token 404s (#1143).
  */
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi, type MockInstance } from 'vitest';
 import request from 'supertest';
 import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
@@ -39,8 +39,11 @@ vi.mock('../../src/db/database', () => ({
   db, canAccessTrip, isOwner: vi.fn(() => true), getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
 }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
-vi.mock('../../src/services/permissions', () => ({ checkPermission }));
+import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+
+// Since the permissions DI migration, the check is a spy on the container's
+// PermissionsService singleton (created in beforeAll, after build()).
+let checkPermission: MockInstance;
 
 const { joinTripAsMember } = vi.hoisted(() => ({ joinTripAsMember: vi.fn() }));
 vi.mock('../../src/services/tripMembership', () => ({ joinTripAsMember }));
@@ -77,6 +80,7 @@ describe('Trip invite-link e2e (real auth guard + temp SQLite)', () => {
     seedUser(db as never, { id: 1 });
     seedUser(db as never, { id: 2, username: 'e2e-user-2', email: 'e2e-2@example.test' });
     app = await build();
+    checkPermission = vi.spyOn(app.get(PermissionsService), 'checkPermission');
     server = app.getHttpServer();
   });
 

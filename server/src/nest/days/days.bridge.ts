@@ -1,6 +1,7 @@
 import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
 import { DaysService, addDays } from './days.service';
+import { PermissionsService } from '../permissions/permissions.service';
 
 /**
  * Non-Nest entry point for the day domain — for code running OUTSIDE the
@@ -16,7 +17,7 @@ import { DaysService, addDays } from './days.service';
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.
  */
-const days = new DaysService(new DatabaseService(db));
+const days = new DaysService(new DatabaseService(db), new PermissionsService(new DatabaseService(db)));
 
 export { addDays };
 

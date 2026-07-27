@@ -1,6 +1,7 @@
 import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
 import { CollabService } from './collab.service';
+import { PermissionsService } from '../permissions/permissions.service';
 
 /**
  * Non-Nest entry point for the collab domain — for code running OUTSIDE the
@@ -16,7 +17,7 @@ import { CollabService } from './collab.service';
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.
  */
-const collab = new CollabService(new DatabaseService(db));
+const collab = new CollabService(new DatabaseService(db), new PermissionsService(new DatabaseService(db)));
 
 export function listNotes(tripId: string | number) {
   return collab.listNotes(tripId);

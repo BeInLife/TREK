@@ -34,8 +34,8 @@ vi.mock('../../../src/db/database', () => dbMock);
 const { broadcast } = vi.hoisted(() => ({ broadcast: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast }));
 
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn(() => true) }));
-vi.mock('../../../src/services/permissions', () => ({ checkPermission }));
+const checkPermission = vi.fn(() => true);
+const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
 const { budget } = vi.hoisted(() => ({
   budget: { createBudgetItem: vi.fn(), updateBudgetItem: vi.fn(), deleteBudgetItem: vi.fn(), linkBudgetItemToReservation: vi.fn() },
@@ -50,10 +50,11 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createReservation, createBudgetItem, createPlace, createDay, createDayAccommodation, addTripMember } from '../../helpers/factories';
 import { DatabaseService } from '../../../src/nest/database/database.service';
+import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
 import * as bridge from '../../../src/nest/reservations/reservations.bridge';
 
-const svc = new ReservationsService(new DatabaseService(testDb));
+const svc = new ReservationsService(new DatabaseService(testDb), permissionsStub);
 
 beforeAll(() => { createTables(testDb); runMigrations(testDb); });
 beforeEach(() => {

@@ -4,9 +4,9 @@
  * per-plugin data db is cached, a granted db:own call works through the wired
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
  * DI-native domains (budget/reservations/tags/categories/todo/packing/
- * day-notes/days/assignments/oauth/llm-config/files/collab/vacay) are
- * constructor-injected stubs; legacy services/* domains stay path-mocked until
- * their own DI migration lands.
+ * day-notes/days/assignments/oauth/llm-config/files/collab/vacay/permissions)
+ * are constructor-injected stubs; legacy services/* domains stay path-mocked
+ * until their own DI migration lands.
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import fs from 'node:fs';
@@ -57,10 +57,11 @@ const budgetStub = {
   remove(id: string, _tid: string) { return id !== '404'; },
 } as unknown as BudgetService;
 
-// Edit permission — flip per test to exercise the gates.
+// Edit permission — flip per test to exercise the gates (constructor-injected
+// stub since the permissions DI migration).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn((..._a: any[]) => true as boolean) }));
-vi.mock('../../../src/services/permissions', () => ({ checkPermission }));
+const checkPermission = vi.fn((..._a: any[]) => true as boolean);
+const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
 // The core write services are delegated to; mock them so the host deps'
 // wiring + error branches run without the full core schema. The error classes must
@@ -320,12 +321,13 @@ import type { LlmConfigResolver } from '../../../src/nest/llm-parse/llm-config.r
 import type { FilesService } from '../../../src/nest/files/files.service';
 import type { CollabService } from '../../../src/nest/collab/collab.service';
 import type { VacayService } from '../../../src/nest/vacay/vacay.service';
+import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 
