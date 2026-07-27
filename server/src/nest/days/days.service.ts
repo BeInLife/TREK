@@ -70,7 +70,12 @@ export interface CreateAccommodationData {
  * defaults, the post-write re-selects, the two-phase negative-day_number
  * renumber and the reservation re-stamping). The legacy hand-rolled
  * BEGIN/COMMIT blocks in reorder/insert became db.transaction() (same
- * rollback-on-throw semantics, savepoint-safe when nested). Trip access
+ * rollback-on-throw semantics, savepoint-safe when nested). Verified defects
+ * were fixed after the port (2026-07): update() now presence-sentinels BOTH
+ * columns (the legacy always-write wiped notes when only a title was sent),
+ * createAccommodation/deleteAccommodation run their multi-statement writes in
+ * a transaction, and getAssignmentsForDay batch-loads tags instead of one
+ * query per assignment. Trip access
  * mirrors the requireTripAccess middleware (canAccessTrip); mutations use the
  * 'day_edit' permission; the WebSocket broadcast keeps its legacy call path.
  * Non-Nest consumers (legacy tripService and the transit/transports MCP
@@ -113,12 +118,13 @@ export class DaysService {
     ORDER BY da.order_index ASC, da.created_at ASC
   `, dayId);
 
+    // One batched tag load instead of the legacy per-assignment query; the
+    // non-compact loader returns the same full tag rows (t.* minus the join
+    // key), so the output shape is unchanged.
+    const tagsByPlaceId = loadTagsByPlaceIds([...new Set(assignments.map(a => a.place_id))]);
+
     return assignments.map(a => {
-      const tags = this.db.all(`
-      SELECT t.* FROM tags t
-      JOIN place_tags pt ON t.id = pt.tag_id
-      WHERE pt.place_id = ?
-    `, a.place_id);
+      const tags = tagsByPlaceId[a.place_id] || [];
 
       return {
         id: a.id,
@@ -237,9 +243,13 @@ export class DaysService {
   }
 
   update(id: string | number, current: Day, fields: { notes?: string; title?: string | null }) {
+    // Both columns use the presence sentinel: an absent key preserves the
+    // current value (the legacy version always wrote notes, so setting a title
+    // silently wiped the day's notes — the client sends the two fields in
+    // separate requests).
     this.db.run('UPDATE days SET notes = ?, title = ? WHERE id = ?',
-      fields.notes || null,
-      'title' in fields ? (fields.title ?? null) : current.title,
+      'notes' in fields ? (fields.notes || null) : (current.notes ?? null),
+      'title' in fields ? (fields.title ?? null) : (current.title ?? null),
       id
     );
     const updatedDay = this.db.get<Day>('SELECT * FROM days WHERE id = ?', id)!;
@@ -533,28 +543,34 @@ export class DaysService {
   createAccommodation(tripId: string | number, data: CreateAccommodationData) {
     const { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes } = data;
 
-    const result = this.db.run(
-      'INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      tripId, place_id, start_day_id, end_day_id, check_in || null, check_in_end || null, check_out || null, confirmation || null, notes || null
-    );
+    // The stay and its partner hotel reservation are one logical write —
+    // atomic, so a failed reservation insert can't leave an orphan stay.
+    const accommodationId = this.db.transaction(() => {
+      const result = this.db.run(
+        'INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        tripId, place_id, start_day_id, end_day_id, check_in || null, check_in_end || null, check_out || null, confirmation || null, notes || null
+      );
 
-    const accommodationId = result.lastInsertRowid;
+      const newId = result.lastInsertRowid;
 
-    // Auto-create linked reservation for this accommodation
-    const placeName = this.db.get<{ name: string }>('SELECT name FROM places WHERE id = ?', place_id)?.name || 'Hotel';
-    const startDayDate = this.db.get<{ date: string }>('SELECT date FROM days WHERE id = ?', start_day_id)?.date || null;
-    const meta: Record<string, string> = {};
-    if (check_in) meta.check_in_time = check_in;
-    if (check_in_end) meta.check_in_end_time = check_in_end;
-    if (check_out) meta.check_out_time = check_out;
-    this.db.run(`
+      // Auto-create linked reservation for this accommodation
+      const placeName = this.db.get<{ name: string }>('SELECT name FROM places WHERE id = ?', place_id)?.name || 'Hotel';
+      const startDayDate = this.db.get<{ date: string }>('SELECT date FROM days WHERE id = ?', start_day_id)?.date || null;
+      const meta: Record<string, string> = {};
+      if (check_in) meta.check_in_time = check_in;
+      if (check_in_end) meta.check_in_end_time = check_in_end;
+      if (check_out) meta.check_out_time = check_out;
+      this.db.run(`
     INSERT INTO reservations (trip_id, day_id, title, reservation_time, location, confirmation_number, notes, status, type, accommodation_id, metadata)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'confirmed', 'hotel', ?, ?)
   `,
-      tripId, start_day_id, placeName, startDayDate || null, null,
-      confirmation || null, notes || null, accommodationId,
-      Object.keys(meta).length > 0 ? JSON.stringify(meta) : null
-    );
+        tripId, start_day_id, placeName, startDayDate || null, null,
+        confirmation || null, notes || null, newId,
+        Object.keys(meta).length > 0 ? JSON.stringify(meta) : null
+      );
+
+      return newId;
+    });
 
     return this.getAccommodationWithPlace(accommodationId);
   }
@@ -595,20 +611,22 @@ export class DaysService {
     return this.getAccommodationWithPlace(Number(id));
   }
 
-  /** Delete accommodation and its linked reservation (and any linked budget item). */
+  /** Delete accommodation and its linked reservation (and any linked budget item), atomically. */
   deleteAccommodation(id: string | number): { linkedReservationId: number | null; deletedBudgetItemId: number | null } {
-    const linkedRes = this.db.get<{ id: number }>('SELECT id FROM reservations WHERE accommodation_id = ?', Number(id));
-    let deletedBudgetItemId: number | null = null;
-    if (linkedRes) {
-      const linkedBudget = this.db.get<{ id: number }>('SELECT id FROM budget_items WHERE reservation_id = ?', linkedRes.id);
-      if (linkedBudget) {
-        this.db.run('DELETE FROM budget_items WHERE id = ?', linkedBudget.id);
-        deletedBudgetItemId = linkedBudget.id;
+    return this.db.transaction(() => {
+      const linkedRes = this.db.get<{ id: number }>('SELECT id FROM reservations WHERE accommodation_id = ?', Number(id));
+      let deletedBudgetItemId: number | null = null;
+      if (linkedRes) {
+        const linkedBudget = this.db.get<{ id: number }>('SELECT id FROM budget_items WHERE reservation_id = ?', linkedRes.id);
+        if (linkedBudget) {
+          this.db.run('DELETE FROM budget_items WHERE id = ?', linkedBudget.id);
+          deletedBudgetItemId = linkedBudget.id;
+        }
+        this.db.run('DELETE FROM reservations WHERE id = ?', linkedRes.id);
       }
-      this.db.run('DELETE FROM reservations WHERE id = ?', linkedRes.id);
-    }
 
-    this.db.run('DELETE FROM day_accommodations WHERE id = ?', id);
-    return { linkedReservationId: linkedRes ? linkedRes.id : null, deletedBudgetItemId };
+      this.db.run('DELETE FROM day_accommodations WHERE id = ?', id);
+      return { linkedReservationId: linkedRes ? linkedRes.id : null, deletedBudgetItemId };
+    });
   }
 }

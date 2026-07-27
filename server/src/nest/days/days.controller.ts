@@ -108,7 +108,10 @@ export class DaysController {
     if (!current) {
       throw new HttpException({ error: 'Day not found' }, 404);
     }
-    const day = this.days.update(id, current as never, { notes: body.notes, title: body.title });
+    // The zod-parsed body carries only the keys the client actually sent, so
+    // the service's presence sentinels preserve the omitted column (the client
+    // updates notes and title in separate requests).
+    const day = this.days.update(id, current as never, body);
     this.days.broadcast(tripId, 'day:updated', { day }, socketId);
     return { day };
   }

@@ -55,7 +55,7 @@ export class DaysMcp {
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     const current = this.days.getDay(dayId, tripId);
     if (!current) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
-    const updated = this.days.update(dayId, current, title !== undefined ? { title } : {});
+    const updated = this.days.update(dayId, current, { title });
     safeBroadcast(tripId, 'day:updated', { day: updated });
     return ok({ day: updated });
   }

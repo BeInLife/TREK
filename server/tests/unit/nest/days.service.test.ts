@@ -1,7 +1,9 @@
 /**
  * Unit tests for the DI-native DaysService — DAY-SVC-001 through DAY-SVC-026
  * moved 1:1 from the legacy tests/unit/services/dayService.test.ts;
- * DAY-SVC-027 through DAY-SVC-032 pin the days.bridge delegation.
+ * DAY-SVC-027 through DAY-SVC-032 pin the days.bridge delegation;
+ * DAY-SVC-033 through DAY-SVC-036 pin the post-port defect fixes (update
+ * presence sentinels, accommodation write atomicity, batched tag load).
  * Uses a real in-memory SQLite DB so SQL logic is exercised faithfully.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
@@ -479,3 +481,69 @@ describe('days.bridge', () => {
   });
 });
 
+// ── post-port defect fixes ────────────────────────────────────────────────────
+
+describe('quirk fixes', () => {
+  it('DAY-SVC-033 — update preserves the omitted column (title-only keeps notes, notes-only keeps title)', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    let day = createDay(testDb, trip.id);
+    day = svc.update(day.id, day, { notes: 'Walking day' }) as never;
+    day = svc.update(day.id, day, { title: 'Arrival' }) as never;
+    expect(day).toMatchObject({ title: 'Arrival', notes: 'Walking day' });
+    day = svc.update(day.id, day, { notes: 'Museum day' }) as never;
+    expect(day).toMatchObject({ title: 'Arrival', notes: 'Museum day' });
+    // A present key still clears via the legacy falsy coercion.
+    day = svc.update(day.id, day, { notes: '' }) as never;
+    expect(day.notes).toBeNull();
+    expect(day.title).toBe('Arrival');
+  });
+
+  it('DAY-SVC-034 — createAccommodation is atomic: a failed reservation insert leaves no orphan stay', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+    const place = createPlace(testDb, trip.id, { name: 'Hotel' });
+    testDb.exec("CREATE TRIGGER boom BEFORE INSERT ON reservations BEGIN SELECT RAISE(ABORT, 'boom'); END");
+    try {
+      expect(() => svc.createAccommodation(trip.id, {
+        place_id: place.id, start_day_id: day.id, end_day_id: day.id,
+      })).toThrow();
+      expect(testDb.prepare('SELECT COUNT(*) as n FROM day_accommodations WHERE trip_id = ?').get(trip.id)).toMatchObject({ n: 0 });
+    } finally {
+      testDb.exec('DROP TRIGGER boom');
+    }
+  });
+
+  it('DAY-SVC-035 — deleteAccommodation is atomic: a failed stay delete keeps the linked reservation', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+    const place = createPlace(testDb, trip.id, { name: 'Hotel' });
+    const accom = svc.createAccommodation(trip.id, {
+      place_id: place.id, start_day_id: day.id, end_day_id: day.id,
+    }) as { id: number };
+    testDb.exec("CREATE TRIGGER boom BEFORE DELETE ON day_accommodations BEGIN SELECT RAISE(ABORT, 'boom'); END");
+    try {
+      expect(() => svc.deleteAccommodation(accom.id)).toThrow();
+      // The earlier reservation delete inside the transaction rolled back.
+      expect(testDb.prepare('SELECT COUNT(*) as n FROM reservations WHERE accommodation_id = ?').get(accom.id)).toMatchObject({ n: 1 });
+    } finally {
+      testDb.exec('DROP TRIGGER boom');
+    }
+  });
+
+  it('DAY-SVC-036 — getAssignmentsForDay returns full tag rows from the batched load', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+    const place = createPlace(testDb, trip.id, { name: 'Tagged' });
+    createDayAssignment(testDb, day.id, place.id);
+    const tagId = Number(testDb.prepare('INSERT INTO tags (user_id, name, color) VALUES (?, ?, ?)').run(user.id, 'Food', '#ff0000').lastInsertRowid);
+    testDb.prepare('INSERT INTO place_tags (place_id, tag_id) VALUES (?, ?)').run(place.id, tagId);
+
+    const assignments = svc.getAssignmentsForDay(day.id);
+    expect(assignments[0].place.tags).toHaveLength(1);
+    expect(assignments[0].place.tags[0]).toMatchObject({ id: tagId, name: 'Food', color: '#ff0000' });
+  });
+});

@@ -139,6 +139,17 @@ describe('Days + day-notes e2e (real auth guard + temp SQLite, real day SQL)', (
       .send({ notes: 'Walking day', title: 'Arrival' });
     expect(res.status).toBe(200);
     expect(res.body.day).toMatchObject({ id: 3, notes: 'Walking day', title: 'Arrival', assignments: [] });
+    // The client updates title and notes in separate requests — an omitted
+    // field must survive (post-port defect fix: the legacy update always wrote
+    // both columns, so a title-only PUT wiped the notes).
+    const titleOnly = await request(server).put('/api/trips/5/days/3').set('Cookie', sessionCookie(1))
+      .send({ title: 'Renamed' });
+    expect(titleOnly.status).toBe(200);
+    expect(titleOnly.body.day).toMatchObject({ id: 3, notes: 'Walking day', title: 'Renamed' });
+    const notesOnly = await request(server).put('/api/trips/5/days/3').set('Cookie', sessionCookie(1))
+      .send({ notes: 'Museum day' });
+    expect(notesOnly.status).toBe(200);
+    expect(notesOnly.body.day).toMatchObject({ id: 3, notes: 'Museum day', title: 'Renamed' });
     const miss = await request(server).put('/api/trips/5/days/99').set('Cookie', sessionCookie(1)).send({ notes: 'x' });
     expect(miss.status).toBe(404);
     expect(miss.body).toEqual({ error: 'Day not found' });

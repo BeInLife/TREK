@@ -95,6 +95,22 @@ describe('Tool: update_day', () => {
     });
   });
 
+  it('setting a title preserves the day notes (post-port defect fix)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const day = createDay(testDb, trip.id);
+    testDb.prepare('UPDATE days SET notes = ? WHERE id = ?').run('Walking day', day.id);
+
+    await withHarness(user.id, async (h) => {
+      const result = await h.client.callTool({
+        name: 'update_day',
+        arguments: { tripId: trip.id, dayId: day.id, title: 'Arrival' },
+      });
+      const data = parseToolResult(result) as { day: { title: string; notes: string } };
+      expect(data.day).toMatchObject({ title: 'Arrival', notes: 'Walking day' });
+    });
+  });
+
   it('broadcasts day:updated event', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
