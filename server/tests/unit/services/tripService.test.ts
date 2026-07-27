@@ -35,8 +35,12 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createTrip, createReservation, createPlace, createDay, createDayAssignment, createDayNote, addTripMember } from '../../helpers/factories';
 import { exportICS, generateDays, deleteOldCover, updateTrip, transferOwnership, createGuest, renameGuest, deleteGuest, listMembers, addMember } from '../../../src/services/tripService';
-import { createAccommodation } from '../../../src/services/dayService';
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { DaysService } from '../../../src/nest/days/days.service';
 import fs from 'fs';
+
+const daysSvc = new DaysService(new DatabaseService(testDb));
+const createAccommodation = daysSvc.createAccommodation.bind(daysSvc);
 
 beforeAll(() => {
   createTables(testDb);

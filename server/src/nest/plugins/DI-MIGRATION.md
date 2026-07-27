@@ -19,7 +19,7 @@ The plugin runtime has three layers. Only the third is "un-Nest".
 |---|---|---|---|
 | Sandbox / transport | `supervisor/plugin-supervisor.ts`, `runtime/plugin-host-entry.ts`, `protocol/envelope.ts` | Forked child per plugin, IPC envelopes, permission tables, actor resolution, rate limiting, RSS policing | Intentionally not — this is the security boundary |
 | Enforcement | `host/rpc-host.ts` (~1330 lines) | `PluginRpcHost`: builds a per-plugin method map at spawn — a handler is registered **only if the plugin holds the unlocking permission** (registration = authorization). Depends only on the `HostDeps` interface | Neutral — decoupled by design |
-| **Wiring** | `host/plugin-host-deps.factory.ts` (was `create-rpc-host.ts`) | Fills the ~130-member `HostDeps` object. Since Option A: an `@Injectable() PluginHostDepsFactory` with the DI-native domain services (`BudgetService`, `ReservationsService`, `TagsService`, `CategoriesService`, `TodoService`, `PluginOAuthService`) constructor-injected; legacy `services/*` domains stay plain function imports until their own migration. Raw `db`/`broadcast` also stay until injectable equivalents exist | **Yes (Option A)** — drains further per §3 |
+| **Wiring** | `host/plugin-host-deps.factory.ts` (was `create-rpc-host.ts`) | Fills the ~130-member `HostDeps` object. Since Option A: an `@Injectable() PluginHostDepsFactory` with the DI-native domain services (`BudgetService`, `ReservationsService`, `TagsService`, `CategoriesService`, `TodoService`, `PluginOAuthService`) constructor-injected, fourteen domains as of 2026-07; legacy `services/*` domains stay plain function imports until their own migration. Raw `db`/`broadcast` also stay until injectable equivalents exist | **Yes (Option A)** — drains further per §3 |
 | Host state | `host/plugin-host-state.ts` | Deliberately module-level (NOT a provider): the per-plugin data-DB map (`getPluginDataDb`/`closePluginDataDb`) and daily broker budgets (`budgetFor`/`pluginBudgetUsage`). Must be one shared instance across host recreations, and is read by `PluginsService`, which the factory imports from — folding it into the injectable would create a provider cycle | Intentionally not |
 
 Key fact that made Option A cheap: the wiring is **called from inside a Nest
@@ -109,9 +109,10 @@ fileService swapped in 2026-07 — its ten imported symbols became the injected
 `FilesService` plus the load-time constants from `files.constants.ts`;
 collabService swapped in 2026-07 — its seven imported symbols became the
 injected `CollabService`, completing Wave 3; vacayService swapped in 2026-07 —
-its four imported symbols became the injected `VacayService`; the remaining
-factory imports are all Wave-4+ domains: trips, places, days, journeys, atlas,
-collections).
+its four imported symbols became the injected `VacayService`; dayService
+swapped in 2026-07 — its eleven imported symbols (the heaviest single import)
+became the injected `DaysService`; the remaining factory imports are all
+Wave-4+ domains: trips, places, journeys, atlas, collections).
 
 ### Test impact (as landed)
 
@@ -119,7 +120,7 @@ collections).
   `PluginRpcHost` directly with hand-built `HostDeps`).
 - `tests/unit/plugins/plugin-host-deps.factory.test.ts` (was
   `create-rpc-host.test.ts`) — the six DI-domain path mocks became constructor
-  stubs (eleven stubs as of the 2026-07 vacay migration); the ~24
+  stubs (fourteen stubs as of the 2026-07 day migration); the ~23
   legacy-service path mocks remain; a file-local shim keeps the
   historical `createRealRpcHost(id, granted)` call sites and supplies a default
   no-op router.
@@ -233,8 +234,9 @@ none of it is throwaway.
    done 2026-07 with no factory impact — it was never imported here;
    `reservationService` done 2026-07, draining the factory's last
    plain-function reservation import — `notifyBookingChange` became a private
-   method over the already-injected `ReservationsService`; next per
-   `src/nest/README.md`): migrate the
+   method over the already-injected `ReservationsService`; `dayService` done
+   2026-07, the heaviest factory import — eleven symbols became the injected
+   `DaysService`; next per `src/nest/README.md`): migrate the
    service to DI as usual; the factory swaps one legacy import for one
    injected service. Optionally pilot `tags.rpc.ts` here — tags is small and
    already fully DI on HTTP + MCP.

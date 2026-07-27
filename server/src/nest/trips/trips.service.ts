@@ -4,8 +4,8 @@ import { broadcast } from '../../websocket';
 import { checkPermission } from '../../services/permissions';
 import type { User } from '../../types';
 import * as tripSvc from '../../services/tripService';
-import { listDays, listAccommodations } from '../../services/dayService';
 import { listPlaces } from '../../services/placeService';
+import { DaysService } from '../days/days.service';
 import { PackingService } from '../packing/packing.service';
 import { TodoService } from '../todo/todo.service';
 import { listBudgetItems, rebaseTripCurrency } from '../../services/budgetService';
@@ -28,6 +28,7 @@ export class TripsService {
     private readonly packing: PackingService,
     private readonly files: FilesService,
     private readonly reservations: ReservationsService,
+    private readonly days: DaysService,
   ) {}
 
   private get db() {
@@ -133,7 +134,7 @@ export class TripsService {
 
   /** Aggregates every trip sub-collection for offline caching (legacy /:id/bundle). */
   bundle(tripId: string, trip: { user_id: number }, viewerId: number) {
-    const { days } = listDays(tripId);
+    const { days } = this.days.list(tripId);
     const { owner, members } = this.listMembers(tripId, trip.user_id);
     return {
       trip,
@@ -146,7 +147,7 @@ export class TripsService {
       budgetItems: listBudgetItems(tripId),
       reservations: this.reservations.list(tripId),
       files: this.files.listFiles(tripId, false),
-      accommodations: listAccommodations(tripId),
+      accommodations: this.days.listAccommodations(tripId),
       members: [owner, ...(members || [])].filter(Boolean),
     };
   }

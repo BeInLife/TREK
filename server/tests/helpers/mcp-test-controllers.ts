@@ -10,6 +10,8 @@ import { CollabService } from '../../src/nest/collab/collab.service';
 import { DatabaseService } from '../../src/nest/database/database.service';
 import { DayNotesMcp } from '../../src/nest/days/day-notes.mcp';
 import { DayNotesService } from '../../src/nest/days/day-notes.service';
+import { DaysMcp } from '../../src/nest/days/days.mcp';
+import { DaysService } from '../../src/nest/days/days.service';
 import { PackingMcp } from '../../src/nest/packing/packing.mcp';
 import { PackingService } from '../../src/nest/packing/packing.service';
 import { ReservationsMcp } from '../../src/nest/reservations/reservations.mcp';
@@ -30,15 +32,17 @@ import { VacayService } from '../../src/nest/vacay/vacay.service';
  */
 export function createMcpTestRegistry(): McpRegistry {
   const dbService = new DatabaseService(db);
+  const daysService = new DaysService(dbService);
   return createTestRegistry(
     [
       new TagsMcp(new TagsService(dbService)),
       new CategoriesMcp(new CategoriesService(dbService)),
       new TodoMcp(new TodoService(dbService)),
       new PackingMcp(new PackingService(dbService)),
-      new ReservationsMcp(new ReservationsService(dbService)),
+      new ReservationsMcp(new ReservationsService(dbService), daysService),
       new DayNotesMcp(new DayNotesService(dbService)),
-      new AssignmentsMcp(new AssignmentsService(dbService)),
+      new DaysMcp(daysService, dbService),
+      new AssignmentsMcp(new AssignmentsService(dbService), daysService),
       new CollabMcp(new CollabService(dbService)),
       new VacayMcp(new VacayService(dbService)),
     ],

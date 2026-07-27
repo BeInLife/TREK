@@ -7,7 +7,7 @@ import {
   type EndpointInput,
 } from '../../nest/reservations/reservations.bridge';
 import { linkBudgetItemToReservation } from '../../services/budgetService';
-import { getDay } from '../../services/dayService';
+import { getDay } from '../../nest/days/days.bridge';
 import { findByIata } from '../../services/airportService';
 import {
   safeBroadcast, TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,

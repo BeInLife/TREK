@@ -3,7 +3,7 @@ import { HttpException } from '@nestjs/common';
 import { DaysController } from '../../../src/nest/days/days.controller';
 import { DayNotesController } from '../../../src/nest/days/day-notes.controller';
 import { DayNoteCreateDto, DayNoteUpdateDto } from '../../../src/nest/days/day-notes.dto';
-import { DayReorderError } from '../../../src/services/dayService';
+import { DayReorderError } from '../../../src/nest/days/days.service';
 import type { DaysService } from '../../../src/nest/days/days.service';
 import type { DayNotesService } from '../../../src/nest/days/day-notes.service';
 import type { User } from '../../../src/types';

@@ -1,7 +1,7 @@
 import { canAccessTrip } from '../../db/database';
 import { RateLimitService } from '../../nest/auth/rate-limit.service';
 import { isDemoUser } from '../../services/authService';
-import { getDay, listDays } from '../../services/dayService';
+import { getDay, listDays } from '../../nest/days/days.bridge';
 import { createReservation, notifyBookingChange } from '../../nest/reservations/reservations.bridge';
 import {
   buildTransitReservationParts,

@@ -6,10 +6,10 @@ import {
 import { z } from 'zod';
 import { isDemoUser } from '../../services/authService';
 import { linkBudgetItemToReservation } from '../../services/budgetService';
-import { getDay } from '../../services/dayService';
 import { placeExists, getAssignmentForTrip } from '../assignments/assignments.bridge';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
 import { ReservationsService } from './reservations.service';
+import { DaysService } from '../days/days.service';
 
 function parseId(value: string | string[]): number | null {
   const n = Number(Array.isArray(value) ? value[0] : value);
@@ -28,7 +28,10 @@ function parseId(value: string | string[]): number | null {
  */
 @McpController()
 export class ReservationsMcp {
-  constructor(private readonly reservations: ReservationsService) {}
+  constructor(
+    private readonly reservations: ReservationsService,
+    private readonly days: DaysService,
+  ) {}
 
   @Tool({
     name: 'create_reservation',
@@ -68,13 +71,13 @@ export class ReservationsMcp {
     if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
 
     // Validate that all referenced IDs belong to this trip
-    if (day_id && !getDay(day_id, tripId))
+    if (day_id && !this.days.getDay(day_id, tripId))
       return errorResult('day_id does not belong to this trip.');
     if (place_id && !placeExists(place_id, tripId))
       return errorResult('place_id does not belong to this trip.');
-    if (start_day_id && !getDay(start_day_id, tripId))
+    if (start_day_id && !this.days.getDay(start_day_id, tripId))
       return errorResult('start_day_id does not belong to this trip.');
-    if (end_day_id && !getDay(end_day_id, tripId))
+    if (end_day_id && !this.days.getDay(end_day_id, tripId))
       return errorResult('end_day_id does not belong to this trip.');
     if (assignment_id && !getAssignmentForTrip(assignment_id, tripId))
       return errorResult('assignment_id does not belong to this trip.');
@@ -237,9 +240,9 @@ export class ReservationsMcp {
 
     if (!placeExists(place_id, tripId))
       return errorResult('place_id does not belong to this trip.');
-    if (!getDay(start_day_id, tripId))
+    if (!this.days.getDay(start_day_id, tripId))
       return errorResult('start_day_id does not belong to this trip.');
-    if (!getDay(end_day_id, tripId))
+    if (!this.days.getDay(end_day_id, tripId))
       return errorResult('end_day_id does not belong to this trip.');
 
     const isNewAccommodation = !current.accommodation_id;

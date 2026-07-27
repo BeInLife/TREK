@@ -3,19 +3,22 @@ import { broadcast } from '../../websocket';
 import { DatabaseService } from '../database/database.service';
 import { checkPermission } from '../../services/permissions';
 import type { User } from '../../types';
-import * as dayService from '../../services/dayService';
+import { DaysService } from '../days/days.service';
 
 type Trip = { user_id: number };
 
 /**
- * Thin Nest wrapper around the accommodation parts of the existing day service.
+ * Thin Nest wrapper around the accommodation parts of the day domain.
  * Accommodations are gated by the 'day_edit' permission (same as days) and the
- * SQL + cascade (linked reservation / budget cleanup on delete) reuse the legacy
- * code unchanged.
+ * SQL + cascade (linked reservation / budget cleanup on delete) live on the
+ * injected DaysService (the DI-native home of the legacy dayService).
  */
 @Injectable()
 export class AccommodationsService {
-  constructor(private readonly dbs: DatabaseService) {}
+  constructor(
+    private readonly dbs: DatabaseService,
+    private readonly days: DaysService,
+  ) {}
 
   /** Mirrors the requireTripAccess middleware (owner or member), returning the trip. */
   verifyTripAccess(tripId: string, userId: number) {
@@ -31,26 +34,26 @@ export class AccommodationsService {
   }
 
   list(tripId: string) {
-    return dayService.listAccommodations(tripId);
+    return this.days.listAccommodations(tripId);
   }
 
   validateRefs(tripId: string, placeId?: number, startDayId?: number, endDayId?: number) {
-    return dayService.validateAccommodationRefs(tripId, placeId, startDayId, endDayId);
+    return this.days.validateAccommodationRefs(tripId, placeId, startDayId, endDayId);
   }
 
   get(id: string, tripId: string) {
-    return dayService.getAccommodation(id, tripId);
+    return this.days.getAccommodation(id, tripId);
   }
 
-  create(tripId: string, data: Parameters<typeof dayService.createAccommodation>[1]) {
-    return dayService.createAccommodation(tripId, data);
+  create(tripId: string, data: Parameters<DaysService['createAccommodation']>[1]) {
+    return this.days.createAccommodation(tripId, data);
   }
 
-  update(id: string, existing: Parameters<typeof dayService.updateAccommodation>[1], fields: Parameters<typeof dayService.updateAccommodation>[2]) {
-    return dayService.updateAccommodation(id, existing, fields);
+  update(id: string, existing: Parameters<DaysService['updateAccommodation']>[1], fields: Parameters<DaysService['updateAccommodation']>[2]) {
+    return this.days.updateAccommodation(id, existing, fields);
   }
 
   remove(id: string) {
-    return dayService.deleteAccommodation(id);
+    return this.days.deleteAccommodation(id);
   }
 }

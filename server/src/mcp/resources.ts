@@ -1,7 +1,6 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp';
 import { canAccessTrip } from '../db/database';
 import { listTrips, getTrip, getTripOwner, listMembers } from '../services/tripService';
-import { listDays, listAccommodations } from '../services/dayService';
 import { listPlaces } from '../services/placeService';
 import { listBudgetItems, getPerPersonSummary, calculateSettlement } from '../services/budgetService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
@@ -71,19 +70,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // Days with assigned places
-  if (canReadTrips(scopes)) server.registerResource(
-    'trip-days',
-    new ResourceTemplate('trek://trips/{tripId}/days', { list: undefined }),
-    { description: 'Days of a trip with their assigned places', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-
-      const { days } = listDays(id);
-      return jsonContent(uri.href, days);
-    }
-  );
+  // The trip-days resource moved to the DI-discovered
+  // src/nest/days/days.mcp.ts (@ResourceTemplate).
 
   // Places in a trip
   if (canRead(scopes, 'places')) server.registerResource(
@@ -121,18 +109,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
   // The day-notes resource moved to the DI-discovered
   // src/nest/days/day-notes.mcp.ts (@ResourceTemplate).
 
-  // Accommodations (hotels, rentals) per trip
-  if (canReadTrips(scopes)) server.registerResource(
-    'trip-accommodations',
-    new ResourceTemplate('trek://trips/{tripId}/accommodations', { list: undefined }),
-    { description: 'Accommodations (hotels, rentals) for a trip with check-in/out details', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const accommodations = listAccommodations(id);
-      return jsonContent(uri.href, accommodations);
-    }
-  );
+  // The trip-accommodations resource moved to the DI-discovered
+  // src/nest/days/days.mcp.ts (@ResourceTemplate).
 
   // Trip members (owner + collaborators)
   if (canReadTrips(scopes)) server.registerResource(

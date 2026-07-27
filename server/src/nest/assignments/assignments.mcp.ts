@@ -6,9 +6,9 @@ import {
 } from '@trek/nest-mcp';
 import { z } from 'zod';
 import { isDemoUser } from '../../services/authService';
-import { getDay } from '../../services/dayService';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
 import { AssignmentsService } from './assignments.service';
+import { DaysService } from '../days/days.service';
 
 /**
  * Assignment MCP surface — ported 1:1 from the legacy registrar in
@@ -16,12 +16,15 @@ import { AssignmentsService } from './assignments.service';
  * annotations, error/payload shapes and broadcasts). The legacy `if (R)` /
  * `if (W)` registration gates on the 'places' scope group map to the
  * declarative access markers (resolved by trekMcpAccessPolicy); there is no
- * addon gate, so no `when`. The target-day check on move keeps its legacy
- * dayService.getDay call path.
+ * addon gate, so no `when`. The target-day check on move uses the injected
+ * DaysService.getDay.
  */
 @McpController()
 export class AssignmentsMcp {
-  constructor(private readonly assignments: AssignmentsService) {}
+  constructor(
+    private readonly assignments: AssignmentsService,
+    private readonly days: DaysService,
+  ) {}
 
   @Tool({
     name: 'assign_place_to_day',
@@ -132,7 +135,7 @@ export class AssignmentsMcp {
     if (!this.assignments.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.assignments.getAssignmentForTrip(assignmentId, tripId)) return errorResult('Assignment not found.');
-    if (!getDay(newDayId, tripId)) return errorResult('Day not found.');
+    if (!this.days.getDay(newDayId, tripId)) return errorResult('Day not found.');
     const result = this.assignments.moveAssignment(assignmentId, newDayId, orderIndex ?? 0);
     safeBroadcast(tripId, 'assignment:moved', { assignment: result.assignment, oldDayId: result.oldDayId });
     this.assignments.reconcile(tripId);
@@ -201,7 +204,7 @@ export class AssignmentsMcp {
     if (isDemoUser(ctx.userId)) return demoDenied();
     if (!this.assignments.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
-    if (!getDay(dayId, tripId)) return errorResult('Day not found.');
+    if (!this.days.getDay(dayId, tripId)) return errorResult('Day not found.');
     this.assignments.reorderAssignments(dayId, assignmentIds);
     safeBroadcast(tripId, 'assignment:reordered', { dayId, assignmentIds });
     return ok({ success: true, dayId, order: assignmentIds });

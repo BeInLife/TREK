@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { DaysModule } from '../days/days.module';
 import { ReservationsController } from './reservations.controller';
 import { ReservationsService } from './reservations.service';
 import { ReservationsMcp } from './reservations.mcp';
@@ -13,6 +14,8 @@ import { UpcomingReservationsController } from './upcoming-reservations.controll
  * decorator-registered MCP tools + resource for the domain.
  */
 @Module({
+  // DaysModule: AccommodationsService + ReservationsMcp inject DaysService.
+  imports: [DaysModule],
   controllers: [ReservationsController, AccommodationsController, UpcomingReservationsController],
   providers: [ReservationsService, AccommodationsService, ReservationsMcp],
   // For in-container consumers (PluginHostDepsFactory, TripsService, BookingImportService).

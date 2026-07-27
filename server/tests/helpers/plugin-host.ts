@@ -10,6 +10,7 @@ import { CategoriesService } from '../../src/nest/categories/categories.service'
 import { TodoService } from '../../src/nest/todo/todo.service';
 import { PackingService } from '../../src/nest/packing/packing.service';
 import { DayNotesService } from '../../src/nest/days/day-notes.service';
+import { DaysService } from '../../src/nest/days/days.service';
 import { AssignmentsService } from '../../src/nest/assignments/assignments.service';
 import { LlmConfigResolver } from '../../src/nest/llm-parse/llm-config.resolver';
 import { SettingsService } from '../../src/nest/settings/settings.service';
@@ -39,6 +40,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     new FilesService(dbs),
     new CollabService(dbs),
     new VacayService(dbs),
+    new DaysService(dbs),
   );
 }
 

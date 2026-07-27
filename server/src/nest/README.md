@@ -28,7 +28,7 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
-  collab, vacay, reservations — see the migration recipe below.
+  collab, vacay, reservations, day — see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -110,8 +110,8 @@ surface, no plugin-host import and no bridge — the SQL folded straight into
 `trip-invite.service.ts`); assignments followed (a 7-tool `assignments.mcp.ts`,
 the plugin-host swap, and a bridge kept only for the two legacy registrars —
 places and reservations — that borrow its existence checks; the batch loaders
-stay in `services/queryHelpers.ts`, shared with the unmigrated day/place
-services); share followed (never imported by the plugin host, and its three MCP
+stay in `services/queryHelpers.ts`, shared with the unmigrated place
+service); share followed (never imported by the plugin host, and its three MCP
 tools stay in the legacy trips registrar — their `trips:share` scope gate has
 no declarative `access: { group, mode }` equivalent — so the port is the SQL
 fold plus a 3-export `share.bridge.ts` for `mcp/tools/trips.ts`); settings
@@ -144,10 +144,22 @@ injection, and a 9-export + 3-type `reservations.bridge.ts` for the legacy
 `tripService`, the airtrail import/sync pair and the still-legacy transit +
 transports registrars; the DTO ratchet for its 4 grandfathered body contracts
 landed as a sibling commit, which also loosened the shared positions schema to
-the real wire contract — `day_plan_position` optional, pinned by RESV-006).
+the real wire contract — `day_plan_position` optional, pinned by RESV-006);
+day followed (the 592-line legacy `dayService` folded into the existing
+wrapper `DaysService` — including the accommodation SQL that
+`nest/reservations/accommodations.service.ts` now reaches via an injected
+`DaysService` — with the hand-rolled `BEGIN`/`COMMIT` blocks in
+reorder/insert converted to `db.transaction()`; a 7-tool + 2-resource
+`days.mcp.ts`, the plugin host's 11-symbol import swapped for the injected
+service, `TripsService` + the assignments/reservations MCP controllers
+converted to injection, and a 6-export `days.bridge.ts` for the legacy
+`tripService` and the still-legacy transit + transports registrars; the DTO
+ratchet for its 4 day + 2 accommodation grandfathered body contracts landed
+as a sibling commit).
 Repeat these steps per
-service (next up: dayService — the dependency-honest order in
-`migration-graph.md` promotes it now that reservations is folded). This is a
+service (next up: permissions + auditLog — the Wave-2 cross-cutting pair the
+dependency-honest order in `migration-graph.md` promotes now that dayService
+is folded; then the exchangeRateService fold → budgetService). This is a
 **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it

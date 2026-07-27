@@ -17,7 +17,6 @@ import { randomUUID } from 'node:crypto';
 import { checkPermission } from '../../../services/permissions';
 import { listTrips, updateTrip, createTrip, removeMember as removeTripMemberSvc, NotFoundError, ValidationError } from '../../../services/tripService';
 import { createPlace, updatePlace, deletePlace } from '../../../services/placeService';
-import { createDay, getDay, updateDay, deleteDay, listDays, listAccommodations, validateAccommodationRefs, createAccommodation as createAccommodationSvc, getAccommodation, updateAccommodation as updateAccommodationSvc, deleteAccommodation as deleteAccommodationSvc } from '../../../services/dayService';
 import { isAddonEnabled } from '../../../services/adminService';
 import { isDemoEmail } from '../../../services/demo';
 import { ADDON_IDS } from '../../../addons';
@@ -31,6 +30,7 @@ import { CategoriesService } from '../../categories/categories.service';
 import { TodoService } from '../../todo/todo.service';
 import { PackingService } from '../../packing/packing.service';
 import { DayNotesService } from '../../days/day-notes.service';
+import { DaysService } from '../../days/days.service';
 import { AssignmentsService } from '../../assignments/assignments.service';
 import { LlmConfigResolver } from '../../llm-parse/llm-config.resolver';
 import { DatabaseService } from '../../database/database.service';
@@ -154,6 +154,7 @@ export class PluginHostDepsFactory {
     private readonly files: FilesService,
     private readonly collab: CollabService,
     private readonly vacay: VacayService,
+    private readonly days: DaysService,
   ) {}
 
   /**
@@ -479,21 +480,21 @@ export class PluginHostDepsFactory {
       canEditDays: (tripId, userId) => this.canEditTripAs('day_edit', tripId, userId),
       createDay: (tripId, input) => {
         const i = input as { date?: string; notes?: string };
-        const day = createDay(tripId, i.date, i.notes);
+        const day = this.days.create(tripId, i.date, i.notes);
         broadcast(tripId, 'day:created', { day });
         return day;
       },
       updateDay: (tripId, dayId, input) => {
-        const current = getDay(dayId, tripId);
+        const current = this.days.getDay(dayId, tripId);
         if (!current) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
-        const day = updateDay(dayId, current, input as { notes?: string; title?: string | null });
+        const day = this.days.update(dayId, current, input as { notes?: string; title?: string | null });
         broadcast(tripId, 'day:updated', { day });
         return day;
       },
       deleteDay: (tripId, dayId) => {
-        const current = getDay(dayId, tripId);
+        const current = this.days.getDay(dayId, tripId);
         if (!current) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
-        deleteDay(dayId);
+        this.days.remove(dayId);
         broadcast(tripId, 'day:deleted', { dayId });
         return { deleted: true };
       },
@@ -567,10 +568,10 @@ export class PluginHostDepsFactory {
       },
       // --- Trip-scoped hydrated reads (membership already checked by tripRead). Same
       // services as the REST GETs, so plugins see the exact planner shapes. ---
-      listTripDays: (tripId) => (listDays(tripId) as { days: unknown[] }).days,
+      listTripDays: (tripId) => (this.days.list(tripId) as { days: unknown[] }).days,
       listTripReservations: (tripId) => this.reservations.list(String(tripId)),
-      listTripAccommodations: (tripId) => listAccommodations(tripId) as unknown[],
-      // --- Accommodations (lodging blocks, day_edit). Delegates to dayService so the
+      listTripAccommodations: (tripId) => this.days.listAccommodations(tripId) as unknown[],
+      // --- Accommodations (lodging blocks, day_edit). Delegates to DaysService so the
       // partner hotel reservation, the metadata sync and the delete cascade behave
       // exactly like the accommodations REST controller, cascade broadcasts included. ---
       createAccommodation: (tripId, input) => {
@@ -579,9 +580,9 @@ export class PluginHostDepsFactory {
         const startDayId = Math.trunc(Number(i.start_day_id));
         const endDayId = Math.trunc(Number(i.end_day_id));
         if (!placeId || !startDayId || !endDayId) throw new BadParams('place_id, start_day_id, and end_day_id are required');
-        const errors = validateAccommodationRefs(tripId, placeId, startDayId, endDayId);
+        const errors = this.days.validateAccommodationRefs(tripId, placeId, startDayId, endDayId);
         if (errors.length > 0) throw new ForbiddenResource(errors[0].message);
-        const accommodation = createAccommodationSvc(tripId, {
+        const accommodation = this.days.createAccommodation(tripId, {
           place_id: placeId, start_day_id: startDayId, end_day_id: endDayId,
           check_in: i.check_in ?? undefined, check_in_end: i.check_in_end ?? undefined,
           check_out: i.check_out ?? undefined, confirmation: i.confirmation ?? undefined, notes: i.notes ?? undefined,
@@ -591,18 +592,18 @@ export class PluginHostDepsFactory {
         return accommodation;
       },
       updateAccommodation: (tripId, accommodationId, input) => {
-        const existing = getAccommodation(accommodationId, tripId);
+        const existing = this.days.getAccommodation(accommodationId, tripId);
         if (!existing) throw new ForbiddenResource(`no accommodation ${accommodationId} on trip ${tripId}`);
         const i = input as { place_id?: number; start_day_id?: number; end_day_id?: number; check_in?: string; check_in_end?: string; check_out?: string; confirmation?: string; notes?: string };
-        const errors = validateAccommodationRefs(tripId, i.place_id, i.start_day_id, i.end_day_id);
+        const errors = this.days.validateAccommodationRefs(tripId, i.place_id, i.start_day_id, i.end_day_id);
         if (errors.length > 0) throw new ForbiddenResource(errors[0].message);
-        const accommodation = updateAccommodationSvc(accommodationId, existing, i);
+        const accommodation = this.days.updateAccommodation(accommodationId, existing, i);
         broadcast(tripId, 'accommodation:updated', { accommodation });
         return accommodation;
       },
       deleteAccommodation: (tripId, accommodationId) => {
-        if (!getAccommodation(accommodationId, tripId)) throw new ForbiddenResource(`no accommodation ${accommodationId} on trip ${tripId}`);
-        const { linkedReservationId, deletedBudgetItemId } = deleteAccommodationSvc(accommodationId);
+        if (!this.days.getAccommodation(accommodationId, tripId)) throw new ForbiddenResource(`no accommodation ${accommodationId} on trip ${tripId}`);
+        const { linkedReservationId, deletedBudgetItemId } = this.days.deleteAccommodation(accommodationId);
         if (linkedReservationId) broadcast(tripId, 'reservation:deleted', { reservationId: linkedReservationId });
         if (deletedBudgetItemId) broadcast(tripId, 'budget:deleted', { itemId: deletedBudgetItemId });
         broadcast(tripId, 'accommodation:deleted', { accommodationId });

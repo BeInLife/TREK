@@ -1,13 +1,15 @@
 /**
  * Unit tests for MCP resources (resources.ts).
- * Tests all 9 legacy-registrar resources via InMemoryTransport + Client
+ * Tests all 7 legacy-registrar resources via InMemoryTransport + Client
  * (trek://categories moved to the DI-discovered CategoriesMcp — see
  * tools-categories.test.ts; trek://trips/{tripId}/todos moved to TodoMcp —
  * see tools-todos.test.ts; trek://trips/{tripId}/packing and .../packing/bags
  * moved to PackingMcp — see tools-packing.test.ts;
  * trek://trips/{tripId}/days/{dayId}/notes moved to DayNotesMcp — see
  * tools-notes.test.ts; trek://trips/{tripId}/collab-notes moved to CollabMcp —
- * see tools-notes.test.ts).
+ * see tools-notes.test.ts; trek://trips/{tripId}/days and
+ * .../accommodations moved to DaysMcp — see tools-days.test.ts and
+ * tools-days-accommodations.test.ts).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 
@@ -46,7 +48,7 @@ vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
-import { createUser, createTrip, createDay, createPlace, addTripMember, createBudgetItem, createReservation, createCollabNote, createBucketListItem, createVisitedCountry, createDayAssignment, createDayAccommodation } from '../../helpers/factories';
+import { createUser, createTrip, createPlace, addTripMember, createBudgetItem, createReservation, createCollabNote, createBucketListItem, createVisitedCountry } from '../../helpers/factories';
 import { createMcpHarness, parseResourceResult, type McpHarness } from '../../helpers/mcp-harness';
 
 beforeAll(() => {
@@ -151,38 +153,8 @@ describe('Resource: trek://trips/{tripId}', () => {
   });
 });
 
-describe('Resource: trek://trips/{tripId}/days', () => {
-  it('returns days with assignments in order', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const day1 = createDay(testDb, trip.id, { day_number: 1 });
-    const day2 = createDay(testDb, trip.id, { day_number: 2 });
-    const place = createPlace(testDb, trip.id);
-    createDayAssignment(testDb, day1.id, place.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/days` });
-      const days = parseResourceResult(result) as any[];
-      expect(days).toHaveLength(2);
-      expect(days[0].day_number).toBe(1);
-      expect(days[0].assignments).toHaveLength(1);
-      expect(days[1].day_number).toBe(2);
-      expect(days[1].assignments).toHaveLength(0);
-    });
-  });
-
-  it('returns access denied for unauthorized trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/days` });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-});
+// The trek://trips/{tripId}/days resource moved to the DI-discovered
+// DaysMcp — see tools-days.test.ts.
 
 describe('Resource: trek://trips/{tripId}/places', () => {
   it('returns all places for a trip', async () => {
@@ -250,35 +222,8 @@ describe('Resource: trek://trips/{tripId}/budget', () => {
 // The trek://trips/{tripId}/days/{dayId}/notes resource moved to the
 // DI-discovered DayNotesMcp — see tools-notes.test.ts.
 
-describe('Resource: trek://trips/{tripId}/accommodations', () => {
-  it('returns accommodations for a trip', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    const day1 = createDay(testDb, trip.id, { day_number: 1 });
-    const day2 = createDay(testDb, trip.id, { day_number: 2 });
-    const place = createPlace(testDb, trip.id, { name: 'Grand Hotel' });
-    createDayAccommodation(testDb, trip.id, place.id, day1.id, day2.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/accommodations` });
-      const items = parseResourceResult(result) as any[];
-      expect(items).toHaveLength(1);
-      expect(items[0].place_name).toBe('Grand Hotel');
-    });
-  });
-
-  it('returns access denied for unauthorized trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/accommodations` });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-});
+// The trek://trips/{tripId}/accommodations resource moved to the
+// DI-discovered DaysMcp — see tools-days-accommodations.test.ts.
 
 describe('Resource: trek://trips/{tripId}/members', () => {
   it('returns owner and collaborators', async () => {

@@ -5,7 +5,6 @@ import { registerNotificationTools } from './tools/notifications';
 import { registerAtlasTools } from './tools/atlas';
 import { registerPlaceTools } from './tools/places';
 import { registerCollectionTools } from './tools/collections';
-import { registerDayTools } from './tools/days';
 import { registerBudgetTools } from './tools/budget';
 import { registerTripTools } from './tools/trips';
 import { registerTransportTools } from './tools/transports';
@@ -28,7 +27,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   // The reservation tools moved to the DI-discovered src/nest/reservations/
   // reservations.mcp.ts (@McpController, attached via the nest-mcp registry below).
 
-  registerDayTools(server, userId, scopes);
+  // The day + accommodation tools moved to the DI-discovered src/nest/days/
+  // days.mcp.ts (@McpController, attached via the nest-mcp registry below).
 
   // The assignment tools moved to the DI-discovered src/nest/assignments/
   // assignments.mcp.ts (@McpController, attached via the nest-mcp registry below).

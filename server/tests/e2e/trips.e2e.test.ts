@@ -54,10 +54,11 @@ const { db } = vi.hoisted(() => {
     needs_review INTEGER DEFAULT 0, day_plan_position REAL, external_source TEXT, sync_enabled INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
   tmp.exec('CREATE TABLE days (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, day_number INTEGER, date TEXT);');
-  tmp.exec('CREATE TABLE places (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, name TEXT, image_url TEXT);');
+  tmp.exec(`CREATE TABLE places (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, name TEXT,
+    image_url TEXT, address TEXT, lat REAL, lng REAL);`);
   tmp.exec(`CREATE TABLE day_accommodations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
     place_id INTEGER, start_day_id INTEGER, end_day_id INTEGER, check_in TEXT, check_in_end TEXT,
-    check_out TEXT, confirmation TEXT);`);
+    check_out TEXT, confirmation TEXT, notes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
   tmp.exec(`CREATE TABLE reservation_day_positions (reservation_id INTEGER NOT NULL, day_id INTEGER NOT NULL,
     position REAL, PRIMARY KEY (reservation_id, day_id));`);
   tmp.exec(`CREATE TABLE reservation_endpoints (id INTEGER PRIMARY KEY AUTOINCREMENT, reservation_id INTEGER NOT NULL,
@@ -89,7 +90,8 @@ const { tripSvc } = vi.hoisted(() => ({
   },
 }));
 vi.mock('../../src/services/tripService', () => tripSvc);
-vi.mock('../../src/services/dayService', () => ({ listDays: () => ({ days: [] }), listAccommodations: () => [] }));
+// bundle()'s days + accommodations now run DaysService's real SQL (DI-injected,
+// no mock) — the days/places/day_accommodations/reservations DDL above serves them.
 vi.mock('../../src/services/placeService', () => ({ listPlaces: () => [] }));
 vi.mock('../../src/services/budgetService', () => ({ listBudgetItems: () => [] }));
 

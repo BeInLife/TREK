@@ -4,7 +4,7 @@
  * per-plugin data db is cached, a granted db:own call works through the wired
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
  * DI-native domains (budget/reservations/tags/categories/todo/packing/
- * day-notes/assignments/oauth/llm-config/files/collab/vacay) are
+ * day-notes/days/assignments/oauth/llm-config/files/collab/vacay) are
  * constructor-injected stubs; legacy services/* domains stay path-mocked until
  * their own DI migration lands.
  */
@@ -91,12 +91,14 @@ vi.mock('../../../src/services/placeService', () => ({
   updatePlace: vi.fn((_tid: string, pid: string) => (pid === '99' ? null : { id: Number(pid) })),
   deletePlace: vi.fn((_tid: string, pid: string) => pid !== '99'),
 }));
-vi.mock('../../../src/services/dayService', () => ({
-  createDay: vi.fn((tid: number) => ({ id: 20, trip_id: tid, assignments: [] })),
+// Days are a constructor-injected stub (same behaviors as the old path mock,
+// mapped onto the DaysService method names).
+const daysStub = {
+  create: vi.fn((tid: number) => ({ id: 20, trip_id: tid, assignments: [] })),
   getDay: vi.fn((id: number) => (id === 99 ? undefined : { id, title: null })),
-  updateDay: vi.fn((id: number) => ({ id, assignments: [] })),
-  deleteDay: vi.fn(),
-  listDays: vi.fn((tid: number) => ({ days: [{ id: 3, trip_id: Number(tid), day_number: 1, assignments: [], notes_items: [] }] })),
+  update: vi.fn((id: number) => ({ id, assignments: [] })),
+  remove: vi.fn(),
+  list: vi.fn((tid: number) => ({ days: [{ id: 3, trip_id: Number(tid), day_number: 1, assignments: [], notes_items: [] }] })),
   listAccommodations: vi.fn((tid: number) => [{ id: 11, trip_id: Number(tid), place_name: 'Ryokan' }]),
   // place 999 / day 88 don't belong to the trip
   validateAccommodationRefs: vi.fn((_tid: number, placeId?: number, startDayId?: number, endDayId?: number) => {
@@ -109,7 +111,7 @@ vi.mock('../../../src/services/dayService', () => ({
   getAccommodation: vi.fn((id: number) => (Number(id) === 404 ? undefined : { id: Number(id), place_id: 7, start_day_id: 3, end_day_id: 4 })),
   updateAccommodation: vi.fn((id: number, _existing: unknown, fields: Record<string, unknown>) => ({ id: Number(id), ...fields })),
   deleteAccommodation: vi.fn((id: number) => (Number(id) === 61 ? { linkedReservationId: 40, deletedBudgetItemId: 9 } : { linkedReservationId: null, deletedBudgetItemId: null })),
-}));
+} as unknown as DaysService;
 // Assignments is a constructor-injected stub (same behaviors as the old path mock).
 const assignmentsStub = {
   createAssignment: vi.fn((dayId: number, placeId: number, notes: string | null) => ({ id: 30, day_id: dayId, place_id: placeId, notes })),
@@ -311,6 +313,7 @@ import type { CategoriesService } from '../../../src/nest/categories/categories.
 import type { TodoService } from '../../../src/nest/todo/todo.service';
 import type { PackingService } from '../../../src/nest/packing/packing.service';
 import type { DayNotesService } from '../../../src/nest/days/day-notes.service';
+import type { DaysService } from '../../../src/nest/days/days.service';
 import type { AssignmentsService } from '../../../src/nest/assignments/assignments.service';
 import type { PluginOAuthService } from '../../../src/nest/plugins/plugin-oauth.service';
 import type { LlmConfigResolver } from '../../../src/nest/llm-parse/llm-config.resolver';
@@ -322,7 +325,7 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 
@@ -591,7 +594,7 @@ describe('host-deps factory — reservations, day notes, cross-trip + addon read
     expect(acc.result).toEqual([{ id: 11, trip_id: 1, place_name: 'Ryokan' }]);
   });
 
-  it('accommodations create validates refs, creates via dayService and emits the cascade broadcasts', async () => {
+  it('accommodations create validates refs, creates via DaysService and emits the cascade broadcasts', async () => {
     const h = host('db:write:accommodations');
     const good = await call(h, 'accommodations.create', { tripId: 1, input: { place_id: 7, start_day_id: 3, end_day_id: 4, check_in: '15:00' } });
     expect(good.ok).toBe(true);

@@ -1,6 +1,6 @@
 /**
  * Day reorder + insert integration tests (#589) — exercises the real
- * dayService against the real schema. Covers: position renumber, dates pinned
+ * DaysService against the real schema. Covers: position renumber, dates pinned
  * to slots while content rides along by id, booking-date re-stamp, permutation
  * validation, the accommodation-inversion guard, and insert (dated + dateless).
  */
@@ -28,7 +28,12 @@ import { createTables } from '../../src/db/schema';
 import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb } from '../helpers/test-db';
 import { createUser, createTrip, createPlace, createDay, createDayAssignment, createReservation, createDayAccommodation } from '../helpers/factories';
-import { reorderDays, insertDay, DayReorderError } from '../../src/services/dayService';
+import { DatabaseService } from '../../src/nest/database/database.service';
+import { DaysService, DayReorderError } from '../../src/nest/days/days.service';
+
+const svc = new DaysService(new DatabaseService(testDb));
+const reorderDays = (tripId: number, orderedIds: number[]) => svc.reorder(tripId, orderedIds);
+const insertDay = (tripId: number, position?: number) => svc.insert(tripId, position);
 
 let userId: number;
 

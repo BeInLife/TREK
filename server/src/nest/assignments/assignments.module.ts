@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { DaysModule } from '../days/days.module';
 import { DayAssignmentsController, AssignmentOpsController } from './assignments.controller';
 import { AssignmentsService } from './assignments.service';
 import { AssignmentsMcp } from './assignments.mcp';
@@ -10,6 +11,8 @@ import { AssignmentsMcp } from './assignments.mcp';
  * the plugin RPC host (PluginHostDepsFactory injects it).
  */
 @Module({
+  // DaysModule: AssignmentsMcp injects DaysService for the target-day checks.
+  imports: [DaysModule],
   controllers: [DayAssignmentsController, AssignmentOpsController],
   providers: [AssignmentsService, AssignmentsMcp],
   exports: [AssignmentsService],

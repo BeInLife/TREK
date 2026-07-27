@@ -1,8 +1,10 @@
 /**
  * Days + day-notes module e2e — exercises both migrated mounts through the real
- * JwtAuthGuard against a temp SQLite db. The day service (still legacy), the
- * permission check, canAccessTrip and the WebSocket broadcast are mocked; the
- * DI-native DayNotesService runs real SQL against the temp db.
+ * JwtAuthGuard against a temp SQLite db. DaysService and DayNotesService run
+ * their real SQL via DatabaseModule (the DATABASE_CONNECTION factory picks up
+ * the mocked db singleton); trip access resolves through a real-SQL
+ * canAccessTrip over the temp db. Only the permission check and the WebSocket
+ * broadcast stay mocked.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
@@ -18,34 +20,67 @@ const { db } = vi.hoisted(() => {
   const tmp = new Database(':memory:');
   tmp.exec('PRAGMA journal_mode = WAL');
   tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0);`);
-  // The tables DayNotesService really queries (real SQL, no service mock).
-  tmp.exec('CREATE TABLE days (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL);');
+    email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
+    avatar TEXT);`);
+  tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, title TEXT, end_date TEXT);');
+  tmp.exec('CREATE TABLE trip_members (trip_id INTEGER NOT NULL, user_id INTEGER NOT NULL);');
+  // The tables DaysService really queries (real SQL, no service mock).
+  tmp.exec(`CREATE TABLE days (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
+    day_number INTEGER, date TEXT, title TEXT, notes TEXT, default_transport_mode TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(trip_id, day_number));`);
+  tmp.exec('CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT, icon TEXT);');
+  tmp.exec(`CREATE TABLE places (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, name TEXT,
+    description TEXT, lat REAL, lng REAL, address TEXT, category_id INTEGER, price REAL, currency TEXT,
+    place_time TEXT, end_time TEXT, duration_minutes INTEGER, notes TEXT, image_url TEXT, transport_mode TEXT,
+    google_place_id TEXT, google_ftid TEXT, osm_id TEXT, website TEXT, phone TEXT);`);
+  tmp.exec(`CREATE TABLE day_assignments (id INTEGER PRIMARY KEY AUTOINCREMENT, day_id INTEGER NOT NULL,
+    place_id INTEGER NOT NULL, order_index INTEGER DEFAULT 0, notes TEXT,
+    assignment_time TEXT, assignment_end_time TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  tmp.exec('CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER, name TEXT, color TEXT);');
+  tmp.exec('CREATE TABLE place_tags (place_id INTEGER NOT NULL, tag_id INTEGER NOT NULL);');
+  tmp.exec(`CREATE TABLE assignment_participants (assignment_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+    PRIMARY KEY (assignment_id, user_id));`);
   tmp.exec(`CREATE TABLE day_notes (id INTEGER PRIMARY KEY AUTOINCREMENT, day_id INTEGER NOT NULL,
     trip_id INTEGER NOT NULL, text TEXT NOT NULL, time TEXT, icon TEXT DEFAULT '📝',
     sort_order REAL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  // Reorder/insert touch accommodations + reservation restamping.
+  tmp.exec(`CREATE TABLE day_accommodations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
+    place_id INTEGER, start_day_id INTEGER, end_day_id INTEGER, check_in TEXT, check_in_end TEXT,
+    check_out TEXT, confirmation TEXT, notes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  tmp.exec(`CREATE TABLE reservations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER, title TEXT,
+    day_id INTEGER, end_day_id INTEGER, type TEXT, status TEXT DEFAULT 'pending', reservation_time TEXT,
+    reservation_end_time TEXT, location TEXT, confirmation_number TEXT, notes TEXT, accommodation_id TEXT,
+    metadata TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  tmp.exec(`CREATE TABLE reservation_endpoints (id INTEGER PRIMARY KEY AUTOINCREMENT, reservation_id INTEGER NOT NULL,
+    local_date TEXT);`);
   return { db: tmp };
 });
 
-const { canAccessTrip } = vi.hoisted(() => ({ canAccessTrip: vi.fn() }));
 vi.mock('../../src/db/database', () => ({
-  db, canAccessTrip, isOwner: vi.fn(() => true), getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
+  db,
+  // Real-SQL trip access over the temp db — DaysService.verifyTripAccess and
+  // DatabaseModule both read the mocked singleton.
+  canAccessTrip: (tripId: number | string, userId: number) =>
+    db.prepare(`
+      SELECT t.id, t.user_id FROM trips t
+      LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ?
+      WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)
+    `).get(userId, tripId, userId),
+  isOwner: () => false,
+  getPlaceWithTags: () => null,
+  closeDb: () => {},
+  reinitialize: () => {},
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 
 const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
 vi.mock('../../src/services/permissions', () => ({ checkPermission }));
 
-const { day } = vi.hoisted(() => ({
-  day: { listDays: vi.fn(), createDay: vi.fn(), getDay: vi.fn(), updateDay: vi.fn(), deleteDay: vi.fn() },
-}));
-vi.mock('../../src/services/dayService', () => day);
-
 import { DaysModule } from '../../src/nest/days/days.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 
-describe('Days + day-notes e2e (real auth guard + temp SQLite)', () => {
+describe('Days + day-notes e2e (real auth guard + temp SQLite, real day SQL)', () => {
   let server: Server;
   let app: Awaited<ReturnType<typeof build>>;
 
@@ -61,16 +96,14 @@ describe('Days + day-notes e2e (real auth guard + temp SQLite)', () => {
 
   beforeAll(async () => {
     seedUser(db as never, { id: 1 });
-    db.prepare('INSERT INTO days (id, trip_id) VALUES (3, 5)').run();
+    db.prepare('INSERT INTO trips (id, user_id, title) VALUES (5, 1, ?)').run('Trip');
+    db.prepare('INSERT INTO days (id, trip_id, day_number) VALUES (3, 5, 1)').run();
     app = await build();
     server = app.getHttpServer();
-    day.listDays.mockReturnValue({ days: [{ id: 1 }] });
-    day.createDay.mockReturnValue({ id: 9 });
   });
 
   beforeEach(() => {
     db.prepare('DELETE FROM day_notes').run();
-    canAccessTrip.mockReturnValue({ id: 5, user_id: 1 });
     checkPermission.mockReturnValue(true);
   });
 
@@ -82,20 +115,72 @@ describe('Days + day-notes e2e (real auth guard + temp SQLite)', () => {
     expect((await request(server).get('/api/trips/5/days')).status).toBe(401);
   });
 
-  it('200 list days (the { days } envelope)', async () => {
+  it('200 list days (the { days } envelope, real rows with assignments + notes_items)', async () => {
     const res = await request(server).get('/api/trips/5/days').set('Cookie', sessionCookie(1));
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ days: [{ id: 1 }] });
+    expect(res.body.days).toHaveLength(1);
+    expect(res.body.days[0]).toMatchObject({ id: 3, trip_id: 5, day_number: 1, assignments: [], notes_items: [] });
   });
 
-  it('201 create day, 404 trip when not accessible', async () => {
+  it('201 create day (real insert, auto day_number), 404 trip when not accessible', async () => {
     const ok = await request(server).post('/api/trips/5/days').set('Cookie', sessionCookie(1)).send({ date: '2026-07-01' });
     expect(ok.status).toBe(201);
-    expect(ok.body).toEqual({ day: { id: 9 } });
-    canAccessTrip.mockReturnValue(undefined);
-    const miss = await request(server).get('/api/trips/5/days').set('Cookie', sessionCookie(1));
+    expect(ok.body.day).toMatchObject({ trip_id: 5, day_number: 2, date: '2026-07-01', assignments: [] });
+    const row = db.prepare('SELECT * FROM days WHERE id = ?').get(ok.body.day.id);
+    expect(row).toMatchObject({ trip_id: 5, day_number: 2, date: '2026-07-01' });
+    db.prepare('DELETE FROM days WHERE id = ?').run(ok.body.day.id);
+    const miss = await request(server).get('/api/trips/77/days').set('Cookie', sessionCookie(1));
     expect(miss.status).toBe(404);
     expect(miss.body).toEqual({ error: 'Trip not found' });
+  });
+
+  it('200 update day notes/title, 404 Day not found, 403 without permission', async () => {
+    const res = await request(server).put('/api/trips/5/days/3').set('Cookie', sessionCookie(1))
+      .send({ notes: 'Walking day', title: 'Arrival' });
+    expect(res.status).toBe(200);
+    expect(res.body.day).toMatchObject({ id: 3, notes: 'Walking day', title: 'Arrival', assignments: [] });
+    const miss = await request(server).put('/api/trips/5/days/99').set('Cookie', sessionCookie(1)).send({ notes: 'x' });
+    expect(miss.status).toBe(404);
+    expect(miss.body).toEqual({ error: 'Day not found' });
+    checkPermission.mockReturnValue(false);
+    const forbidden = await request(server).put('/api/trips/5/days/3').set('Cookie', sessionCookie(1)).send({ notes: 'x' });
+    expect(forbidden.status).toBe(403);
+    expect(forbidden.body).toEqual({ error: 'No permission' });
+  });
+
+  it('200 transport setter changes only default_transport_mode', async () => {
+    db.prepare('UPDATE days SET notes = ?, title = ? WHERE id = 3').run('Keep', 'Kept');
+    const res = await request(server).put('/api/trips/5/days/3/transport').set('Cookie', sessionCookie(1))
+      .send({ transport_mode: 'walk' });
+    expect(res.status).toBe(200);
+    expect(res.body.day).toMatchObject({ id: 3, default_transport_mode: 'walk', notes: 'Keep', title: 'Kept' });
+  });
+
+  it('200 reorder permutes day_number, 400 on a non-permutation', async () => {
+    db.prepare('INSERT INTO trips (id, user_id, title) VALUES (6, 1, ?)').run('Reorder');
+    const a = Number(db.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (6, 1, ?)').run('2026-03-01').lastInsertRowid);
+    const b = Number(db.prepare('INSERT INTO days (trip_id, day_number, date) VALUES (6, 2, ?)').run('2026-03-02').lastInsertRowid);
+    const ok = await request(server).put('/api/trips/6/days/reorder').set('Cookie', sessionCookie(1))
+      .send({ orderedIds: [b, a] });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toEqual({ success: true });
+    const after = db.prepare('SELECT id, date FROM days WHERE trip_id = 6 ORDER BY day_number').all() as { id: number; date: string }[];
+    // Dates stay pinned to slots; the rows swapped positions.
+    expect(after.map(d => d.id)).toEqual([b, a]);
+    expect(after.map(d => d.date)).toEqual(['2026-03-01', '2026-03-02']);
+    const bad = await request(server).put('/api/trips/6/days/reorder').set('Cookie', sessionCookie(1))
+      .send({ orderedIds: [b] });
+    expect(bad.status).toBe(400);
+    expect(bad.body).toEqual({ error: 'orderedIds must be a permutation of the trip day ids.' });
+  });
+
+  it('200 delete day removes the row', async () => {
+    db.prepare('INSERT INTO trips (id, user_id, title) VALUES (7, 1, ?)').run('Delete');
+    const id = Number(db.prepare('INSERT INTO days (trip_id, day_number) VALUES (7, 1)').run().lastInsertRowid);
+    const res = await request(server).delete(`/api/trips/7/days/${id}`).set('Cookie', sessionCookie(1));
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ success: true });
+    expect(db.prepare('SELECT * FROM days WHERE id = ?').get(id)).toBeUndefined();
   });
 
   it('201 create note (real insert: trim, empty-string coercions), 400 on over-long text (before access)', async () => {
