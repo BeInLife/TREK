@@ -230,7 +230,10 @@ none of it is throwaway.
    stubs (see §2).
 2. **Per domain, as the service migrations proceed** (`packingService`,
    `dayNoteService` and `assignmentService` done 2026-07; `tripInviteService`
-   done 2026-07 with no factory impact — it was never imported here; next per
+   done 2026-07 with no factory impact — it was never imported here;
+   `reservationService` done 2026-07, draining the factory's last
+   plain-function reservation import — `notifyBookingChange` became a private
+   method over the already-injected `ReservationsService`; next per
    `src/nest/README.md`): migrate the
    service to DI as usual; the factory swaps one legacy import for one
    injected service. Optionally pilot `tags.rpc.ts` here — tags is small and

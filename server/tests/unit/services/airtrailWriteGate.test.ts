@@ -10,7 +10,7 @@ vi.mock('../../../src/db/database', () => ({ db: { prepare: vi.fn() } }));
 vi.mock('../../../src/services/adminService', () => ({ isAddonEnabled: vi.fn(() => true) }));
 vi.mock('../../../src/services/auditLog', () => ({ logError: vi.fn(), logInfo: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
-vi.mock('../../../src/services/reservationService', () => ({
+vi.mock('../../../src/nest/reservations/reservations.bridge', () => ({
   getReservation: vi.fn(),
   getReservationWithJoins: vi.fn(),
   updateReservation: vi.fn(),
@@ -33,7 +33,7 @@ vi.mock('../../../src/services/airtrail/airtrailService', () => ({
 
 import { pushReservationToAirtrail, runAirtrailSyncForUser } from '../../../src/services/airtrail/airtrailSync';
 import { db } from '../../../src/db/database';
-import { getReservation, getReservationWithJoins, updateReservation } from '../../../src/services/reservationService';
+import { getReservation, getReservationWithJoins, updateReservation } from '../../../src/nest/reservations/reservations.bridge';
 import { getFlight, listFlights, saveFlight } from '../../../src/services/airtrail/airtrailClient';
 import { isAirtrailWriteEnabled, getAirtrailCredentials } from '../../../src/services/airtrail/airtrailService';
 

@@ -4,7 +4,6 @@ import { listTrips, getTrip, getTripOwner, listMembers } from '../services/tripS
 import { listDays, listAccommodations } from '../services/dayService';
 import { listPlaces } from '../services/placeService';
 import { listBudgetItems, getPerPersonSummary, calculateSettlement } from '../services/budgetService';
-import { listReservations } from '../services/reservationService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
 import { isAddonEnabled } from '../services/adminService';
@@ -116,18 +115,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
   // The trip-packing resource moved to the DI-discovered
   // src/nest/packing/packing.mcp.ts (@ResourceTemplate).
 
-  // Reservations (flights, hotels, restaurants)
-  if (canRead(scopes, 'reservations')) server.registerResource(
-    'trip-reservations',
-    new ResourceTemplate('trek://trips/{tripId}/reservations', { list: undefined }),
-    { description: 'Reservations (flights, hotels, restaurants) for a trip', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const reservations = listReservations(id);
-      return jsonContent(uri.href, reservations);
-    }
-  );
+  // The trip-reservations resource moved to the DI-discovered
+  // src/nest/reservations/reservations.mcp.ts (@ResourceTemplate).
 
   // The day-notes resource moved to the DI-discovered
   // src/nest/days/day-notes.mcp.ts (@ResourceTemplate).

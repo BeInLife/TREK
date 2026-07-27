@@ -9,7 +9,7 @@ import { listPlaces } from '../../services/placeService';
 import { PackingService } from '../packing/packing.service';
 import { TodoService } from '../todo/todo.service';
 import { listBudgetItems, rebaseTripCurrency } from '../../services/budgetService';
-import { listReservations } from '../../services/reservationService';
+import { ReservationsService } from '../reservations/reservations.service';
 import { FilesService } from '../files/files.service';
 import { searchUnsplashPhotos, getUnsplashKey } from '../../services/unsplashService';
 
@@ -27,6 +27,7 @@ export class TripsService {
     private readonly todo: TodoService,
     private readonly packing: PackingService,
     private readonly files: FilesService,
+    private readonly reservations: ReservationsService,
   ) {}
 
   private get db() {
@@ -143,7 +144,7 @@ export class TripsService {
       packingItems: this.packing.listItems(tripId, viewerId),
       todoItems: this.todo.listItems(tripId),
       budgetItems: listBudgetItems(tripId),
-      reservations: listReservations(tripId),
+      reservations: this.reservations.list(tripId),
       files: this.files.listFiles(tripId, false),
       accommodations: listAccommodations(tripId),
       members: [owner, ...(members || [])].filter(Boolean),

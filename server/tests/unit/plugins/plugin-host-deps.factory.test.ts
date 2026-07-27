@@ -245,6 +245,7 @@ const reservationsStub = {
   list(tid: string) { return [{ id: 1, trip_id: Number(tid), title: 'Flight' }]; },
   syncBudgetOnCreate() {},
   syncBudgetOnUpdate() {},
+  notifyBookingChange() {},
 } as unknown as ReservationsService;
 vi.mock('../../../src/services/journeyService', () => ({
   // Consumed by the real assignments.service.ts module (loaded un-mocked as a

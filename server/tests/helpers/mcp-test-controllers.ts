@@ -12,6 +12,8 @@ import { DayNotesMcp } from '../../src/nest/days/day-notes.mcp';
 import { DayNotesService } from '../../src/nest/days/day-notes.service';
 import { PackingMcp } from '../../src/nest/packing/packing.mcp';
 import { PackingService } from '../../src/nest/packing/packing.service';
+import { ReservationsMcp } from '../../src/nest/reservations/reservations.mcp';
+import { ReservationsService } from '../../src/nest/reservations/reservations.service';
 import { TagsMcp } from '../../src/nest/tags/tags.mcp';
 import { TagsService } from '../../src/nest/tags/tags.service';
 import { TodoMcp } from '../../src/nest/todo/todo.mcp';
@@ -34,6 +36,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new CategoriesMcp(new CategoriesService(dbService)),
       new TodoMcp(new TodoService(dbService)),
       new PackingMcp(new PackingService(dbService)),
+      new ReservationsMcp(new ReservationsService(dbService)),
       new DayNotesMcp(new DayNotesService(dbService)),
       new AssignmentsMcp(new AssignmentsService(dbService)),
       new CollabMcp(new CollabService(dbService)),

@@ -31,19 +31,19 @@ vi.mock('../../../src/services/budgetService', () => ({
   listBudgetItems: () => [],
   rebaseTripCurrency: vi.fn(async () => {}),
 }));
-vi.mock('../../../src/services/reservationService', () => ({ listReservations: () => [] }));
-
 import { TripsService } from '../../../src/nest/trips/trips.service';
 import type { TodoService } from '../../../src/nest/todo/todo.service';
 import type { PackingService } from '../../../src/nest/packing/packing.service';
 import type { FilesService } from '../../../src/nest/files/files.service';
+import type { ReservationsService } from '../../../src/nest/reservations/reservations.service';
 import { rebaseTripCurrency } from '../../../src/services/budgetService';
 
 const todoStub = { listItems: () => [] } as unknown as TodoService;
 const packingListItems = vi.fn(() => []);
 const packingStub = { listItems: packingListItems } as unknown as PackingService;
 const filesStub = { listFiles: () => [] } as unknown as FilesService;
-function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub, filesStub); }
+const reservationsStub = { list: () => [] } as unknown as ReservationsService;
+function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub, filesStub, reservationsStub); }
 beforeEach(() => vi.clearAllMocks());
 
 describe('TripsService (wrapper delegation + bundle/copy/notify helpers)', () => {

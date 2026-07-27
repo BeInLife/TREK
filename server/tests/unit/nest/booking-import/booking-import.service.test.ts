@@ -9,7 +9,6 @@ import { DatabaseService } from '../../../../src/nest/database/database.service'
 vi.mock('../../../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../../../src/services/permissions', () => ({ checkPermission: vi.fn(() => true) }));
 vi.mock('../../../../src/services/tripAccess', () => ({ verifyTripAccess: vi.fn() }));
-vi.mock('../../../../src/services/reservationService', () => ({ createReservation: vi.fn() }));
 vi.mock('../../../../src/services/placeService', () => ({ createPlace: vi.fn() }));
 vi.mock('../../../../src/services/mapsService', () => ({ searchNominatim: vi.fn() }));
 
@@ -21,7 +20,8 @@ const file = (name = 'a.pdf') => ({ buffer: Buffer.from('x'), originalname: name
 function make(opts: { kit?: boolean; ai?: boolean; extract?: any; parse?: any }) {
   const extractor = { isAvailable: () => opts.kit ?? false, extract: vi.fn(opts.extract ?? (async () => [])) };
   const llmParse = { isAvailable: () => opts.ai ?? false, parse: vi.fn(opts.parse ?? (async () => ({ kiItems: [], warnings: [] }))) };
-  return { svc: new BookingImportService(extractor as any, llmParse as any, new DatabaseService(dbConn)), extractor, llmParse };
+  const reservations = { create: vi.fn() };
+  return { svc: new BookingImportService(extractor as any, llmParse as any, new DatabaseService(dbConn), reservations as never), extractor, llmParse, reservations };
 }
 
 beforeEach(() => vi.clearAllMocks());

@@ -37,16 +37,9 @@ import { DatabaseService } from '../../database/database.service';
 import { FilesService } from '../../files/files.service';
 import { CollabService } from '../../collab/collab.service';
 import { VacayService } from '../../vacay/vacay.service';
-import { notifyBookingChange } from '../../../services/reservationService';
 import { PluginRpcHost, ForbiddenResource, BadParams } from './rpc-host';
 import { appendAudit } from './plugin-audit';
 import { getPluginDataDb, budgetFor } from './plugin-host-state';
-
-// The booking notification the REST controller sends after a create/update/delete
-// is fire-and-forget, so it never blocks the plugin write.
-function notifyBooking(actingUserId: number, tripId: number, booking: string, type: string): void {
-  notifyBookingChange(tripId, actingUserId, booking, type);
-}
 
 // A subsystem read is refused when its addon is off — parity with the app, where a
 // disabled addon means there is simply nothing to read (same shape as the Costs gate).
@@ -175,6 +168,12 @@ export class PluginHostDepsFactory {
     const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
     if (!u) return false;
     return checkPermission(action, u.role ?? 'user', trip.user_id, userId, trip.user_id !== userId);
+  }
+
+  // The booking notification the REST controller sends after a create/update/delete
+  // is fire-and-forget, so it never blocks the plugin write.
+  private notifyBooking(actingUserId: number, tripId: number, booking: string, type: string): void {
+    this.reservations.notifyBookingChange(tripId, actingUserId, booking, type);
   }
 
   create(id: string, granted: ReadonlySet<string>, router: PluginCallRouter): PluginRpcHost {
@@ -738,7 +737,7 @@ export class PluginHostDepsFactory {
         const i = input as { title?: string; type?: string; create_budget_entry?: unknown };
         this.reservations.syncBudgetOnCreate(String(tripId), reservation.id, i.title ?? '', i.type, i.create_budget_entry as never, undefined);
         broadcast(tripId, 'reservation:created', { reservation }, undefined);
-        notifyBooking(actingUserId, tripId, i.title ?? '', i.type ?? '');
+        this.notifyBooking(actingUserId, tripId, i.title ?? '', i.type ?? '');
         return reservation;
       },
       updateReservation: (tripId, reservationId, input, actingUserId) => {
@@ -750,7 +749,7 @@ export class PluginHostDepsFactory {
         const i = input as { title?: string; type?: string; create_budget_entry?: unknown };
         this.reservations.syncBudgetOnUpdate(String(tripId), String(reservationId), i.title ?? '', i.type, cur.title, cur.type, i.create_budget_entry as never, undefined);
         broadcast(tripId, 'reservation:updated', { reservation }, undefined);
-        notifyBooking(actingUserId, tripId, i.title || cur.title, i.type || cur.type || '');
+        this.notifyBooking(actingUserId, tripId, i.title || cur.title, i.type || cur.type || '');
         return reservation;
       },
       deleteReservation: (tripId, reservationId, actingUserId) => {
@@ -759,7 +758,7 @@ export class PluginHostDepsFactory {
         if (accommodationDeleted) broadcast(tripId, 'accommodation:deleted', { accommodationId: deleted.accommodation_id }, undefined);
         if (deletedBudgetItemId) broadcast(tripId, 'budget:deleted', { itemId: deletedBudgetItemId }, undefined);
         broadcast(tripId, 'reservation:deleted', { reservationId: Number(reservationId) }, undefined);
-        notifyBooking(actingUserId, tripId, deleted.title, deleted.type || '');
+        this.notifyBooking(actingUserId, tripId, deleted.title, deleted.type || '');
         return { deleted: true };
       },
       // --- Packing (packing_edit). Reuses PackingService + replicates the #858

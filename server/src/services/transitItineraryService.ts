@@ -1,5 +1,5 @@
 import { haversineKm } from './distanceService';
-import type { EndpointInput } from './reservationService';
+import type { EndpointInput } from '../nest/reservations/reservations.bridge';
 import { localParts, resolveTimeZone } from './timezoneService';
 import { deriveTransitStats, type TransitItinerary, type TransitLeg } from './transitService';
 

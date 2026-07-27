@@ -57,7 +57,7 @@ describe('ReservationsController (parity with the legacy /api/trips/:tripId/rese
       expect(broadcast).toHaveBeenCalledWith('5', 'accommodation:created', {}, 'sock');
       expect(syncBudgetOnCreate).toHaveBeenCalledWith('5', 9, 'Hotel', 'lodging', { total_price: 200 }, 'sock');
       expect(broadcast).toHaveBeenCalledWith('5', 'reservation:created', { reservation: { id: 9 } }, 'sock');
-      expect(notifyBookingChange).toHaveBeenCalledWith('5', user, 'Hotel', 'lodging');
+      expect(notifyBookingChange).toHaveBeenCalledWith('5', user.id, 'Hotel', 'lodging');
     });
   });
 
@@ -89,7 +89,7 @@ describe('ReservationsController (parity with the legacy /api/trips/:tripId/rese
       new ReservationsController(svc).update(user, '5', '9', { create_budget_entry: { total_price: 50 } }, 'sock');
       expect(broadcast).toHaveBeenCalledWith('5', 'accommodation:updated', {}, 'sock');
       expect(syncBudgetOnUpdate).toHaveBeenCalledWith('5', '9', '', undefined, 'Old', 'lodging', { total_price: 50 }, 'sock');
-      expect(notifyBookingChange).toHaveBeenCalledWith('5', user, 'Old', 'lodging');
+      expect(notifyBookingChange).toHaveBeenCalledWith('5', user.id, 'Old', 'lodging');
     });
   });
 

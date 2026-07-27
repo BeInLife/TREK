@@ -2,7 +2,7 @@ import { Injectable, HttpException } from '@nestjs/common';
 import { broadcast } from '../../websocket';
 import { checkPermission } from '../../services/permissions';
 import { verifyTripAccess } from '../../services/tripAccess';
-import { createReservation } from '../../services/reservationService';
+import { ReservationsService } from '../reservations/reservations.service';
 import { createPlace } from '../../services/placeService';
 import { createBudgetItem, freezeForeignRate } from '../../services/budgetService';
 import { isAddonEnabled } from '../../services/adminService';
@@ -23,6 +23,7 @@ export class BookingImportService {
     private readonly extractor: KitineraryExtractorService,
     private readonly llmParse: LlmParseService,
     private readonly dbs: DatabaseService,
+    private readonly reservations: ReservationsService,
   ) {}
 
   private get db() {
@@ -219,7 +220,7 @@ export class BookingImportService {
           };
         }
 
-        const { reservation, accommodationCreated } = createReservation(tripId, {
+        const { reservation, accommodationCreated } = this.reservations.create(tripId, {
           ...reservationData,
           place_id: placeId,
           create_accommodation: createAccommodation,

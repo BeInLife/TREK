@@ -42,8 +42,8 @@ vi.mock('../../../src/services/transitService', async (importOriginal) => ({
   plan: planMock,
 }));
 vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
-vi.mock('../../../src/services/reservationService', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../../src/services/reservationService')>()),
+vi.mock('../../../src/nest/reservations/reservations.bridge', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../src/nest/reservations/reservations.bridge')>()),
   notifyBookingChange: notifyBookingChangeMock,
 }));
 vi.mock('../../../src/config', () => ({

@@ -244,32 +244,8 @@ describe('Resource: trek://trips/{tripId}/budget', () => {
 // The trek://trips/{tripId}/packing and .../packing/bags resources moved to the
 // DI-discovered PackingMcp — see tools-packing.test.ts.
 
-describe('Resource: trek://trips/{tripId}/reservations', () => {
-  it('returns reservations for a trip', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    createReservation(testDb, trip.id, { title: 'Flight to Paris', type: 'flight' });
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/reservations` });
-      const items = parseResourceResult(result) as any[];
-      expect(items).toHaveLength(1);
-      expect(items[0].title).toBe('Flight to Paris');
-    });
-  });
-
-  it('returns access denied for unauthorized trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/reservations` });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-});
+// The trek://trips/{tripId}/reservations resource moved to the DI-discovered
+// ReservationsMcp — see tools-reservations.test.ts.
 
 // The trek://trips/{tripId}/days/{dayId}/notes resource moved to the
 // DI-discovered DayNotesMcp — see tools-notes.test.ts.

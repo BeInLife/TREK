@@ -5,7 +5,7 @@ import { isDemoUser } from '../../services/authService';
 import {
   createReservation, deleteReservation, getReservation, updateReservation,
   type EndpointInput,
-} from '../../services/reservationService';
+} from '../../nest/reservations/reservations.bridge';
 import { linkBudgetItemToReservation } from '../../services/budgetService';
 import { getDay } from '../../services/dayService';
 import { findByIata } from '../../services/airportService';

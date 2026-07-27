@@ -2,7 +2,7 @@ import { canAccessTrip } from '../../db/database';
 import { RateLimitService } from '../../nest/auth/rate-limit.service';
 import { isDemoUser } from '../../services/authService';
 import { getDay, listDays } from '../../services/dayService';
-import { createReservation, notifyBookingChange } from '../../services/reservationService';
+import { createReservation, notifyBookingChange } from '../../nest/reservations/reservations.bridge';
 import {
   buildTransitReservationParts,
   cleanTransitItineraryNames,

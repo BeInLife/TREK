@@ -9,7 +9,7 @@ import { Trip, User } from '../types';
 import { listDays, listAccommodations, addDays, resyncAccommodationDays, restampReservationDates } from './dayService';
 import { listBudgetItems, removeUserFromBudgetItems } from './budgetService';
 import { listItems as listPackingItems } from '../nest/packing/packing.bridge';
-import { listReservations, loadEndpointsByTrip, resyncReservationDays } from './reservationService';
+import { listReservations, loadEndpointsByTrip, resyncReservationDays } from '../nest/reservations/reservations.bridge';
 import { listNotes as listCollabNotes } from '../nest/collab/collab.bridge';
 import { shiftOwnerEntriesForTripWindow } from '../nest/vacay/vacay.bridge';
 import { resolveTimeZone } from './timezoneService';

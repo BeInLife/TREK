@@ -80,7 +80,7 @@ export class ReservationsController {
     }
     this.reservations.syncBudgetOnCreate(tripId, reservation.id, body.title, body.type, body.create_budget_entry, socketId);
     this.reservations.broadcast(tripId, 'reservation:created', { reservation }, socketId);
-    this.reservations.notifyBookingChange(tripId, user, body.title, body.type ?? '');
+    this.reservations.notifyBookingChange(tripId, user.id, body.title, body.type ?? '');
     return { reservation };
   }
 
@@ -127,7 +127,7 @@ export class ReservationsController {
     if ((reservation as any)?.external_source === 'airtrail' && (reservation as any)?.sync_enabled) {
       void pushReservationToAirtrail(Number((reservation as any).id), Number(tripId)).catch(() => {});
     }
-    this.reservations.notifyBookingChange(tripId, user, body.title || cur.title, body.type || cur.type || '');
+    this.reservations.notifyBookingChange(tripId, user.id, body.title || cur.title, body.type || cur.type || '');
     return { reservation };
   }
 
@@ -169,7 +169,7 @@ export class ReservationsController {
       this.reservations.broadcast(tripId, 'budget:deleted', { itemId: deletedBudgetItemId }, socketId);
     }
     this.reservations.broadcast(tripId, 'reservation:deleted', { reservationId: Number(id) }, socketId);
-    this.reservations.notifyBookingChange(tripId, user, deleted.title, deleted.type || '');
+    this.reservations.notifyBookingChange(tripId, user.id, deleted.title, deleted.type || '');
     return { success: true };
   }
 }

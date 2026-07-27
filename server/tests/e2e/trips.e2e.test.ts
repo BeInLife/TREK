@@ -19,7 +19,7 @@ const { db } = vi.hoisted(() => {
   tmp.exec('PRAGMA journal_mode = WAL');
   tmp.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE, role TEXT NOT NULL DEFAULT 'user', password_version INTEGER NOT NULL DEFAULT 0,
-    avatar TEXT);`);
+    avatar TEXT, display_name TEXT, is_guest INTEGER NOT NULL DEFAULT 0);`);
   tmp.exec('CREATE TABLE trips (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT);');
   // bundle()'s todoItems now runs TodoService's real SQL (DI-injected, no mock).
   tmp.exec(`CREATE TABLE todo_items (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
@@ -44,7 +44,27 @@ const { db } = vi.hoisted(() => {
   tmp.exec(`CREATE TABLE file_links (id INTEGER PRIMARY KEY AUTOINCREMENT, file_id INTEGER NOT NULL,
     reservation_id INTEGER, assignment_id INTEGER, place_id INTEGER,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
-  tmp.exec('CREATE TABLE IF NOT EXISTS reservations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER, title TEXT);');
+  // bundle()'s reservations now runs ReservationsService's real SQL
+  // (DI-injected, no mock) — the joined list query needs the full reservation
+  // table set (trimmed from src/db/schema.ts; accommodation_id is TEXT there).
+  tmp.exec(`CREATE TABLE reservations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER, title TEXT,
+    day_id INTEGER, end_day_id INTEGER, place_id INTEGER, assignment_id INTEGER, type TEXT,
+    status TEXT DEFAULT 'pending', reservation_time TEXT, reservation_end_time TEXT, location TEXT,
+    confirmation_number TEXT, notes TEXT, url TEXT, accommodation_id TEXT, metadata TEXT,
+    needs_review INTEGER DEFAULT 0, day_plan_position REAL, external_source TEXT, sync_enabled INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  tmp.exec('CREATE TABLE days (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, day_number INTEGER, date TEXT);');
+  tmp.exec('CREATE TABLE places (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, name TEXT, image_url TEXT);');
+  tmp.exec(`CREATE TABLE day_accommodations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
+    place_id INTEGER, start_day_id INTEGER, end_day_id INTEGER, check_in TEXT, check_in_end TEXT,
+    check_out TEXT, confirmation TEXT);`);
+  tmp.exec(`CREATE TABLE reservation_day_positions (reservation_id INTEGER NOT NULL, day_id INTEGER NOT NULL,
+    position REAL, PRIMARY KEY (reservation_id, day_id));`);
+  tmp.exec(`CREATE TABLE reservation_endpoints (id INTEGER PRIMARY KEY AUTOINCREMENT, reservation_id INTEGER NOT NULL,
+    role TEXT, sequence INTEGER, name TEXT, code TEXT, lat REAL NOT NULL, lng REAL NOT NULL,
+    timezone TEXT, local_time TEXT, local_date TEXT);`);
+  tmp.exec(`CREATE TABLE reservation_travelers (reservation_id INTEGER NOT NULL, user_id INTEGER NOT NULL,
+    PRIMARY KEY (reservation_id, user_id));`);
   return { db: tmp };
 });
 
@@ -54,7 +74,7 @@ vi.mock('../../src/db/database', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../../src/services/auditLog', () => ({ writeAudit: vi.fn(), getClientIp: vi.fn(() => '1.2.3.4'), logInfo: vi.fn() }));
+vi.mock('../../src/services/auditLog', () => ({ writeAudit: vi.fn(), getClientIp: vi.fn(() => '1.2.3.4'), logInfo: vi.fn(), logError: vi.fn() }));
 vi.mock('../../src/services/demo', () => ({ isDemoEmail: vi.fn(() => false) }));
 
 const { checkPermission } = vi.hoisted(() => ({ checkPermission: vi.fn() }));
@@ -72,7 +92,6 @@ vi.mock('../../src/services/tripService', () => tripSvc);
 vi.mock('../../src/services/dayService', () => ({ listDays: () => ({ days: [] }), listAccommodations: () => [] }));
 vi.mock('../../src/services/placeService', () => ({ listPlaces: () => [] }));
 vi.mock('../../src/services/budgetService', () => ({ listBudgetItems: () => [] }));
-vi.mock('../../src/services/reservationService', () => ({ listReservations: () => [] }));
 
 import { TripsModule } from '../../src/nest/trips/trips.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';

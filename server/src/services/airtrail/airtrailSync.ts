@@ -3,7 +3,7 @@ import { db } from '../../db/database';
 import { broadcast } from '../../websocket';
 import { isAddonEnabled } from '../adminService';
 import { logError, logInfo } from '../auditLog';
-import { getReservation, getReservationWithJoins, updateReservation } from '../reservationService';
+import { getReservation, getReservationWithJoins, updateReservation } from '../../nest/reservations/reservations.bridge';
 import {
   AirtrailAuthError,
   AirtrailCreds,

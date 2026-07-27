@@ -1,6 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { registerJourneyTools } from './tools/journey';
-import { registerReservationTools } from './tools/reservations';
 import { registerMapsWeatherTools } from './tools/mapsWeather';
 import { registerNotificationTools } from './tools/notifications';
 import { registerAtlasTools } from './tools/atlas';
@@ -26,7 +25,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   // The packing tools moved to the DI-discovered src/nest/packing/packing.mcp.ts
   // (@McpController, attached via the nest-mcp registry below).
 
-  registerReservationTools(server, userId, scopes);
+  // The reservation tools moved to the DI-discovered src/nest/reservations/
+  // reservations.mcp.ts (@McpController, attached via the nest-mcp registry below).
 
   registerDayTools(server, userId, scopes);
 
