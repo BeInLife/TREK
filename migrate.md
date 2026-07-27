@@ -12,8 +12,8 @@ or the MCP layer gets a handle to the Nest app (app.get(TodoService)). Better to
 
 Wave 2 — cross-cutting leverage (parallel to wave 3, high payoff)
 
-4. permissions (149 lines, zero deps, 17 Nest consumers) → an injectable PermissionsService. Every module wrapper already calls checkPermission; this converts the single most-imported seam in one move.
-5. auditLog (171 lines, 13 Nest consumers) → AuditService.
+4. permissions (149 lines, zero deps, 17 Nest consumers) → an injectable PermissionsService (done 2026-07 — every module wrapper, the airtrail-import controller and PluginHostDepsFactory now inject it; the cache stays module-scoped so the DI singleton and permissions.bridge — kept for mcp/_shared.ts + adminService/authService/backupService/collectionsService — share one invalidation). Every module wrapper already calls checkPermission; this converts the single most-imported seam in one move.
+5. auditLog (171 lines, 13 Nest consumers) → AuditService (done 2026-07 — writeAudit is the injectable; getClientIp and the log*/LOG_LEVEL logger stay plain modules in nest/audit/ (client-ip.ts, audit-log.logger.ts with its frozen-at-import level + mkdir as a documented parity exception); audit.bridge covers mcp/index, oauthProvider and the legacy airtrail/immich/oauth services).
 6. tripAccess (9 lines) — don't migrate, delete: it's a wrapper around canAccessTrip, which DatabaseService now exposes. Absorb its 11 call sites opportunistically.
 
 Wave 3 — domain services with existing modules, low fan-in
@@ -27,7 +27,7 @@ Wave 4 — the coupled cluster (order matters here)
    importing legacy functions. — **Correction (migration-graph.md, borne out by the migration): the claimed ordering constraint doesn't exist at the service layer.** reservationService (done 2026-07) imported neither budgetService nor
    dayService; the budget/day coupling lives in the Nest wrapper's budget-sync seam and the MCP registrars, which keep their legacy imports until those domains migrate. Reservations went first as the frontier residue fold; dayService
    (done 2026-07 — the 592-line service folded into the wrapper `DaysService`, the accommodations seam in `nest/reservations/` now injects it, and the hand-rolled reorder/insert transactions became `db.transaction()`) followed;
-   budgetService is next in the cluster (after the Wave-2 permissions + auditLog pair per migration-graph.md).
+   budgetService is next in the cluster (the Wave-2 permissions + auditLog pair is done 2026-07; the exchangeRateService fold precedes it per migration-graph.md).
 9. Then placeService (7 internal deps, mostly on things migrated by now) and tripService (10 deps — the biggest hub; last in this wave, since nearly everything it needs will already be injectable).
 
 Wave 5 — the heavyweights, last

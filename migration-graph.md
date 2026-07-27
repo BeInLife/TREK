@@ -1,8 +1,8 @@
 # Legacy `src/services/` dependency graph
 
 Generated from the actual imports in `server/src` on **2026-07-27** (after the
-dayService migration — step 1 of the dependency-honest order below, following
-the reservationService residue fold).
+Wave-2 permissions + auditLog pair — step 1 of the dependency-honest order
+below, following the dayService fold).
 Regenerate any
 time — the extraction script only parses `from './x'` /
 `from '../services/x'` imports:
@@ -26,14 +26,17 @@ How to read it:
 ## Node classification
 
 - **Already DI-native (legacy file deleted):** tags, categories, todo, packing, day-notes,
-  trip-invite, assignments, share, settings, files, collab, vacay, reservations, day.
+  trip-invite, assignments, share, settings, files, collab, vacay, reservations, day,
+  permissions (module-scoped cache retained on purpose — the bridge and DI instances share
+  one invalidation), audit (the `writeAudit` injectable; `client-ip.ts` and the deliberately
+  side-effectful `audit-log.logger.ts` stay plain modules inside `nest/audit/`).
 - **Domain migration targets** (the wave material): adminService, airportService, atlasService,
   authService, backupService, budgetService, collectionsService,
   journeyService, journeyShareService, mapsService, notificationService, oauthService,
   oidcService, passkeyService, placeService, transitService,
   transitItineraryService, tripService, weatherService, wikiService.
-- **Cross-cutting Wave-2 targets:** permissions (17 nest consumers), auditLog (13 nest + 5
-  out-of-container), tripAccess (delete, don't migrate).
+- **Cross-cutting Wave-2 targets:** permissions and auditLog are done (2026-07) — see the
+  DI-native list above; only tripAccess remains (delete, don't migrate).
 - **Helpers that stay as plain modules** (pure/infra, not wave material): avatarUrl,
   queryHelpers, conflictResult, cookie, demo, distanceService, ephemeralTokens, apiKeyCrypto,
   mfaCrypto, passwordPolicy, webauthnConfig, timezoneService, llmConfig, kmlImport, placeImage,
@@ -57,8 +60,7 @@ flowchart TD
     weather[weatherService]:::ready
     airport["airportService (boot special case)"]:::ready
     wiki[wikiService]:::ready
-    permissions[permissions W2]:::ready
-    auditLog[auditLog W2]:::ready
+    collections[collectionsService]:::ready
   end
 
   trip[tripService]:::hub
@@ -75,8 +77,7 @@ flowchart TD
   passkey[passkeyService]:::blocked
   journey[journeyService]:::blocked
   journeyShare[journeyShareService]:::blocked
-  collections[collectionsService]:::blocked
-  backup[backupService]:::blocked
+  backup["backupService (last by design)"]:::infra
   notifCluster["notifications cluster<br/>(notifications + prefs + inApp + channelRegistry)"]:::infra
   memories["memories/ cluster"]:::infra
   fx[exchangeRateService]:::infra
@@ -89,37 +90,38 @@ flowchart TD
   maps --> notifCluster
   transit --> maps
   transitItin --> transit
-  notifSvc --> notifCluster & auditLog
+  notifSvc --> notifCluster
   admin --> auth & notifSvc & cleanup
-  auth --> atlas & permissions
-  oauth --> admin & auditLog
+  auth --> atlas
+  oauth --> admin
   oidc --> auth
   passkey --> auth
   journey --> memories
   journeyShare --> journey
-  collections --> permissions
-  backup --> permissions
   memories --> notifSvc & admin
 ```
 
 (`placeService → mapsService` is via the `placeEnrichment` helper; `mapsService/notificationService
 → notifications cluster` are hard imports. `memories/` ↔ admin/notificationService edges make the
-journey/memories corner tangle with the admin corner.)
+journey/memories corner tangle with the admin corner. The former
+`auth/collections/backup → permissions` and `notifSvc/oauth → auditLog` edges are gone since the
+2026-07 Wave-2 pair: the permissions consumers repointed to `nest/permissions/permissions.bridge`,
+the writeAudit consumers to `nest/audit/audit.bridge`, and the log*-only consumers to the plain
+`nest/audit/audit-log.logger` — none of them block a migration anymore.)
 
 ## Full adjacency table
 
 | service | imports (services/) | imported by (services/) | nest consumers | out-of-container consumers |
 |---|---|---|---|---|
-| `adminService` | apiKeyCrypto, authService, avatarUrl, llmConfig, memories/helpersService, notificationService, passwordPolicy, permissions, userCleanupService | airtrail/airtrailSync, memories/thumbnailService, oauthService | nest/addons/addons.service.ts, nest/admin/admin.service.ts, nest/booking-import/booking-import.service.ts, nest/booking-import/features.controller.ts, nest/collab/collab.mcp.ts, nest/collections/collections-addon.guard.ts, nest/integrations/airtrail-addon.guard.ts, nest/journey/journey.service.ts, nest/llm-parse/llm-config.resolver.ts, nest/oauth/oauth.service.ts, nest/packing/packing.mcp.ts, nest/platform/platform.routes.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/plugins/journal-entry-rows.controller.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/todo/todo.mcp.ts, nest/vacay/vacay.mcp.ts | mcp/index.ts, mcp/resources.ts, mcp/tools/atlas.ts, mcp/tools/budget.ts, mcp/tools/journey.ts, mcp/tools/prompts.ts, mcp/tools/trips.ts, scheduler.ts |
+| `adminService` | apiKeyCrypto, authService, avatarUrl, llmConfig, memories/helpersService, notificationService, passwordPolicy, userCleanupService (+ `permissions.bridge`) | airtrail/airtrailSync, memories/thumbnailService, oauthService | nest/addons/addons.service.ts, nest/admin/admin.service.ts, nest/booking-import/booking-import.service.ts, nest/booking-import/features.controller.ts, nest/collab/collab.mcp.ts, nest/collections/collections-addon.guard.ts, nest/integrations/airtrail-addon.guard.ts, nest/journey/journey.service.ts, nest/llm-parse/llm-config.resolver.ts, nest/oauth/oauth.service.ts, nest/packing/packing.mcp.ts, nest/platform/platform.routes.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/plugins/journal-entry-rows.controller.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/todo/todo.mcp.ts, nest/vacay/vacay.mcp.ts | mcp/index.ts, mcp/resources.ts, mcp/tools/atlas.ts, mcp/tools/budget.ts, mcp/tools/journey.ts, mcp/tools/prompts.ts, mcp/tools/trips.ts, scheduler.ts |
 | `airportService` | (none) | (none) | nest/airports/airports.service.ts, nest/booking-import/kitinerary-mapper.ts | db/database.ts, mcp/tools/mapsWeather.ts, mcp/tools/transports.ts |
 | `apiKeyCrypto` | (none) | adminService, airtrail/airtrailService, authService, llmConfig, mapsService, memories/helpersService, memories/immichService, memories/photoResolverService, memories/synologyService, memories/unifiedService, notifications, oidcService, unsplashService | nest/plugins/plugin-oauth.service.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/settings/settings.service.ts | db/migrations.ts |
 | `atlasService` | (none) | authService | nest/atlas/atlas.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | mcp/resources.ts, mcp/tools/atlas.ts |
-| `auditLog` | (none) | airtrail/airtrailService, airtrail/airtrailSync, memories/immichService, notificationService, notifications, oauthService | nest/admin/admin.controller.ts, nest/auth/auth-public.controller.ts, nest/auth/auth.controller.ts, nest/auth/passkey.controller.ts, nest/backup/backup.controller.ts, nest/integrations/airtrail.controller.ts, nest/memories/immich.controller.ts, nest/oauth/oauth-api.controller.ts, nest/oauth/oauth-public.controller.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.controller.ts, nest/trip-invite/trip-invite.controller.ts, nest/trips/trips.controller.ts | index.ts, mcp/index.ts, mcp/oauthProvider.ts, middleware/globalMiddleware.ts, scheduler.ts |
-| `authService` | apiKeyCrypto, atlasService, avatarUrl, demo, distanceService, ephemeralTokens, mfaCrypto, passwordPolicy, permissions, tripMembership, userCleanupService, webauthnConfig | adminService, oidcService, passkeyService | nest/assignments/assignments.mcp.ts, nest/auth/auth.service.ts, nest/auth/passkey-enabled.guard.ts, nest/collab/collab.mcp.ts, nest/days/day-notes.mcp.ts, nest/days/days.mcp.ts, nest/oidc/oidc.service.ts, nest/packing/packing.mcp.ts, nest/reservations/reservations.mcp.ts, nest/tags/tags.mcp.ts, nest/todo/todo.mcp.ts, nest/vacay/vacay.mcp.ts | mcp/index.ts, mcp/tools/atlas.ts, mcp/tools/budget.ts, mcp/tools/collections.ts, mcp/tools/journey.ts, mcp/tools/notifications.ts, mcp/tools/places.ts, mcp/tools/transit.ts, mcp/tools/transports.ts, mcp/tools/trips.ts |
+| `authService` | apiKeyCrypto, atlasService, avatarUrl, demo, distanceService, ephemeralTokens, mfaCrypto, passwordPolicy, tripMembership, userCleanupService, webauthnConfig (+ `permissions.bridge`) | adminService, oidcService, passkeyService | nest/assignments/assignments.mcp.ts, nest/auth/auth.service.ts, nest/auth/passkey-enabled.guard.ts, nest/collab/collab.mcp.ts, nest/days/day-notes.mcp.ts, nest/days/days.mcp.ts, nest/oidc/oidc.service.ts, nest/packing/packing.mcp.ts, nest/reservations/reservations.mcp.ts, nest/tags/tags.mcp.ts, nest/todo/todo.mcp.ts, nest/vacay/vacay.mcp.ts | mcp/index.ts, mcp/tools/atlas.ts, mcp/tools/budget.ts, mcp/tools/collections.ts, mcp/tools/journey.ts, mcp/tools/notifications.ts, mcp/tools/places.ts, mcp/tools/transit.ts, mcp/tools/transports.ts, mcp/tools/trips.ts |
 | `avatarUrl` | (none) | adminService, authService, budgetService, inAppNotifications, journeyService, tripService | nest/collab/collab.service.ts, nest/files/files.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts | (none) |
-| `backupService` | permissions | (none) | nest/backup/backup.controller.ts, nest/backup/backup.service.ts | (none) |
+| `backupService` | (none — `permissions.bridge` only) | (none) | nest/backup/backup.controller.ts, nest/backup/backup.service.ts | (none) |
 | `budgetService` | avatarUrl, exchangeRateService, tripAccess | tripService, userCleanupService | nest/booking-import/booking-import.service.ts, nest/budget/budget.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/reservations/reservations.mcp.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | mcp/resources.ts, mcp/tools/budget.ts, mcp/tools/transports.ts, mcp/tools/trips.ts |
-| `collectionsService` | permissions, placeImage | (none) | nest/collections/collections.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | mcp/tools/collections.ts |
+| `collectionsService` | placeImage (+ `permissions.bridge`) | (none) | nest/collections/collections.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | mcp/tools/collections.ts |
 | `conflictResult` | (none) | placeService | nest/packing/packing.controller.ts, nest/packing/packing.service.ts, nest/places/places.controller.ts, nest/plugins/host/plugin-host-deps.factory.ts | (none) |
 | `cookie` | (none) | (none) | nest/auth/auth-public.controller.ts, nest/auth/auth.service.ts, nest/auth/passkey.controller.ts, nest/oidc/oidc.controller.ts, nest/oidc/oidc.service.ts | (none) |
 | `demo` | (none) | authService | nest/auth/auth.controller.ts, nest/collections/collections.controller.ts, nest/files/files.controller.ts, nest/places/places.controller.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/trips/trips.controller.ts | middleware/auth.ts, middleware/mfaPolicy.ts |
@@ -135,13 +137,12 @@ journey/memories corner tangle with the admin corner.)
 | `mapsService` | apiKeyCrypto, notifications, placePhotoCache | placeEnrichment, transitService | nest/booking-import/booking-import.service.ts, nest/maps/maps.service.ts | mcp/tools/mapsWeather.ts, mcp/tools/places.ts |
 | `mfaCrypto` | (none) | authService | (none) | (none) |
 | `notificationPreferencesService` | notifications, notifications/channelRegistry | inAppNotifications, notificationService, notifications, notifications/channelRegistry | nest/admin/admin.service.ts, nest/notifications/notifications.service.ts, nest/plugins/install/manifest.ts | (none) |
-| `notificationService` | auditLog, inAppNotifications, notificationPreferencesService, notifications, notifications/channelRegistry | adminService, memories/synologyService, memories/unifiedService | nest/admin/admin.controller.ts, nest/collab/collab.service.ts, nest/packing/packing.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/trips/trips.service.ts | scheduler.ts |
-| `notifications` | apiKeyCrypto, auditLog, notificationPreferencesService | mapsService, notificationPreferencesService, notificationService, notifications/builtins, oauthService, transitService, webauthnConfig | nest/auth/auth.service.ts, nest/notifications/notifications.service.ts, nest/oauth/oauth.service.ts, nest/oidc/oidc.service.ts, nest/platform/platform.routes.ts, nest/plugins/plugin-oauth.service.ts | index.ts, mcp/index.ts, mcp/oauthProvider.ts |
-| `oauthService` | adminService, auditLog, notifications | (none) | nest/oauth/oauth-api.controller.ts, nest/oauth/oauth.service.ts | mcp/index.ts, mcp/oauthProvider.ts |
+| `notificationService` | inAppNotifications, notificationPreferencesService, notifications, notifications/channelRegistry (+ `audit-log.logger`) | adminService, memories/synologyService, memories/unifiedService | nest/admin/admin.controller.ts, nest/collab/collab.service.ts, nest/packing/packing.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/trips/trips.service.ts | scheduler.ts |
+| `notifications` | apiKeyCrypto, notificationPreferencesService (+ `audit-log.logger`) | mapsService, notificationPreferencesService, notificationService, notifications/builtins, oauthService, transitService, webauthnConfig | nest/auth/auth.service.ts, nest/notifications/notifications.service.ts, nest/oauth/oauth.service.ts, nest/oidc/oidc.service.ts, nest/platform/platform.routes.ts, nest/plugins/plugin-oauth.service.ts | index.ts, mcp/index.ts, mcp/oauthProvider.ts |
+| `oauthService` | adminService, notifications (+ `audit.bridge`) | (none) | nest/oauth/oauth-api.controller.ts, nest/oauth/oauth.service.ts | mcp/index.ts, mcp/oauthProvider.ts |
 | `oidcService` | apiKeyCrypto, authService, tripMembership | (none) | nest/oidc/oidc.service.ts | (none) |
 | `passkeyService` | authService, webauthnConfig | (none) | nest/admin/admin.service.ts, nest/auth/passkey.controller.ts | (none) |
 | `passwordPolicy` | (none) | adminService, authService | (none) | (none) |
-| `permissions` | (none) | adminService, authService, backupService, collectionsService | nest/assignments/assignments.service.ts, nest/booking-import/booking-import.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/days/day-notes.service.ts, nest/days/days.service.ts, nest/files/files.service.ts, nest/integrations/airtrail-import.controller.ts, nest/packing/packing.service.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/reservations/accommodations.service.ts, nest/reservations/reservations.service.ts, nest/share/share.service.ts, nest/todo/todo.service.ts, nest/trip-invite/trip-invite.service.ts, nest/trips/trips.service.ts | mcp/tools/_shared.ts |
 | `placeEnrichment` | mapsService | placeService | (none) | (none) |
 | `placeImage` | (none) | collectionsService, placeService | nest/collections/collections.controller.ts, nest/common/place-image-upload.ts, nest/places/places.controller.ts | (none) |
 | `placePhotoCache` | (none) | mapsService, placeService | nest/maps/maps.service.ts, nest/share/share.service.ts | scheduler.ts |
@@ -169,7 +170,10 @@ journey/memories corner tangle with the admin corner.)
   and `synology/unified → notificationService` couple this cluster to the admin corner.
 - **`airtrail/`**: `airtrailClient` (base) ← mapper ← service ← import/sync; `import`/`sync`
   consume `adminService` and (since the 2026-07 reservations fold) the
-  `nest/reservations/reservations.bridge` instead of the deleted `reservationService`.
+  `nest/reservations/reservations.bridge` instead of the deleted `reservationService`; since
+  the auditLog fold, `airtrailService` writes audits via `nest/audit/audit.bridge` and
+  `airtrailSync` logs via the plain `nest/audit/audit-log.logger` (same split in
+  `memories/immichService` → bridge).
 
 ## Decoding "what's next"
 
@@ -177,7 +181,8 @@ journey/memories corner tangle with the admin corner.)
 
 | Candidate | Why now / why not | Bridge tax (legacy dependents + out-of-container) |
 |---|---|---|
-| **permissions / auditLog (Wave 2)** ← pick | Zero deps, giant fan-in (17 / 13 nest consumers) — pure leverage, parallelizable with any domain migration | mcp `_shared.ts`; index/scheduler/middleware for auditLog |
+| **exchangeRateService fold → budgetService** ← pick | The Wave-2 pair is done (2026-07); this is step 2 of the dependency-honest order and **is** the tripService unblock | `tripService`, `userCleanupService`; mcp budget/transports/trips registrars |
+| **collectionsService** | Newly frontier-ready — its only legacy deps are the placeImage helper + `permissions.bridge` | `mcp/tools/collections.ts` |
 | **atlasService** | Zero deps, but its legacy dependent is `authService` (Wave-5) → bridge lives long | `authService`; `mcp/tools/atlas.ts`, `mcp/resources.ts` |
 | **weatherService / wikiService / airportService** | Independent leaves; airport has the `db/database.ts` boot lazy-require special case | little / none |
 
@@ -189,31 +194,33 @@ journey/memories corner tangle with the admin corner.)
   `collab.bridge` / `vacay.bridge` / `reservations.bridge` / `days.bridge`
   repoints). Migrating budget **is** the tripService unblock.
 - `placeService` ← `mapsService` (via placeEnrichment) ← notifications cluster.
-- `notificationService` ← notifications cluster + `auditLog` (Wave 2 first).
+- `notificationService` ← notifications cluster (its auditLog edge is now the plain
+  `audit-log.logger` import — gone as a blocker since the 2026-07 Wave-2 pair).
 - `transitItineraryService` ← `transitService` (← mapsService) — its reservation edge is now
   the `reservations.bridge` repoint (type-only).
-- `adminService`/`oauthService`/`authService` corner: `authService` ← `atlasService` +
-  `permissions`; `adminService` ← `authService` + `notificationService`; `oauthService` ←
-  `adminService`. Order inside the corner: permissions → atlas → auth → admin → oauth
-  (oidc/passkey ride auth).
+- `adminService`/`oauthService`/`authService` corner: `authService` ← `atlasService`
+  (its permissions edge is now the `permissions.bridge` repoint); `adminService` ←
+  `authService` + `notificationService`; `oauthService` ← `adminService`. Order inside the
+  corner: atlas → auth → admin → oauth (oidc/passkey ride auth; permissions done 2026-07).
 - `journeyService` ← `memories/` cluster (which itself touches admin + notificationService) →
   `journeyShareService` after.
-- `collectionsService`/`backupService` ← `permissions` (Wave 2); backup stays last by design
-  (owns the closeDb/reinitialize lifecycle).
+- `collectionsService`/`backupService`: unblocked since the permissions fold (their edges are
+  `permissions.bridge` repoints now); backup still stays last by design (owns the
+  closeDb/reinitialize lifecycle).
 
 **Dependency-honest order** (each step's deps are already done at that point;
-`vacayService`, `reservationService` (the residue fold) and `dayService` were the
-first three frontier picks — all done 2026-07, after `collabService` completed
-Wave 3):
+`vacayService`, `reservationService` (the residue fold), `dayService` and the
+Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all done
+2026-07, after `collabService` completed Wave 3):
 
-1. `permissions` + `auditLog` (Wave 2 — anytime, ideally early and in parallel)
-2. `exchangeRateService` fold → `budgetService` (then `userCleanupService` is free)
-3. `tripService` — all remaining domain edges + userCleanup now gone
-4. notifications cluster → `notificationService`
-5. `mapsService` → `transitService` → `placeService` → `transitItineraryService`
-6. `atlasService` → `authService` (+ oidc/passkey) → `adminService` → `oauthService`
-7. `memories/` cluster → `journeyService` → `journeyShareService`; `collectionsService`
-8. Independent any time: `weatherService`, `wikiService`, `airportService` (move the
+1. `exchangeRateService` fold → `budgetService` (then `userCleanupService` is free)
+2. `tripService` — all remaining domain edges + userCleanup now gone
+3. notifications cluster → `notificationService`
+4. `mapsService` → `transitService` → `placeService` → `transitItineraryService`
+5. `atlasService` → `authService` (+ oidc/passkey) → `adminService` → `oauthService`
+6. `memories/` cluster → `journeyService` → `journeyShareService`; `collectionsService`
+   (frontier-ready since the permissions fold — can also go any time)
+7. Independent any time: `weatherService`, `wikiService`, `airportService` (move the
     boot backfill into Nest bootstrap when you do it); `backupService` last
 
 **Corrections to `migrate.md` this graph surfaced:**

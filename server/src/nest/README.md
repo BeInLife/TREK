@@ -28,7 +28,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
-  collab, vacay, reservations, day — see the migration recipe below.
+  collab, vacay, reservations, day, permissions, audit — see the migration
+  recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -155,11 +156,38 @@ service, `TripsService` + the assignments/reservations MCP controllers
 converted to injection, and a 6-export `days.bridge.ts` for the legacy
 `tripService` and the still-legacy transit + transports registrars; the DTO
 ratchet for its 4 day + 2 accommodation grandfathered body contracts landed
-as a sibling commit).
+as a sibling commit);
+permissions followed (the first Wave-2 **cross-cutting** migration and the
+first greenfield module in the series — no prior wrapper, controller, MCP
+surface or DTO of its own: a new `nest/permissions/` whose
+`PermissionsService` is injected by 16 domain services, the airtrail-import
+controller and `PluginHostDepsFactory` (its 16th constructor dep) in one move,
+plus a 5-function `permissions.bridge.ts` for `mcp/tools/_shared.ts` — one
+repoint covering every `hasTripPermission` call site — and the four legacy
+consumers adminService/authService/backupService/collectionsService; the
+permissions **cache stays module-scoped** in `permissions.service.ts` on
+purpose, so the bridge instance and the container singleton share one cache
+and backup-restore's bridge-side `invalidatePermissionsCache()` flushes what
+request handlers serve; the domain e2e suites swapped their path mocks for a
+`vi.spyOn(app.get(PermissionsService), 'checkPermission')` instance spy);
+auditLog followed (the other Wave-2 half, split into five files: the
+injectable `AuditService` (`writeAudit` over `DatabaseService`), the pure
+`client-ip.ts` (files.constants precedent — the four getClientIp-only
+controllers stay plain imports), the deliberately side-effectful plain
+`audit-log.logger.ts` — frozen-at-import `LOG_LEVEL` and the import-time
+`data/logs` mkdir are a documented parity exception to the no-side-effects
+rule because `index.ts` lazy-requires it pre-container and tests/setup.ts
+sets the level pre-import — plus `audit.module.ts` and a full-surface
+`audit.bridge.ts` for `mcp/index.ts`, `mcp/oauthProvider.ts` and the legacy
+airtrail/immich/oauth services, while log*-only consumers (index.ts's lazy
+require strings, scheduler, globalMiddleware, notifications) point at the
+logger directly; 8 controllers + `PluginRuntimeService` inject `AuditService`,
+and the domain e2e suites dropped the audit mock entirely — writeAudit runs
+for real against an `audit_log` table in their temp DBs).
 Repeat these steps per
-service (next up: permissions + auditLog — the Wave-2 cross-cutting pair the
-dependency-honest order in `migration-graph.md` promotes now that dayService
-is folded; then the exchangeRateService fold → budgetService). This is a
+service (next up: the exchangeRateService fold → budgetService per the
+dependency-honest order in `migration-graph.md`, now that the Wave-2
+permissions + auditLog pair is folded). This is a
 **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it
