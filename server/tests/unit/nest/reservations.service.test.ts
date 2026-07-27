@@ -134,7 +134,7 @@ describe('ReservationsService (DI-native, real SQL)', () => {
       expect(rows).toEqual([{ name: 'A', sequence: 0 }, { name: 'B', sequence: 1 }]);
     });
 
-    it('RESV-SVC-006 (quirk preserved): metadata check-in sync is gated on the raw accommodation_id, so an auto-created accommodation is not updated', () => {
+    it('RESV-SVC-006 (quirk fixed): metadata check-in sync keys off the resolved id, so an auto-created accommodation gets its times too', () => {
       const { trip } = ownerTrip({ start_date: '2030-05-01', end_date: '2030-05-02' });
       const place = createPlace(testDb, trip.id);
       const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as { id: number }[];
@@ -143,8 +143,9 @@ describe('ReservationsService (DI-native, real SQL)', () => {
         create_accommodation: { place_id: place.id, start_day_id: days[0].id, end_day_id: days[1].id },
         metadata: { check_in_time: '16:00' },
       });
+      // The legacy gate read the raw accommodation_id and left this NULL.
       const acc = testDb.prepare('SELECT check_in FROM day_accommodations WHERE trip_id = ?').get(trip.id) as { check_in: string | null };
-      expect(acc.check_in).toBeNull(); // the L416 gate reads accommodation_id, not resolvedAccommodationId
+      expect(acc.check_in).toBe('16:00');
     });
   });
 
@@ -732,5 +733,31 @@ describe('ReservationsService — legacy branch parity (coverage of the folded c
     // explicit clear with no linked item deletes nothing
     svc.syncBudgetOnUpdate(String(trip.id), '999999', 'X', 'flight', 'X', 'flight', { total_price: 0 }, undefined);
     expect(budget.deleteBudgetItem).not.toHaveBeenCalled();
+  });
+});
+
+describe('ReservationsService — quirk fixes (post-fold)', () => {
+  it('RESV-FIX-001: create is atomic — a failing endpoint save rolls back the reservation AND the auto-created accommodation', () => {
+    const { trip } = ownerTrip({ start_date: '2030-05-01', end_date: '2030-05-02' });
+    const place = createPlace(testDb, trip.id);
+    const days = testDb.prepare('SELECT id FROM days WHERE trip_id = ? ORDER BY day_number').all(trip.id) as { id: number }[];
+    // sequence is an unbindable object -> the endpoint INSERT throws mid-write.
+    const badEndpoints = [{ role: 'from', name: 'A', code: null, lat: 1, lng: 2, timezone: null, local_time: null, local_date: null, sequence: {} }];
+    expect(() => svc.create(String(trip.id), {
+      title: 'Hotel', type: 'hotel',
+      create_accommodation: { place_id: place.id, start_day_id: days[0].id, end_day_id: days[1].id },
+      endpoints: badEndpoints,
+    } as never)).toThrow();
+    expect(testDb.prepare('SELECT COUNT(*) as c FROM reservations WHERE trip_id = ?').get(trip.id)).toEqual({ c: 0 });
+    expect(testDb.prepare('SELECT COUNT(*) as c FROM day_accommodations WHERE trip_id = ?').get(trip.id)).toEqual({ c: 0 });
+  });
+
+  it('RESV-FIX-002: update is atomic — a failing endpoint save rolls back the field update', () => {
+    const { trip } = ownerTrip();
+    const res = createReservation(testDb, trip.id, { title: 'Old' });
+    const current = svc.getReservation(String(res.id), String(trip.id))!;
+    const badEndpoints = [{ role: 'from', name: 'A', code: null, lat: 1, lng: 2, timezone: null, local_time: null, local_date: null, sequence: {} }];
+    expect(() => svc.update(String(res.id), String(trip.id), { title: 'New', endpoints: badEndpoints } as never, current)).toThrow();
+    expect(testDb.prepare('SELECT title FROM reservations WHERE id = ?').get(res.id)).toEqual({ title: 'Old' });
   });
 });

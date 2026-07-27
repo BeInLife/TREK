@@ -113,8 +113,11 @@ type AccommodationTimesMeta = {
 /**
  * Reservations domain service — owns the reservation SQL (moved 1:1 from the
  * legacy services/reservationService.ts: identical statements, the `||`
- * falsy-coercion defaults, the COALESCE update semantics, the post-write
- * re-selects and the un-transactioned multi-statement writes). Trip access,
+ * falsy-coercion defaults, the COALESCE update semantics and the post-write
+ * re-selects; the multi-statement writes gained db.transaction() wrappers in
+ * the post-fold quirk-fix commit, and the accommodation metadata sync now
+ * keys off the resolved accommodation id so auto-created accommodations get
+ * their check-in/out times too). Trip access,
  * the 'reservation_edit' permission and the WebSocket broadcast keep their
  * legacy call paths. The legacy route's budget side effects (auto-create /
  * update / delete a linked budget item) and the booking notification are
@@ -240,11 +243,13 @@ export class ReservationsService {
   setReservationTravelers(reservationId: number | string, tripId: string | number, userIds: number[]): void {
     const allowed = this.assignableUserIds(tripId);
     const ids = [...new Set(userIds)].filter(uid => allowed.has(uid));
-    this.db.run('DELETE FROM reservation_travelers WHERE reservation_id = ?', reservationId);
-    if (ids.length > 0) {
-      const insert = this.db.prepare('INSERT OR IGNORE INTO reservation_travelers (reservation_id, user_id) VALUES (?, ?)');
-      for (const uid of ids) insert.run(reservationId, uid);
-    }
+    this.db.transaction(() => {
+      this.db.run('DELETE FROM reservation_travelers WHERE reservation_id = ?', reservationId);
+      if (ids.length > 0) {
+        const insert = this.db.prepare('INSERT OR IGNORE INTO reservation_travelers (reservation_id, user_id) VALUES (?, ?)');
+        for (const uid of ids) insert.run(reservationId, uid);
+      }
+    });
   }
 
   /** Assign trip members / named guests to a reservation (#1517). Null when off-trip. */
@@ -300,16 +305,18 @@ export class ReservationsService {
       tripId
     );
     const update = this.db.prepare('UPDATE reservations SET day_id = ?, end_day_id = ? WHERE id = ?');
-    for (const r of rows) {
-      const newDayId = this.resolveDayIdFromTime(tripId, r.reservation_time, false);
-      if (newDayId == null) continue;
-      const newEndDayId = r.reservation_end_time
-        ? (this.resolveDayIdFromTime(tripId, r.reservation_end_time, false) ?? r.end_day_id)
-        : r.end_day_id;
-      if (newDayId !== r.day_id || newEndDayId !== r.end_day_id) {
-        update.run(newDayId, newEndDayId, r.id);
+    this.db.transaction(() => {
+      for (const r of rows) {
+        const newDayId = this.resolveDayIdFromTime(tripId, r.reservation_time, false);
+        if (newDayId == null) continue;
+        const newEndDayId = r.reservation_end_time
+          ? (this.resolveDayIdFromTime(tripId, r.reservation_end_time, false) ?? r.end_day_id)
+          : r.end_day_id;
+        if (newDayId !== r.day_id || newEndDayId !== r.end_day_id) {
+          update.run(newDayId, newEndDayId, r.id);
+        }
       }
-    }
+    });
   }
 
   private saveEndpoints(reservationId: number, endpoints: EndpointInput[]): void {
@@ -436,7 +443,13 @@ export class ReservationsService {
     return row;
   }
 
+  /** The accommodation insert, the reservation insert, the endpoint save and
+   *  the metadata sync are one logical write — all-or-nothing. */
   create(tripId: string | number, data: CreateReservationData): { reservation: ReservationRow; accommodationCreated: boolean } {
+    return this.db.transaction(() => this.createInTx(tripId, data));
+  }
+
+  private createInTx(tripId: string | number, data: CreateReservationData): { reservation: ReservationRow; accommodationCreated: boolean } {
     const {
       title, reservation_time, reservation_end_time, location,
       confirmation_number, notes, url, day_id, end_day_id, place_id, assignment_id,
@@ -500,19 +513,22 @@ export class ReservationsService {
       this.saveEndpoints(Number(result.lastInsertRowid), endpoints);
     }
 
-    // Sync check-in/out to accommodation if linked
-    if (accommodation_id && metadata) {
+    // Sync check-in/out to accommodation if linked. Keyed off the RESOLVED id
+    // (quirk fix): the legacy gate read the raw accommodation_id, so a hotel
+    // whose accommodation was just auto-created above never received its
+    // metadata check-in/out times or confirmation.
+    if (resolvedAccommodationId && metadata) {
       const meta = (typeof metadata === 'string' ? JSON.parse(metadata) : metadata) as AccommodationTimesMeta;
       if (meta.check_in_time || meta.check_in_end_time || meta.check_out_time) {
         this.db.run(
           'UPDATE day_accommodations SET check_in = COALESCE(?, check_in), check_in_end = COALESCE(?, check_in_end), check_out = COALESCE(?, check_out) WHERE id = ?',
-          meta.check_in_time || null, meta.check_in_end_time || null, meta.check_out_time || null, accommodation_id
+          meta.check_in_time || null, meta.check_in_end_time || null, meta.check_out_time || null, resolvedAccommodationId
         );
       }
       if (confirmation_number) {
         this.db.run(
           'UPDATE day_accommodations SET confirmation = COALESCE(?, confirmation) WHERE id = ?',
-          confirmation_number, accommodation_id
+          confirmation_number, resolvedAccommodationId
         );
       }
     }
@@ -546,7 +562,13 @@ export class ReservationsService {
     return this.db.get<Reservation>('SELECT * FROM reservations WHERE id = ? AND trip_id = ?', id, tripId);
   }
 
+  /** The accommodation upsert, the reservation update, the endpoint replace
+   *  and the metadata sync are one logical write — all-or-nothing. */
   update(id: string | number, tripId: string | number, data: UpdateReservationData, current: Reservation): { reservation: ReservationRow; accommodationChanged: boolean } {
+    return this.db.transaction(() => this.updateInTx(id, tripId, data, current));
+  }
+
+  private updateInTx(id: string | number, tripId: string | number, data: UpdateReservationData, current: Reservation): { reservation: ReservationRow; accommodationChanged: boolean } {
     const {
       title, reservation_time, reservation_end_time, location,
       confirmation_number, notes, url, day_id, end_day_id, place_id, assignment_id,
@@ -685,25 +707,29 @@ export class ReservationsService {
     return { reservation, accommodationChanged };
   }
 
+  /** The accommodation + budget-item + reservation deletes are one logical
+   *  cascade — all-or-nothing. */
   remove(id: string | number, tripId: string | number): { deleted: { id: number; title: string; type: string; accommodation_id: number | null } | undefined; accommodationDeleted: boolean; deletedBudgetItemId: number | null } {
-    const reservation = this.db.get<{ id: number; title: string; type: string; accommodation_id: number | null }>(
-      'SELECT id, title, type, accommodation_id FROM reservations WHERE id = ? AND trip_id = ?', id, tripId
-    );
-    if (!reservation) return { deleted: undefined, accommodationDeleted: false, deletedBudgetItemId: null };
+    return this.db.transaction(() => {
+      const reservation = this.db.get<{ id: number; title: string; type: string; accommodation_id: number | null }>(
+        'SELECT id, title, type, accommodation_id FROM reservations WHERE id = ? AND trip_id = ?', id, tripId
+      );
+      if (!reservation) return { deleted: undefined, accommodationDeleted: false, deletedBudgetItemId: null };
 
-    let accommodationDeleted = false;
-    if (reservation.accommodation_id) {
-      this.db.run('DELETE FROM day_accommodations WHERE id = ?', reservation.accommodation_id);
-      accommodationDeleted = true;
-    }
+      let accommodationDeleted = false;
+      if (reservation.accommodation_id) {
+        this.db.run('DELETE FROM day_accommodations WHERE id = ?', reservation.accommodation_id);
+        accommodationDeleted = true;
+      }
 
-    const linkedBudget = this.db.get<{ id: number }>('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?', tripId, id);
-    if (linkedBudget) {
-      this.db.run('DELETE FROM budget_items WHERE id = ?', linkedBudget.id);
-    }
+      const linkedBudget = this.db.get<{ id: number }>('SELECT id FROM budget_items WHERE trip_id = ? AND reservation_id = ?', tripId, id);
+      if (linkedBudget) {
+        this.db.run('DELETE FROM budget_items WHERE id = ?', linkedBudget.id);
+      }
 
-    this.db.run('DELETE FROM reservations WHERE id = ?', id);
-    return { deleted: reservation, accommodationDeleted, deletedBudgetItemId: linkedBudget ? linkedBudget.id : null };
+      this.db.run('DELETE FROM reservations WHERE id = ?', id);
+      return { deleted: reservation, accommodationDeleted, deletedBudgetItemId: linkedBudget ? linkedBudget.id : null };
+    });
   }
 
   /** POST side effect: auto-create a linked budget item when a price is provided. */
