@@ -5,7 +5,6 @@ import { listBudgetItems } from '../../../services/budgetService';
 import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
 import { BLOCKED_EXTENSIONS, filesDir } from '../../files/files.constants';
-import { getRates as getExchangeRates } from '../../../services/exchangeRateService';
 import { joinTripAsMember } from '../../../services/tripMembership';
 import { send as sendNotification } from '../../../services/notificationService';
 import { createLlmClient } from '../../llm-parse/llm-client.factory';
@@ -24,6 +23,7 @@ import { listJourneys, listEntries as listJournalEntriesSvc, createEntry as crea
 import { listVisitedCountries, listManuallyVisitedRegions, listBucketList, markCountryVisited, unmarkCountryVisited, markRegionVisited, unmarkRegionVisited, createBucketItem as createBucketItemSvc, deleteBucketItem as deleteBucketItemSvc } from '../../../services/atlasService';
 import { listCollections, getCollection, createCollection, updateCollection, savePlace as saveCollectionPlaceSvc, copyToTrip as copyCollectionToTripSvc, deletePlace as deleteCollectionPlaceSvc } from '../../../services/collectionsService';
 import { BudgetService } from '../../budget/budget.service';
+import { ExchangeRatesService } from '../../budget/exchange-rates.service';
 import { ReservationsService } from '../../reservations/reservations.service';
 import { TagsService } from '../../tags/tags.service';
 import { CategoriesService } from '../../categories/categories.service';
@@ -129,9 +129,9 @@ export interface PluginCallRouter {
  * host (parent), never in the child. Broadcasts are force-namespaced to
  * `plugin:{id}:{event}` so a plugin can't forge a core event.
  *
- * DI-native domain services (budget, reservations, tags, categories, todo,
- * packing, day-notes, assignments, oauth, files, collab, vacay, the LLM
- * config resolver) and
+ * DI-native domain services (budget, exchange-rates, reservations, tags,
+ * categories, todo, packing, day-notes, assignments, oauth, files, collab,
+ * vacay, the LLM config resolver) and
  * the DatabaseService (all inline SQL + the trip-access helper) are
  * constructor-injected; legacy `services/*` domains stay plain function
  * imports until their own migration lands (DI-MIGRATION.md), at which point
@@ -156,6 +156,7 @@ export class PluginHostDepsFactory {
     private readonly vacay: VacayService,
     private readonly days: DaysService,
     private readonly permissions: PermissionsService,
+    private readonly exchangeRates: ExchangeRatesService,
   ) {}
 
   /**
@@ -534,7 +535,7 @@ export class PluginHostDepsFactory {
         }
       },
       // --- Exchange rates: the same cached upstream feed the budget uses (tenant-free). ---
-      getRates: (base) => getExchangeRates(base),
+      getRates: (base) => this.exchangeRates.getRates(base),
       // --- Trip (trip_edit). Only the schema-writable fields reach updateTrip; its
       // NotFound/Validation errors are mapped to clean RPC codes. ---
       canEditTrip: (tripId, userId) => this.canEditTripAs('trip_edit', tripId, userId),

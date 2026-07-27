@@ -19,7 +19,7 @@ The plugin runtime has three layers. Only the third is "un-Nest".
 |---|---|---|---|
 | Sandbox / transport | `supervisor/plugin-supervisor.ts`, `runtime/plugin-host-entry.ts`, `protocol/envelope.ts` | Forked child per plugin, IPC envelopes, permission tables, actor resolution, rate limiting, RSS policing | Intentionally not — this is the security boundary |
 | Enforcement | `host/rpc-host.ts` (~1330 lines) | `PluginRpcHost`: builds a per-plugin method map at spawn — a handler is registered **only if the plugin holds the unlocking permission** (registration = authorization). Depends only on the `HostDeps` interface | Neutral — decoupled by design |
-| **Wiring** | `host/plugin-host-deps.factory.ts` (was `create-rpc-host.ts`) | Fills the ~130-member `HostDeps` object. Since Option A: an `@Injectable() PluginHostDepsFactory` with the DI-native domain services (`BudgetService`, `ReservationsService`, `TagsService`, `CategoriesService`, `TodoService`, `PluginOAuthService`) constructor-injected, fifteen domains as of 2026-07 (permissions joined with the Wave-2 pair); legacy `services/*` domains stay plain function imports until their own migration. Raw `db`/`broadcast` also stay until injectable equivalents exist | **Yes (Option A)** — drains further per §3 |
+| **Wiring** | `host/plugin-host-deps.factory.ts` (was `create-rpc-host.ts`) | Fills the ~130-member `HostDeps` object. Since Option A: an `@Injectable() PluginHostDepsFactory` with the DI-native domain services (`BudgetService`, `ReservationsService`, `TagsService`, `CategoriesService`, `TodoService`, `PluginOAuthService`) constructor-injected, sixteen domains as of 2026-07 (exchange-rates joined with the budget-domain fold, after the Wave-2 permissions pair); legacy `services/*` domains stay plain function imports until their own migration. Raw `db`/`broadcast` also stay until injectable equivalents exist | **Yes (Option A)** — drains further per §3 |
 | Host state | `host/plugin-host-state.ts` | Deliberately module-level (NOT a provider): the per-plugin data-DB map (`getPluginDataDb`/`closePluginDataDb`) and daily broker budgets (`budgetFor`/`pluginBudgetUsage`). Must be one shared instance across host recreations, and is read by `PluginsService`, which the factory imports from — folding it into the injectable would create a provider cycle | Intentionally not |
 
 Key fact that made Option A cheap: the wiring is **called from inside a Nest
@@ -114,7 +114,9 @@ swapped in 2026-07 — its eleven imported symbols (the heaviest single import)
 became the injected `DaysService`; permissions swapped in 2026-07 with the
 Wave-2 pair — its `checkPermission` import became the injected
 `PermissionsService` (the auditLog half never touched the factory: the plugin
-host's audit trail is the separate `plugin-audit.ts`); the remaining factory
+host's audit trail is the separate `plugin-audit.ts`); exchangeRateService
+swapped in 2026-07 with the budget-domain fold — its `getRates` import became
+the injected `ExchangeRatesService`; the remaining factory
 imports are all Wave-4+ domains: trips, places, journeys, atlas, collections).
 
 ### Test impact (as landed)
@@ -123,7 +125,7 @@ imports are all Wave-4+ domains: trips, places, journeys, atlas, collections).
   `PluginRpcHost` directly with hand-built `HostDeps`).
 - `tests/unit/plugins/plugin-host-deps.factory.test.ts` (was
   `create-rpc-host.test.ts`) — the six DI-domain path mocks became constructor
-  stubs (fifteen stubs as of the 2026-07 permissions migration); the ~22
+  stubs (sixteen stubs as of the 2026-07 exchange-rates fold); the ~22
   legacy-service path mocks remain; a file-local shim keeps the
   historical `createRealRpcHost(id, granted)` call sites and supplies a default
   no-op router.

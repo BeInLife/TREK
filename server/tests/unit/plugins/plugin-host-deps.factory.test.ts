@@ -3,8 +3,9 @@
  * capability host to the real privileged modules (#plugins, M1). Verifies the
  * per-plugin data db is cached, a granted db:own call works through the wired
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
- * DI-native domains (budget/reservations/tags/categories/todo/packing/
- * day-notes/days/assignments/oauth/llm-config/files/collab/vacay/permissions)
+ * DI-native domains (budget/exchange-rates/reservations/tags/categories/todo/
+ * packing/day-notes/days/assignments/oauth/llm-config/files/collab/vacay/
+ * permissions)
  * are constructor-injected stubs; legacy services/* domains stay path-mocked
  * until their own DI migration lands.
  */
@@ -84,9 +85,11 @@ vi.mock('../../../src/services/tripService', () => {
     NotFoundError, ValidationError,
   };
 });
-vi.mock('../../../src/services/exchangeRateService', () => ({
+// Exchange rates are a constructor-injected stub since the budget-domain fold
+// (was a path mock of the deleted services/exchangeRateService — same behavior).
+const exchangeRatesStub = {
   getRates: vi.fn(async (base: string) => ({ [base]: 1, USD: 1.08, GBP: 0.85 })),
-}));
+} as unknown as ExchangeRatesService;
 vi.mock('../../../src/services/placeService', () => ({
   createPlace: vi.fn((tid: string, body: Record<string, unknown>) => ({ id: 10, trip_id: Number(tid), ...body })),
   updatePlace: vi.fn((_tid: string, pid: string) => (pid === '99' ? null : { id: Number(pid) })),
@@ -308,6 +311,7 @@ import { PluginHostDepsFactory, type PluginCallRouter } from '../../../src/nest/
 import { getPluginDataDb, closePluginDataDb } from '../../../src/nest/plugins/host/plugin-host-state';
 import { db as mockDb } from '../../../src/db/database';
 import type { BudgetService } from '../../../src/nest/budget/budget.service';
+import type { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import type { ReservationsService } from '../../../src/nest/reservations/reservations.service';
 import type { TagsService } from '../../../src/nest/tags/tags.service';
 import type { CategoriesService } from '../../../src/nest/categories/categories.service';
@@ -327,7 +331,7 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 

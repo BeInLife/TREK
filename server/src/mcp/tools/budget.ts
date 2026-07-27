@@ -8,7 +8,7 @@ import {
   toggleMemberPaid, getBudgetItem, freezeForeignRate,
   calculateSettlement, listSettlements, createSettlement, updateSettlement, deleteSettlement,
 } from '../../services/budgetService';
-import { getRates } from '../../services/exchangeRateService';
+import { getRates } from '../../nest/budget/exchange-rates.bridge';
 import { getTripOwner, listMembers } from '../../services/tripService';
 import {
   safeBroadcast, TOOL_ANNOTATIONS_WRITE, TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_READONLY,

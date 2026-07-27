@@ -33,7 +33,7 @@ const RATES: Record<string, Record<string, number>> = {
   RUB: { RUB: 1, USD: 0.013042, EUR: 0.011412 },
   EUR: { EUR: 1, USD: 1.1429, RUB: 87.63 },
 };
-vi.mock('../../../src/services/exchangeRateService', () => ({
+vi.mock('../../../src/nest/budget/exchange-rates.bridge', () => ({
   getRates: vi.fn(async (base: string) => RATES[base.toUpperCase()] ?? null),
 }));
 

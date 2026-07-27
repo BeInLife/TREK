@@ -16,8 +16,11 @@ vi.mock('../../../src/websocket', () => ({ broadcast }));
 const checkPermission = vi.fn(() => true);
 const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
-const { getRates } = vi.hoisted(() => ({ getRates: vi.fn() }));
-vi.mock('../../../src/services/exchangeRateService', () => ({ getRates }));
+// Constructor-injected stub since the exchange-rates fold (was a path mock of
+// the deleted services/exchangeRateService).
+import type { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
+const getRates = vi.fn();
+const exchangeRatesStub = { getRates } as unknown as ExchangeRatesService;
 
 const { budget } = vi.hoisted(() => ({
   budget: {
@@ -45,7 +48,7 @@ vi.mock('../../../src/services/budgetService', () => budget);
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 
 function svc() {
-  return new BudgetService(new DatabaseService(dbConn), permissionsStub);
+  return new BudgetService(new DatabaseService(dbConn), permissionsStub, exchangeRatesStub);
 }
 
 beforeEach(() => {

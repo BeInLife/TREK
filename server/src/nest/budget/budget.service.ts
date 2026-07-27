@@ -4,7 +4,7 @@ import { broadcast } from '../../websocket';
 import { PermissionsService } from '../permissions/permissions.service';
 import type { User } from '../../types';
 import * as svc from '../../services/budgetService';
-import { getRates } from '../../services/exchangeRateService';
+import { ExchangeRatesService } from './exchange-rates.service';
 
 type Trip = NonNullable<ReturnType<typeof svc.verifyTripAccess>>;
 
@@ -18,6 +18,7 @@ export class BudgetService {
   constructor(
     private readonly dbs: DatabaseService,
     private readonly permissions: PermissionsService,
+    private readonly exchangeRates: ExchangeRatesService,
   ) {}
 
   private get db() {
@@ -46,7 +47,7 @@ export class BudgetService {
 
   async settlement(tripId: string, base: string | undefined, tripCurrency: string) {
     const effectiveBase = (base || tripCurrency || 'EUR').toUpperCase();
-    const rates = await getRates(effectiveBase);
+    const rates = await this.exchangeRates.getRates(effectiveBase);
     return svc.calculateSettlement(tripId, { base: effectiveBase, rates, tripCurrency });
   }
 

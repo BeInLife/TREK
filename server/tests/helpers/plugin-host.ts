@@ -4,6 +4,7 @@ import type { PluginRegistryService } from '../../src/nest/plugins/registry/regi
 import { PluginHostDepsFactory } from '../../src/nest/plugins/host/plugin-host-deps.factory';
 import { PluginOAuthService } from '../../src/nest/plugins/plugin-oauth.service';
 import { BudgetService } from '../../src/nest/budget/budget.service';
+import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.service';
 import { ReservationsService } from '../../src/nest/reservations/reservations.service';
 import { TagsService } from '../../src/nest/tags/tags.service';
 import { CategoriesService } from '../../src/nest/categories/categories.service';
@@ -28,8 +29,9 @@ import { AuditService } from '../../src/nest/audit/audit.service';
  */
 export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFactory {
   const permissions = new PermissionsService(dbs);
+  const exchangeRates = new ExchangeRatesService();
   return new PluginHostDepsFactory(
-    new BudgetService(dbs, permissions),
+    new BudgetService(dbs, permissions, exchangeRates),
     new ReservationsService(dbs, permissions),
     new TagsService(dbs),
     new CategoriesService(dbs),
@@ -45,6 +47,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     new VacayService(dbs),
     new DaysService(dbs, permissions),
     permissions,
+    exchangeRates,
   );
 }
 

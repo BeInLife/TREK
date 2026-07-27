@@ -184,10 +184,18 @@ require strings, scheduler, globalMiddleware, notifications) point at the
 logger directly; 8 controllers + `PluginRuntimeService` inject `AuditService`,
 and the domain e2e suites dropped the audit mock entirely — writeAudit runs
 for real against an `audit_log` table in their temp DBs).
+The exchangeRateService fold followed (the pure-infra FX helper — Frankfurter
+fetch + module-scoped 6h cache, no SQL, no controller, no MCP registrar of its
+own — folded into `nest/budget/` as a dep-free `ExchangeRatesService`, injected
+by `BudgetService` and `PluginHostDepsFactory` (its 17th constructor dep), with
+an `exchange-rates.bridge.ts` for the legacy `services/budgetService.ts` FX
+seams and the `mcp/tools/budget.ts` registrar; the rate **cache stays
+module-scoped** like the permissions cache, so the bridge instance and the
+container singleton share one cached upstream feed).
 Repeat these steps per
-service (next up: the exchangeRateService fold → budgetService per the
-dependency-honest order in `migration-graph.md`, now that the Wave-2
-permissions + auditLog pair is folded). This is a
+service (next up: **budgetService** — frontier-ready now that its
+exchangeRateService dependency is folded, per the dependency-honest order in
+`migration-graph.md`). This is a
 **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it

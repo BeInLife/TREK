@@ -18,7 +18,7 @@ const mockDb = vi.hoisted(() => {
 vi.mock('../../../src/db/database', () => mockDb);
 
 const mockRates = vi.hoisted(() => ({ getRates: vi.fn() }));
-vi.mock('../../../src/services/exchangeRateService', () => mockRates);
+vi.mock('../../../src/nest/budget/exchange-rates.bridge', () => mockRates);
 
 import { calculateSettlement, updateSettlement, freezeForeignRate } from '../../../src/services/budgetService';
 import type { BudgetItem, BudgetItemMember, BudgetItemPayer } from '../../../src/types';

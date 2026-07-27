@@ -1,7 +1,7 @@
 import { db } from '../db/database';
 import { BudgetItem, BudgetItemMember, BudgetItemPayer } from '../types';
 import { avatarUrl } from './avatarUrl';
-import { getRates } from './exchangeRateService';
+import { getRates } from '../nest/budget/exchange-rates.bridge';
 
 // ---------------------------------------------------------------------------
 // Helpers
