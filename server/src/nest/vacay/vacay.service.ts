@@ -2,6 +2,10 @@ import { Injectable } from '@nestjs/common';
 import * as svc from '../../services/vacayService';
 
 type UpdatePlanBody = Parameters<typeof svc.updatePlan>[1];
+// The wire contract admits holidays_region: null (the MCP tool already passes
+// null through and SQLite stores NULL); the legacy UpdatePlanBody type is
+// narrower than the runtime. Widened here at the wrapper seam.
+type UpdatePlanInput = Omit<UpdatePlanBody, 'holidays_region'> & { holidays_region?: string | null };
 
 /**
  * Thin Nest wrapper around the existing vacay service. All plan logic, the
@@ -22,8 +26,8 @@ export class VacayService {
     return svc.getActivePlan(userId);
   }
 
-  updatePlan(planId: number, body: UpdatePlanBody, socketId: string | undefined) {
-    return svc.updatePlan(planId, body, socketId);
+  updatePlan(planId: number, body: UpdatePlanInput, socketId: string | undefined) {
+    return svc.updatePlan(planId, body as UpdatePlanBody, socketId);
   }
 
   addHolidayCalendar(planId: number, region: string, label: string | null, color: string | undefined, sortOrder: number | undefined, socketId: string | undefined, type?: 'public_holiday' | 'school_holiday') {

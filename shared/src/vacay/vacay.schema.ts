@@ -16,6 +16,23 @@ import { z } from 'zod';
 
 const open = z.record(z.string(), z.unknown());
 
+// Plan settings update (PUT /plan): every field optional — only provided keys
+// are written (dynamic SET list server-side). weekend_days is the
+// comma-separated weekday list stored as TEXT (e.g. '0,6'); week_start is
+// coerced to 0/1 server-side; holidays_region takes null to clear the legacy
+// single-region field (superseded by holiday calendars, still on the wire).
+export const vacayUpdatePlanRequestSchema = z.object({
+  block_weekends: z.boolean().optional(),
+  holidays_enabled: z.boolean().optional(),
+  holidays_region: z.string().nullable().optional(),
+  school_holidays_enabled: z.boolean().optional(),
+  company_holidays_enabled: z.boolean().optional(),
+  carry_over_enabled: z.boolean().optional(),
+  weekend_days: z.string().optional(),
+  week_start: z.number().optional(),
+});
+export type VacayUpdatePlanRequest = z.infer<typeof vacayUpdatePlanRequestSchema>;
+
 export const vacayAddHolidayCalendarRequestSchema = z.object({
   region: z.string().min(1),
   type: z.enum(['public_holiday', 'school_holiday']).optional(),
@@ -24,6 +41,17 @@ export const vacayAddHolidayCalendarRequestSchema = z.object({
   sort_order: z.number().optional(),
 });
 export type VacayAddHolidayCalendarRequest = z.infer<typeof vacayAddHolidayCalendarRequestSchema>;
+
+// Partial calendar update (PUT /plan/holiday-calendars/:id): every field
+// optional — only provided keys are written (dynamic SET list server-side).
+export const vacayUpdateHolidayCalendarRequestSchema = z.object({
+  region: z.string().optional(),
+  type: z.enum(['public_holiday', 'school_holiday']).optional(),
+  label: z.string().nullable().optional(),
+  color: z.string().optional(),
+  sort_order: z.number().optional(),
+});
+export type VacayUpdateHolidayCalendarRequest = z.infer<typeof vacayUpdateHolidayCalendarRequestSchema>;
 
 export const vacaySetColorRequestSchema = z.object({
   color: z.string().optional(),

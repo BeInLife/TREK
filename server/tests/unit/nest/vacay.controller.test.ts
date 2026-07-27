@@ -32,16 +32,13 @@ describe('VacayController (parity with the legacy /api/addons/vacay route)', () 
 
   it('PUT /plan forwards the socket id', async () => {
     const updatePlan = vi.fn().mockResolvedValue({ ok: true });
-    await makeController({ ...planBase, updatePlan }).updatePlan(user, { foo: 1 }, 'sock-1');
-    expect(updatePlan).toHaveBeenCalledWith(10, { foo: 1 }, 'sock-1');
+    await makeController({ ...planBase, updatePlan }).updatePlan(user, { block_weekends: true }, 'sock-1');
+    expect(updatePlan).toHaveBeenCalledWith(10, { block_weekends: true }, 'sock-1');
   });
 
   describe('holiday calendars', () => {
-    it('400 when region missing', () => {
-      return thrown(() => makeController({ ...planBase }).addHolidayCalendar(user, {})).then((r) =>
-        expect(r).toEqual({ status: 400, body: { error: 'region required' } }));
-    });
-
+    // A missing region now 400s in the global ZodValidationPipe (the schema
+    // requires it), so the bespoke 'region required' guard is gone.
     it('creates a calendar', () => {
       const addHolidayCalendar = vi.fn().mockReturnValue({ id: 1, region: 'DE-BY' });
       const res = makeController({ ...planBase, addHolidayCalendar }).addHolidayCalendar(user, { region: 'DE-BY', label: 'Bayern' }, 'sock');
@@ -78,56 +75,57 @@ describe('VacayController (parity with the legacy /api/addons/vacay route)', () 
   });
 
   describe('invites', () => {
-    it('400 when user_id missing', () => {
-      return thrown(() => makeController({ ...planBase }).invite(user, undefined)).then((r) =>
+    // The schema requires user_id but still admits falsy values (0, '') — the
+    // bespoke guard stays for those, byte-identical to the legacy route.
+    it('400 when user_id falsy', () => {
+      return thrown(() => makeController({ ...planBase }).invite(user, { user_id: 0 })).then((r) =>
         expect(r).toEqual({ status: 400, body: { error: 'user_id required' } }));
     });
 
     it('maps a sendInvite error to its status', () => {
       const sendInvite = vi.fn().mockReturnValue({ error: 'Already in a plan', status: 409 });
-      return thrown(() => makeController({ ...planBase, sendInvite }).invite(user, 2)).then((r) =>
+      return thrown(() => makeController({ ...planBase, sendInvite }).invite(user, { user_id: 2 })).then((r) =>
         expect(r).toEqual({ status: 409, body: { error: 'Already in a plan' } }));
     });
 
     it('sends an invite', () => {
       const sendInvite = vi.fn().mockReturnValue({});
-      expect(makeController({ ...planBase, sendInvite }).invite(user, 2)).toEqual({ success: true });
+      expect(makeController({ ...planBase, sendInvite }).invite(user, { user_id: 2 })).toEqual({ success: true });
       expect(sendInvite).toHaveBeenCalledWith(10, 1, 'u', 'u@example.test', 2);
     });
 
     it('maps an acceptInvite error', () => {
       const acceptInvite = vi.fn().mockReturnValue({ error: 'Invite not found', status: 404 });
-      return thrown(() => makeController({ acceptInvite }).acceptInvite(user, 5)).then((r) =>
+      return thrown(() => makeController({ acceptInvite }).acceptInvite(user, { plan_id: 5 })).then((r) =>
         expect(r).toEqual({ status: 404, body: { error: 'Invite not found' } }));
     });
 
     it('decline / cancel / dissolve return success', () => {
       const declineInvite = vi.fn(); const cancelInvite = vi.fn(); const dissolvePlan = vi.fn();
-      expect(makeController({ declineInvite }).declineInvite(user, 5)).toEqual({ success: true });
-      expect(makeController({ ...planBase, cancelInvite }).cancelInvite(user, 2)).toEqual({ success: true });
+      expect(makeController({ declineInvite }).declineInvite(user, { plan_id: 5 })).toEqual({ success: true });
+      expect(makeController({ ...planBase, cancelInvite }).cancelInvite(user, { user_id: 2 })).toEqual({ success: true });
       expect(makeController({ dissolvePlan }).dissolve(user)).toEqual({ success: true });
     });
   });
 
   describe('years', () => {
-    it('400 when year missing on add', () => {
-      return thrown(() => makeController({ ...planBase }).addYear(user, undefined)).then((r) =>
+    // Same falsy-but-present rule as user_id: schema admits 0/'', the guard
+    // keeps the legacy 'Year required' body for them.
+    it('400 when year falsy on add', () => {
+      return thrown(() => makeController({ ...planBase }).addYear(user, { year: 0 })).then((r) =>
         expect(r).toEqual({ status: 400, body: { error: 'Year required' } }));
     });
 
     it('adds and deletes years', () => {
       const addYear = vi.fn().mockReturnValue([2026]); const deleteYear = vi.fn().mockReturnValue([]);
-      expect(makeController({ ...planBase, addYear }).addYear(user, 2026, 'sock')).toEqual({ years: [2026] });
+      expect(makeController({ ...planBase, addYear }).addYear(user, { year: 2026 }, 'sock')).toEqual({ years: [2026] });
       expect(makeController({ ...planBase, deleteYear }).deleteYear(user, '2026', 'sock')).toEqual({ years: [] });
     });
   });
 
   describe('entries', () => {
-    it('400 when date missing on toggle', () => {
-      return thrown(() => makeController({ ...planBase }).toggleEntry(user, {})).then((r) =>
-        expect(r).toEqual({ status: 400, body: { error: 'date required' } }));
-    });
-
+    // A missing date now 400s in the global ZodValidationPipe (schema-required),
+    // so the bespoke 'date required' guard is gone.
     it('403 when toggling for a user not in the plan', () => {
       const getPlanUsers = vi.fn().mockReturnValue([{ id: 1 }]);
       return thrown(() => makeController({ ...planBase, getPlanUsers }).toggleEntry(user, { date: '2026-07-01', target_user_id: 99 })).then((r) =>
@@ -215,20 +213,20 @@ describe('VacayController (parity with the legacy /api/addons/vacay route)', () 
       expect(listShares).toHaveBeenCalledWith(1);
     });
 
-    it('400 when user_id missing on share', () => {
-      return thrown(() => makeController({}).share(user, undefined)).then((r) =>
+    it('400 when user_id falsy on share', () => {
+      return thrown(() => makeController({}).share(user, { user_id: 0 })).then((r) =>
         expect(r).toEqual({ status: 400, body: { error: 'user_id required' } }));
     });
 
     it('maps a shareCalendar error to its status', () => {
       const shareCalendar = vi.fn().mockReturnValue({ error: 'Already shared', status: 400 });
-      return thrown(() => makeController({ shareCalendar }).share(user, 2)).then((r) =>
+      return thrown(() => makeController({ shareCalendar }).share(user, { user_id: 2 })).then((r) =>
         expect(r).toEqual({ status: 400, body: { error: 'Already shared' } }));
     });
 
     it('shares a calendar (user_id coerced to a number, socket id forwarded)', () => {
       const shareCalendar = vi.fn().mockReturnValue({});
-      expect(makeController({ shareCalendar }).share(user, '2', 'sock-1')).toEqual({ success: true });
+      expect(makeController({ shareCalendar }).share(user, { user_id: '2' }, 'sock-1')).toEqual({ success: true });
       expect(shareCalendar).toHaveBeenCalledWith(1, 'u@example.test', 2, 'sock-1');
     });
 

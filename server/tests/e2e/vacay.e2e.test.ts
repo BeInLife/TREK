@@ -90,10 +90,10 @@ describe('Vacay e2e (real auth guard + temp SQLite)', () => {
     expect(svc.toggleEntry).toHaveBeenCalledWith(1, 10, '2026-07-01', undefined, undefined, 'sock-7');
   });
 
-  it('400 on entries/toggle without a date', async () => {
+  it('400 from the Zod pipe on entries/toggle without a date', async () => {
     const res = await request(server).post('/api/addons/vacay/entries/toggle').set('Cookie', sessionCookie(1)).send({});
     expect(res.status).toBe(400);
-    expect(res.body).toEqual({ error: 'date required' });
+    expect(res.body.error).toContain('date');
   });
 
   it('403 on color for a user not in the plan', async () => {
