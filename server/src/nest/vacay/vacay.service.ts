@@ -92,15 +92,8 @@ export interface VacayShare {
   created_at?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Holiday cache (shared in-process)
-// ---------------------------------------------------------------------------
-// Deliberately module-level, exactly like the legacy services/vacayService.ts:
-// the cache is process-wide, so a bridge- or test-constructed second instance
-// shares it. DI-ifying it is a behavior change reserved for a fix commit.
-
-const holidayCache = new Map<string, { data: unknown; time: number }>();
 const CACHE_TTL = 24 * 60 * 60 * 1000;
+const FETCH_TIMEOUT_MS = 10_000;
 
 // ---------------------------------------------------------------------------
 // Color palette for auto-assign
@@ -151,20 +144,25 @@ function windowEndYear(end: string): number {
 /**
  * Vacay domain service — owns the vacay SQL (moved 1:1 from the legacy
  * services/vacayService.ts: identical statements, the `||` falsy-coercion
- * defaults next to `??` ones, the post-write re-selects, the dynamic SET-list
- * updates, and the deliberately unwrapped multi-statement writes — the legacy
- * module used no transactions, and adding them is a behavior change reserved
- * for a fix commit). Broadcasts go straight to `broadcastToUser` inside the
+ * defaults next to `??` ones, the post-write re-selects and the dynamic
+ * SET-list updates). Broadcasts go straight to `broadcastToUser` inside the
  * same try/catch swallows the legacy lazy require sat in; notifications stay
- * fire-and-forget dynamic imports. The nager.at / openholidaysapi.org fetch
- * quirks (no timeout, no resp.ok check on the nager endpoints, TTL-less cache
- * read in applyHolidayCalendars) are preserved as-is.
+ * fire-and-forget dynamic imports.
+ *
+ * Post-migration fixes on top of the relocated legacy behavior: the
+ * multi-statement writes (acceptInvite, dissolvePlan, deleteYear, updatePlan's
+ * carry-over recompute) run in db.transaction(); every outbound fetch carries
+ * an AbortSignal timeout and the nager.at responses are ok-checked;
+ * applyHolidayCalendars honors the cache TTL; addYear no longer swallows real
+ * errors; the holiday cache is instance state instead of a module-level map.
  * The only consumer outside the Nest container is the legacy tripService,
  * which goes through vacay.bridge.ts instead of importing this class.
  */
 @Injectable()
 export class VacayService {
   constructor(private readonly db: DatabaseService) {}
+
+  private readonly holidayCache = new Map<string, { data: unknown; time: number }>();
 
   // -------------------------------------------------------------------------
   // Entitlement helpers
@@ -430,11 +428,13 @@ export class VacayService {
       for (const year of calendarYears) {
         try {
           const cacheKey = `${year}-${country}`;
-          let holidays = holidayCache.get(cacheKey)?.data as Holiday[] | undefined;
+          const cached = this.holidayCache.get(cacheKey);
+          let holidays = cached && Date.now() - cached.time < CACHE_TTL ? cached.data as Holiday[] : undefined;
           if (!holidays) {
-            const resp = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${country}`);
+            const resp = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${country}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+            if (!resp.ok) continue;
             holidays = await resp.json() as Holiday[];
-            holidayCache.set(cacheKey, { data: holidays, time: Date.now() });
+            this.holidayCache.set(cacheKey, { data: holidays, time: Date.now() });
           }
           const hasRegions = holidays.some((h: Holiday) => h.counties && h.counties.length > 0);
           if (hasRegions && !region) continue;
@@ -499,22 +499,26 @@ export class VacayService {
     }
 
     if (carry_over_enabled === true) {
-      const years = this.db.all<{ year: number }>('SELECT year FROM vacay_years WHERE plan_id = ? ORDER BY year', planId);
-      const users = this.getPlanUsers(planId);
-      for (let i = 0; i < years.length - 1; i++) {
-        const yr = years[i].year;
-        const nextYr = years[i + 1].year;
-        for (const u of users) {
-          const used = this.usedDays(u.id, planId, yr);
-          const config = this.db.get<VacayUserYear>('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?', u.id, planId, yr);
-          const total = (config ? config.vacation_days : 30) + (config ? config.carried_over : 0);
-          const carry = Math.max(0, total - used);
-          this.db.run(`
+      // The chained per-year/per-user recompute is atomic — a failure mid-chain
+      // would otherwise leave later years carrying stale balances.
+      this.db.transaction(() => {
+        const years = this.db.all<{ year: number }>('SELECT year FROM vacay_years WHERE plan_id = ? ORDER BY year', planId);
+        const users = this.getPlanUsers(planId);
+        for (let i = 0; i < years.length - 1; i++) {
+          const yr = years[i].year;
+          const nextYr = years[i + 1].year;
+          for (const u of users) {
+            const used = this.usedDays(u.id, planId, yr);
+            const config = this.db.get<VacayUserYear>('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?', u.id, planId, yr);
+            const total = (config ? config.vacation_days : 30) + (config ? config.carried_over : 0);
+            const carry = Math.max(0, total - used);
+            this.db.run(`
           INSERT INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, 30, ?)
           ON CONFLICT(user_id, plan_id, year) DO UPDATE SET carried_over = ?
         `, u.id, planId, nextYr, carry, carry);
+          }
         }
-      }
+      });
     }
 
     this.notifyPlanUsers(planId, socketId, 'vacay:settings');
@@ -631,47 +635,53 @@ export class VacayService {
   }
 
   acceptInvite(userId: number, planId: number, socketId: string | undefined): { error?: string; status?: number } {
-    const invite = this.db.get<VacayPlanMember>("SELECT * FROM vacay_plan_members WHERE plan_id = ? AND user_id = ? AND status = 'pending'", planId, userId);
-    if (!invite) return { error: 'No pending invite', status: 404 };
+    // The accept flow is a multi-statement write (status flip + entry/year/color
+    // migration + seeding) — atomic, so a failure can't leave the member half-fused.
+    const result = this.db.transaction((): { error?: string; status?: number } => {
+      const invite = this.db.get<VacayPlanMember>("SELECT * FROM vacay_plan_members WHERE plan_id = ? AND user_id = ? AND status = 'pending'", planId, userId);
+      if (!invite) return { error: 'No pending invite', status: 404 };
 
-    this.db.run("UPDATE vacay_plan_members SET status = 'accepted' WHERE id = ?", invite.id);
+      this.db.run("UPDATE vacay_plan_members SET status = 'accepted' WHERE id = ?", invite.id);
 
-    // Migrate data from user's own plan
-    const ownPlan = this.db.get<{ id: number }>('SELECT id FROM vacay_plans WHERE owner_id = ?', userId);
-    if (ownPlan && ownPlan.id !== planId) {
-      this.db.run('UPDATE vacay_entries SET plan_id = ? WHERE plan_id = ? AND user_id = ?', planId, ownPlan.id, userId);
-      const ownYears = this.db.all<VacayUserYear>('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ?', userId, ownPlan.id);
-      for (const y of ownYears) {
-        this.db.run('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, ?, ?)', userId, planId, y.year, y.vacation_days, y.carried_over);
+      // Migrate data from user's own plan
+      const ownPlan = this.db.get<{ id: number }>('SELECT id FROM vacay_plans WHERE owner_id = ?', userId);
+      if (ownPlan && ownPlan.id !== planId) {
+        this.db.run('UPDATE vacay_entries SET plan_id = ? WHERE plan_id = ? AND user_id = ?', planId, ownPlan.id, userId);
+        const ownYears = this.db.all<VacayUserYear>('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ?', userId, ownPlan.id);
+        for (const y of ownYears) {
+          this.db.run('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, ?, ?)', userId, planId, y.year, y.vacation_days, y.carried_over);
+        }
+        const colorRow = this.db.get<{ color: string }>('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?', userId, ownPlan.id);
+        if (colorRow) {
+          this.db.run('INSERT OR IGNORE INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)', userId, planId, colorRow.color);
+        }
       }
-      const colorRow = this.db.get<{ color: string }>('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?', userId, ownPlan.id);
-      if (colorRow) {
-        this.db.run('INSERT OR IGNORE INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)', userId, planId, colorRow.color);
-      }
-    }
 
-    // Auto-assign unique color
-    const existingColors = this.db.all<{ color: string }>('SELECT color FROM vacay_user_colors WHERE plan_id = ? AND user_id != ?', planId, userId).map(r => r.color);
-    const myColor = this.db.get<{ color: string }>('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?', userId, planId);
-    const effectiveColor = myColor?.color || '#6366f1';
-    if (existingColors.includes(effectiveColor)) {
-      const available = COLORS.find(c => !existingColors.includes(c));
-      if (available) {
-        this.db.run(`INSERT INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)
+      // Auto-assign unique color
+      const existingColors = this.db.all<{ color: string }>('SELECT color FROM vacay_user_colors WHERE plan_id = ? AND user_id != ?', planId, userId).map(r => r.color);
+      const myColor = this.db.get<{ color: string }>('SELECT color FROM vacay_user_colors WHERE user_id = ? AND plan_id = ?', userId, planId);
+      const effectiveColor = myColor?.color || '#6366f1';
+      if (existingColors.includes(effectiveColor)) {
+        const available = COLORS.find(c => !existingColors.includes(c));
+        if (available) {
+          this.db.run(`INSERT INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)
         ON CONFLICT(user_id, plan_id) DO UPDATE SET color = excluded.color`, userId, planId, available);
+        }
+      } else if (!myColor) {
+        this.db.run('INSERT OR IGNORE INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)', userId, planId, effectiveColor);
       }
-    } else if (!myColor) {
-      this.db.run('INSERT OR IGNORE INTO vacay_user_colors (user_id, plan_id, color) VALUES (?, ?, ?)', userId, planId, effectiveColor);
-    }
 
-    // Ensure user has rows for all plan years
-    const targetYears = this.db.all<{ year: number }>('SELECT year FROM vacay_years WHERE plan_id = ?', planId);
-    for (const y of targetYears) {
-      this.db.run('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, 30, 0)', userId, planId, y.year);
-    }
+      // Ensure user has rows for all plan years
+      const targetYears = this.db.all<{ year: number }>('SELECT year FROM vacay_years WHERE plan_id = ?', planId);
+      for (const y of targetYears) {
+        this.db.run('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, 30, 0)', userId, planId, y.year);
+      }
+      return {};
+    });
 
+    if (result.error) return result;
     this.notifyPlanUsers(planId, socketId, 'vacay:accepted');
-    return {};
+    return result;
   }
 
   declineInvite(userId: number, planId: number, socketId: string | undefined): void {
@@ -692,30 +702,35 @@ export class VacayService {
   // -------------------------------------------------------------------------
 
   dissolvePlan(userId: number, socketId: string | undefined): void {
-    const plan = this.getActivePlan(userId);
-    const isOwnerFlag = plan.owner_id === userId;
+    // Dissolution moves every member's entries back to their own plan and copies
+    // the company holidays — atomic, so a failure can't strand entries between plans.
+    const allUserIds = this.db.transaction(() => {
+      const plan = this.getActivePlan(userId);
+      const isOwnerFlag = plan.owner_id === userId;
 
-    const allUserIds = this.getPlanUsers(plan.id).map(u => u.id);
-    const companyHolidays = this.db.all<{ date: string; note: string }>('SELECT date, note FROM vacay_company_holidays WHERE plan_id = ?', plan.id);
+      const userIds = this.getPlanUsers(plan.id).map(u => u.id);
+      const companyHolidays = this.db.all<{ date: string; note: string }>('SELECT date, note FROM vacay_company_holidays WHERE plan_id = ?', plan.id);
 
-    if (isOwnerFlag) {
-      const members = this.db.all<{ user_id: number }>("SELECT user_id FROM vacay_plan_members WHERE plan_id = ? AND status = 'accepted'", plan.id);
-      for (const m of members) {
-        const memberPlan = this.getOwnPlan(m.user_id);
-        this.db.run('UPDATE vacay_entries SET plan_id = ? WHERE plan_id = ? AND user_id = ?', memberPlan.id, plan.id, m.user_id);
-        for (const ch of companyHolidays) {
-          this.db.run('INSERT OR IGNORE INTO vacay_company_holidays (plan_id, date, note) VALUES (?, ?, ?)', memberPlan.id, ch.date, ch.note);
+      if (isOwnerFlag) {
+        const members = this.db.all<{ user_id: number }>("SELECT user_id FROM vacay_plan_members WHERE plan_id = ? AND status = 'accepted'", plan.id);
+        for (const m of members) {
+          const memberPlan = this.getOwnPlan(m.user_id);
+          this.db.run('UPDATE vacay_entries SET plan_id = ? WHERE plan_id = ? AND user_id = ?', memberPlan.id, plan.id, m.user_id);
+          for (const ch of companyHolidays) {
+            this.db.run('INSERT OR IGNORE INTO vacay_company_holidays (plan_id, date, note) VALUES (?, ?, ?)', memberPlan.id, ch.date, ch.note);
+          }
         }
+        this.db.run('DELETE FROM vacay_plan_members WHERE plan_id = ?', plan.id);
+      } else {
+        const ownPlan = this.getOwnPlan(userId);
+        this.db.run('UPDATE vacay_entries SET plan_id = ? WHERE plan_id = ? AND user_id = ?', ownPlan.id, plan.id, userId);
+        for (const ch of companyHolidays) {
+          this.db.run('INSERT OR IGNORE INTO vacay_company_holidays (plan_id, date, note) VALUES (?, ?, ?)', ownPlan.id, ch.date, ch.note);
+        }
+        this.db.run('DELETE FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?', plan.id, userId);
       }
-      this.db.run('DELETE FROM vacay_plan_members WHERE plan_id = ?', plan.id);
-    } else {
-      const ownPlan = this.getOwnPlan(userId);
-      this.db.run('UPDATE vacay_entries SET plan_id = ? WHERE plan_id = ? AND user_id = ?', ownPlan.id, plan.id, userId);
-      for (const ch of companyHolidays) {
-        this.db.run('INSERT OR IGNORE INTO vacay_company_holidays (plan_id, date, note) VALUES (?, ?, ?)', ownPlan.id, ch.date, ch.note);
-      }
-      this.db.run('DELETE FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?', plan.id, userId);
-    }
+      return userIds;
+    });
 
     try {
       allUserIds.filter(id => id !== userId).forEach(id => broadcastToUser(id, { type: 'vacay:dissolved' }));
@@ -933,73 +948,83 @@ export class VacayService {
   }
 
   addYear(planId: number, year: number, socketId: string | undefined): number[] {
-    try {
-      this.db.run('INSERT INTO vacay_years (plan_id, year) VALUES (?, ?)', planId, year);
-      const plan = this.db.get<VacayPlan>('SELECT * FROM vacay_plans WHERE id = ?', planId);
-      const carryOverEnabled = plan ? !!plan.carry_over_enabled : true;
-      const users = this.getPlanUsers(planId);
-      for (const u of users) {
-        let carriedOver = 0;
-        if (carryOverEnabled) {
-          const prevConfig = this.db.get<VacayUserYear>('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?', u.id, planId, year - 1);
-          if (prevConfig) {
-            const used = this.usedDays(u.id, planId, year - 1);
-            const total = prevConfig.vacation_days + prevConfig.carried_over;
-            carriedOver = Math.max(0, total - used);
+    // A duplicate year is a no-op (the legacy blanket try/catch was written for
+    // exactly this constraint hit); real errors now propagate instead of being
+    // swallowed. The insert + per-user seeding runs atomically.
+    const exists = this.db.get('SELECT id FROM vacay_years WHERE plan_id = ? AND year = ?', planId, year);
+    if (!exists) {
+      this.db.transaction(() => {
+        this.db.run('INSERT INTO vacay_years (plan_id, year) VALUES (?, ?)', planId, year);
+        const plan = this.db.get<VacayPlan>('SELECT * FROM vacay_plans WHERE id = ?', planId);
+        const carryOverEnabled = plan ? !!plan.carry_over_enabled : true;
+        const users = this.getPlanUsers(planId);
+        for (const u of users) {
+          let carriedOver = 0;
+          if (carryOverEnabled) {
+            const prevConfig = this.db.get<VacayUserYear>('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?', u.id, planId, year - 1);
+            if (prevConfig) {
+              const used = this.usedDays(u.id, planId, year - 1);
+              const total = prevConfig.vacation_days + prevConfig.carried_over;
+              carriedOver = Math.max(0, total - used);
+            }
           }
+          this.db.run('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, 30, ?)', u.id, planId, year, carriedOver);
         }
-        this.db.run('INSERT OR IGNORE INTO vacay_user_years (user_id, plan_id, year, vacation_days, carried_over) VALUES (?, ?, ?, 30, ?)', u.id, planId, year, carriedOver);
-      }
-    } catch { /* year already exists */ }
+      });
+    }
     this.notifyPlanUsers(planId, socketId, 'vacay:settings');
     return this.listYears(planId);
   }
 
   deleteYear(planId: number, year: number, socketId: string | undefined): number[] {
-    this.db.run('DELETE FROM vacay_years WHERE plan_id = ? AND year = ?', planId, year);
-    // Members can be on differently shaped leave years (#737), so entries go per
-    // author over that author's period rather than by one shared year prefix.
-    // Authors are read off the entries themselves so orphans are cleared too.
-    const authors = this.db.all<{ user_id: number }>('SELECT DISTINCT user_id FROM vacay_entries WHERE plan_id = ?', planId);
-    for (const { user_id } of authors) {
-      const { start, end } = this.resolveYearWindow(user_id, year);
-      this.db.run('DELETE FROM vacay_entries WHERE plan_id = ? AND user_id = ? AND date >= ? AND date < ?', planId, user_id, start, end);
-    }
-    // Company holidays belong to the plan, not to a member, and every member sees
-    // them over their own window. In a fused plan with mixed year types the safe
-    // range is therefore the intersection of all member windows — anything outside
-    // it still sits inside a period somebody else has not deleted.
-    const owner = this.db.get<{ owner_id: number }>('SELECT owner_id FROM vacay_plans WHERE id = ?', planId);
-    const members = this.getPlanUsers(planId);
-    const windows = (members.length > 0 ? members.map(m => m.id) : [owner?.owner_id ?? -1]).map(id => this.resolveYearWindow(id, year));
-    const holidayStart = windows.reduce((a, w) => (w.start > a ? w.start : a), windows[0].start);
-    const holidayEnd = windows.reduce((a, w) => (w.end < a ? w.end : a), windows[0].end);
-    if (holidayStart < holidayEnd) {
-      this.db.run('DELETE FROM vacay_company_holidays WHERE plan_id = ? AND date >= ? AND date < ?', planId, holidayStart, holidayEnd);
-    }
-    this.db.run('DELETE FROM vacay_user_years WHERE plan_id = ? AND year = ?', planId, year);
-
-    // Recalculate carry-over for year+1 if it exists, since its previous year has changed
-    const nextYearExists = this.db.get('SELECT id FROM vacay_years WHERE plan_id = ? AND year = ?', planId, year + 1);
-    if (nextYearExists) {
-      const plan = this.db.get<VacayPlan>('SELECT * FROM vacay_plans WHERE id = ?', planId);
-      const carryOverEnabled = plan ? !!plan.carry_over_enabled : true;
-      const users = this.getPlanUsers(planId);
-      const prevYear = this.db.get<{ year: number }>('SELECT year FROM vacay_years WHERE plan_id = ? AND year < ? ORDER BY year DESC LIMIT 1', planId, year + 1);
-
-      for (const u of users) {
-        let carry = 0;
-        if (carryOverEnabled && prevYear) {
-          const prevConfig = this.db.get<VacayUserYear>('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?', u.id, planId, prevYear.year);
-          if (prevConfig) {
-            const used = this.usedDays(u.id, planId, prevYear.year);
-            const total = prevConfig.vacation_days + prevConfig.carried_over;
-            carry = Math.max(0, total - used);
-          }
-        }
-        this.db.run('UPDATE vacay_user_years SET carried_over = ? WHERE user_id = ? AND plan_id = ? AND year = ?', carry, u.id, planId, year + 1);
+    // Year removal deletes across four tables and recomputes the next year's
+    // carry-over — atomic, so a failure can't leave entries without their year.
+    this.db.transaction(() => {
+      this.db.run('DELETE FROM vacay_years WHERE plan_id = ? AND year = ?', planId, year);
+      // Members can be on differently shaped leave years (#737), so entries go per
+      // author over that author's period rather than by one shared year prefix.
+      // Authors are read off the entries themselves so orphans are cleared too.
+      const authors = this.db.all<{ user_id: number }>('SELECT DISTINCT user_id FROM vacay_entries WHERE plan_id = ?', planId);
+      for (const { user_id } of authors) {
+        const { start, end } = this.resolveYearWindow(user_id, year);
+        this.db.run('DELETE FROM vacay_entries WHERE plan_id = ? AND user_id = ? AND date >= ? AND date < ?', planId, user_id, start, end);
       }
-    }
+      // Company holidays belong to the plan, not to a member, and every member sees
+      // them over their own window. In a fused plan with mixed year types the safe
+      // range is therefore the intersection of all member windows — anything outside
+      // it still sits inside a period somebody else has not deleted.
+      const owner = this.db.get<{ owner_id: number }>('SELECT owner_id FROM vacay_plans WHERE id = ?', planId);
+      const members = this.getPlanUsers(planId);
+      const windows = (members.length > 0 ? members.map(m => m.id) : [owner?.owner_id ?? -1]).map(id => this.resolveYearWindow(id, year));
+      const holidayStart = windows.reduce((a, w) => (w.start > a ? w.start : a), windows[0].start);
+      const holidayEnd = windows.reduce((a, w) => (w.end < a ? w.end : a), windows[0].end);
+      if (holidayStart < holidayEnd) {
+        this.db.run('DELETE FROM vacay_company_holidays WHERE plan_id = ? AND date >= ? AND date < ?', planId, holidayStart, holidayEnd);
+      }
+      this.db.run('DELETE FROM vacay_user_years WHERE plan_id = ? AND year = ?', planId, year);
+
+      // Recalculate carry-over for year+1 if it exists, since its previous year has changed
+      const nextYearExists = this.db.get('SELECT id FROM vacay_years WHERE plan_id = ? AND year = ?', planId, year + 1);
+      if (nextYearExists) {
+        const plan = this.db.get<VacayPlan>('SELECT * FROM vacay_plans WHERE id = ?', planId);
+        const carryOverEnabled = plan ? !!plan.carry_over_enabled : true;
+        const users = this.getPlanUsers(planId);
+        const prevYear = this.db.get<{ year: number }>('SELECT year FROM vacay_years WHERE plan_id = ? AND year < ? ORDER BY year DESC LIMIT 1', planId, year + 1);
+
+        for (const u of users) {
+          let carry = 0;
+          if (carryOverEnabled && prevYear) {
+            const prevConfig = this.db.get<VacayUserYear>('SELECT * FROM vacay_user_years WHERE user_id = ? AND plan_id = ? AND year = ?', u.id, planId, prevYear.year);
+            if (prevConfig) {
+              const used = this.usedDays(u.id, planId, prevYear.year);
+              const total = prevConfig.vacation_days + prevConfig.carried_over;
+              carry = Math.max(0, total - used);
+            }
+          }
+          this.db.run('UPDATE vacay_user_years SET carried_over = ? WHERE user_id = ? AND plan_id = ? AND year = ?', carry, u.id, planId, year + 1);
+        }
+      }
+    });
 
     this.notifyPlanUsers(planId, socketId, 'vacay:settings');
     return this.listYears(planId);
@@ -1163,12 +1188,13 @@ export class VacayService {
 
   async getCountries(): Promise<{ data?: unknown; error?: string }> {
     const cacheKey = 'countries';
-    const cached = holidayCache.get(cacheKey);
+    const cached = this.holidayCache.get(cacheKey);
     if (cached && Date.now() - cached.time < CACHE_TTL) return { data: cached.data };
     try {
-      const resp = await fetch('https://date.nager.at/api/v3/AvailableCountries');
+      const resp = await fetch('https://date.nager.at/api/v3/AvailableCountries', { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (!resp.ok) return { error: 'Failed to fetch countries' };
       const data = await resp.json();
-      holidayCache.set(cacheKey, { data, time: Date.now() });
+      this.holidayCache.set(cacheKey, { data, time: Date.now() });
       return { data };
     } catch {
       return { error: 'Failed to fetch countries' };
@@ -1177,12 +1203,13 @@ export class VacayService {
 
   async getHolidays(year: string, country: string): Promise<{ data?: unknown; error?: string }> {
     const cacheKey = `${year}-${country}`;
-    const cached = holidayCache.get(cacheKey);
+    const cached = this.holidayCache.get(cacheKey);
     if (cached && Date.now() - cached.time < CACHE_TTL) return { data: cached.data };
     try {
-      const resp = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${country}`);
+      const resp = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/${country}`, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (!resp.ok) return { error: 'Failed to fetch holidays' };
       const data = await resp.json();
-      holidayCache.set(cacheKey, { data, time: Date.now() });
+      this.holidayCache.set(cacheKey, { data, time: Date.now() });
       return { data };
     } catch {
       return { error: 'Failed to fetch holidays' };
@@ -1192,19 +1219,19 @@ export class VacayService {
   async getSchoolHolidayRegions(country: string, language = 'EN'): Promise<{ data?: unknown; error?: string }> {
     const normalizedLanguage = String(language || 'EN').slice(0, 2).toUpperCase();
     const cacheKey = `school-regions-${country}-${normalizedLanguage}`;
-    const cached = holidayCache.get(cacheKey);
+    const cached = this.holidayCache.get(cacheKey);
     if (cached && Date.now() - cached.time < CACHE_TTL) return { data: cached.data };
     try {
       const [groupsResp, subdivisionsResp] = await Promise.all([
-        fetch(`https://openholidaysapi.org/Groups?countryIsoCode=${country}&languageIsoCode=${normalizedLanguage}`, { headers: { accept: 'text/json' } }),
-        fetch(`https://openholidaysapi.org/Subdivisions?countryIsoCode=${country}&languageIsoCode=${normalizedLanguage}`, { headers: { accept: 'text/json' } }),
+        fetch(`https://openholidaysapi.org/Groups?countryIsoCode=${country}&languageIsoCode=${normalizedLanguage}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+        fetch(`https://openholidaysapi.org/Subdivisions?countryIsoCode=${country}&languageIsoCode=${normalizedLanguage}`, { headers: { accept: 'text/json' }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
       ]);
       if (!groupsResp.ok || !subdivisionsResp.ok) return { error: 'Failed to fetch school holiday regions' };
       const data = {
         groups: await groupsResp.json(),
         subdivisions: await subdivisionsResp.json(),
       };
-      holidayCache.set(cacheKey, { data, time: Date.now() });
+      this.holidayCache.set(cacheKey, { data, time: Date.now() });
       return { data };
     } catch {
       return { error: 'Failed to fetch school holiday regions' };
@@ -1216,7 +1243,7 @@ export class VacayService {
     const normalizedSubdivision = subdivision || '';
     const normalizedGroup = group || '';
     const cacheKey = `school-${year}-${country}-${normalizedSubdivision || 'all'}-${normalizedGroup || 'all'}-${normalizedLanguage}`;
-    const cached = holidayCache.get(cacheKey);
+    const cached = this.holidayCache.get(cacheKey);
     if (cached && Date.now() - cached.time < CACHE_TTL) return { data: cached.data };
     try {
       const params = new URLSearchParams({
@@ -1229,10 +1256,11 @@ export class VacayService {
       if (normalizedGroup) params.set('groupCode', normalizedGroup);
       const resp = await fetch(`https://openholidaysapi.org/SchoolHolidays?${params.toString()}`, {
         headers: { accept: 'text/json' },
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });
       if (!resp.ok) return { error: 'Failed to fetch school holidays' };
       const data = await resp.json();
-      holidayCache.set(cacheKey, { data, time: Date.now() });
+      this.holidayCache.set(cacheKey, { data, time: Date.now() });
       return { data };
     } catch {
       return { error: 'Failed to fetch school holidays' };

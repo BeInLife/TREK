@@ -613,3 +613,32 @@ describe('Resource: trek://vacay/holidays/{year}', () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// decline_vacay_invite (demo guard added by the vacay quirk-fix commit — the
+// legacy registrar was the only vacay write without it)
+// ---------------------------------------------------------------------------
+
+describe('Tool: decline_vacay_invite', () => {
+  it('declines a pending invite', async () => {
+    const { user: owner } = createUser(testDb);
+    const { user: invitee } = createUser(testDb);
+    await withHarness(owner.id, async (h) => {
+      await h.client.callTool({ name: 'send_vacay_invite', arguments: { targetUserId: invitee.id } });
+    });
+    await withHarness(invitee.id, async (h) => {
+      const result = await h.client.callTool({ name: 'decline_vacay_invite', arguments: { planId: testDb.prepare('SELECT plan_id FROM vacay_plan_members WHERE user_id = ?').get(invitee.id)!.plan_id } });
+      const data = parseToolResult(result) as any;
+      expect(data.success).toBe(true);
+    });
+  });
+
+  it('blocks demo user', async () => {
+    process.env.DEMO_MODE = 'true';
+    const { user } = createUser(testDb, { email: 'demo@nomad.app' });
+    await withHarness(user.id, async (h) => {
+      const result = await h.client.callTool({ name: 'decline_vacay_invite', arguments: { planId: 1 } });
+      expect(result.isError).toBe(true);
+    });
+  });
+});

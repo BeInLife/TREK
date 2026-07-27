@@ -1,7 +1,8 @@
 import {
   McpController, Tool, Resource, ResourceTemplate, type McpContext,
-  TOOL_ANNOTATIONS_READONLY, TOOL_ANNOTATIONS_WRITE,
-  TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
+  TOOL_ANNOTATIONS_READONLY, TOOL_ANNOTATIONS_OPEN_WORLD_READONLY,
+  TOOL_ANNOTATIONS_WRITE, TOOL_ANNOTATIONS_DELETE,
+  TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, errorResult, ok,
 } from '@trek/nest-mcp';
 import { z } from 'zod';
@@ -23,8 +24,9 @@ const vacayAddonOn = () => isAddonEnabled(ADDON_IDS.VACAY);
  * plus the declarative vacay read/write access markers (the legacy `if (R)` /
  * `if (W)` checks, resolved by trekMcpAccessPolicy). Vacay is plan-scoped, not
  * trip-scoped, so there is no trip-permission layer; the only per-call guard is
- * the demo-user check — which decline_vacay_invite deliberately lacks, exactly
- * like the legacy registrar (a quirk preserved for the fix commit).
+ * the demo-user check on every write (including decline_vacay_invite, which the
+ * legacy registrar missed). The two nager.at-backed lookups carry the
+ * open-world readonly annotation.
  */
 @McpController()
 export class VacayMcp {
@@ -151,6 +153,7 @@ export class VacayMcp {
     access: { group: 'vacay', mode: 'write' },
   })
   async declineVacayInvite({ planId }: { planId: number }, ctx: McpContext) {
+    if (isDemoUser(ctx.userId)) return demoDenied();
     this.vacay.declineInvite(ctx.userId, planId, undefined);
     return ok({ success: true });
   }
@@ -386,7 +389,7 @@ export class VacayMcp {
     name: 'list_holiday_countries',
     description: 'List countries available for public holiday calendars.',
     inputSchema: {},
-    annotations: TOOL_ANNOTATIONS_READONLY,
+    annotations: TOOL_ANNOTATIONS_OPEN_WORLD_READONLY,
     when: vacayAddonOn,
     access: { group: 'vacay', mode: 'read' },
   })
@@ -403,7 +406,7 @@ export class VacayMcp {
       country: z.string().describe('ISO 3166-1 alpha-2 code'),
       year: z.number().int(),
     },
-    annotations: TOOL_ANNOTATIONS_READONLY,
+    annotations: TOOL_ANNOTATIONS_OPEN_WORLD_READONLY,
     when: vacayAddonOn,
     access: { group: 'vacay', mode: 'read' },
   })

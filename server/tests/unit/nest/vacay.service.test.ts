@@ -1379,3 +1379,91 @@ describe('vacay.bridge', () => {
     expect(dates).toEqual([{ date: '2025-05-17' }]);
   });
 });
+
+// ── Quirk fixes (transactions, fetch hygiene, cache TTL, addYear errors) ──────
+
+describe('quirk fixes', () => {
+  /** A DatabaseService whose run() throws when the SQL matches, for atomicity checks. */
+  function failingService(match: string) {
+    const failingDb = new DatabaseService(testDb);
+    const realRun = failingDb.run.bind(failingDb);
+    vi.spyOn(failingDb, 'run').mockImplementation((sql: string, ...params: unknown[]) => {
+      if (sql.includes(match)) throw new Error('boom');
+      return realRun(sql, ...params);
+    });
+    return new VacayService(failingDb);
+  }
+
+  it('VACAY-SVC-068: acceptInvite is atomic — a failure mid-flow rolls the status flip back', () => {
+    const { plan } = setupUserWithPlan();
+    const { user: member } = createUser(testDb);
+    svc.getOwnPlan(member.id);
+    insertMember(plan.id, member.id, 'pending');
+
+    const broken = failingService('INSERT OR IGNORE INTO vacay_user_years');
+    expect(() => broken.acceptInvite(member.id, plan.id, undefined)).toThrow('boom');
+
+    const row = testDb.prepare('SELECT status FROM vacay_plan_members WHERE plan_id = ? AND user_id = ?').get(plan.id, member.id) as { status: string };
+    expect(row.status).toBe('pending');
+  });
+
+  it('VACAY-SVC-069: deleteYear is atomic — a failure mid-flow keeps the year and its entries', () => {
+    const { user, plan } = setupUserWithPlan();
+    const year = new Date().getFullYear();
+    svc.toggleEntry(user.id, plan.id, `${year}-03-03`, 1);
+
+    const broken = failingService('DELETE FROM vacay_user_years');
+    expect(() => broken.deleteYear(plan.id, year, undefined)).toThrow('boom');
+
+    expect(testDb.prepare('SELECT id FROM vacay_years WHERE plan_id = ? AND year = ?').get(plan.id, year)).toBeDefined();
+    expect(testDb.prepare('SELECT id FROM vacay_entries WHERE plan_id = ?').get(plan.id)).toBeDefined();
+  });
+
+  it('VACAY-SVC-070: getCountries surfaces an upstream non-2xx as the fetch error and caches nothing', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 502, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchMock);
+    const fresh = new VacayService(new DatabaseService(testDb));
+
+    expect(await fresh.getCountries()).toEqual({ error: 'Failed to fetch countries' });
+    // Nothing cached: a retry hits the network again.
+    expect(await fresh.getCountries()).toEqual({ error: 'Failed to fetch countries' });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ signal: expect.any(AbortSignal) }));
+  });
+
+  it('VACAY-SVC-071: applyHolidayCalendars honors the cache TTL', async () => {
+    const { plan } = setupUserWithPlan();
+    testDb.prepare('UPDATE vacay_plans SET holidays_enabled = 1 WHERE id = ?').run(plan.id);
+    testDb.prepare("INSERT INTO vacay_holiday_calendars (plan_id, region) VALUES (?, 'DE')").run(plan.id);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => [] });
+    vi.stubGlobal('fetch', fetchMock);
+    const fresh = new VacayService(new DatabaseService(testDb));
+
+    await fresh.applyHolidayCalendars(plan.id);
+    const afterFirst = fetchMock.mock.calls.length;
+    await fresh.applyHolidayCalendars(plan.id);
+    // Within the TTL the cached year list is reused — no new requests.
+    expect(fetchMock.mock.calls.length).toBe(afterFirst);
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(Date.now() + 24 * 60 * 60 * 1000 + 1);
+      await fresh.applyHolidayCalendars(plan.id);
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(afterFirst);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('VACAY-SVC-072: addYear still no-ops on a duplicate year but propagates real errors', () => {
+    const { plan } = setupUserWithPlan();
+    const year = new Date().getFullYear();
+    // Duplicate: the seeded current year — silently returns the list, like before.
+    expect(svc.addYear(plan.id, year, undefined)).toContain(year);
+
+    const broken = failingService('INSERT OR IGNORE INTO vacay_user_years');
+    expect(() => broken.addYear(plan.id, year + 1, undefined)).toThrow('boom');
+    // And atomically: the failed year was not half-added.
+    expect(testDb.prepare('SELECT id FROM vacay_years WHERE plan_id = ? AND year = ?').get(plan.id, year + 1)).toBeUndefined();
+  });
+});
