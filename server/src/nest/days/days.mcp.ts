@@ -99,7 +99,9 @@ export class DaysMcp {
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.days.getDay(dayId, tripId)) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
     this.days.remove(dayId);
-    safeBroadcast(tripId, 'day:deleted', { id: dayId });
+    // REST parity shape ({ dayId }) — the client reads payload.dayId, so the { id }
+    // variant never removed the day from collaborator screens.
+    safeBroadcast(tripId, 'day:deleted', { dayId });
     return ok({ success: true });
   }
 

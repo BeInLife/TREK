@@ -137,7 +137,10 @@ export class AssignmentsMcp {
     if (!this.assignments.getAssignmentForTrip(assignmentId, tripId)) return errorResult('Assignment not found.');
     if (!this.days.getDay(newDayId, tripId)) return errorResult('Day not found.');
     const result = this.assignments.moveAssignment(assignmentId, newDayId, orderIndex ?? 0);
-    safeBroadcast(tripId, 'assignment:moved', { assignment: result.assignment, oldDayId: result.oldDayId });
+    // REST parity shape ({ assignment, oldDayId, newDayId }) — the client keys its
+    // per-day assignment map on newDayId, so omitting it filed the moved assignment
+    // under "undefined" on collaborator screens.
+    safeBroadcast(tripId, 'assignment:moved', { assignment: result.assignment, oldDayId: result.oldDayId, newDayId });
     this.assignments.reconcile(tripId);
     return ok({ assignment: result.assignment });
   }
@@ -206,7 +209,9 @@ export class AssignmentsMcp {
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.days.getDay(dayId, tripId)) return errorResult('Day not found.');
     this.assignments.reorderAssignments(dayId, assignmentIds);
-    safeBroadcast(tripId, 'assignment:reordered', { dayId, assignmentIds });
+    // REST parity shape ({ dayId, orderedIds }) — the client only reads orderedIds,
+    // so broadcasting the tool-input key name emptied the day for collaborators.
+    safeBroadcast(tripId, 'assignment:reordered', { dayId, orderedIds: assignmentIds });
     return ok({ success: true, dayId, order: assignmentIds });
   }
 }
