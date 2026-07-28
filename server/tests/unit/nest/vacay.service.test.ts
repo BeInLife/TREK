@@ -35,14 +35,14 @@ import { createUser } from '../../helpers/factories';
 
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { VacayService } from '../../../src/nest/vacay/vacay.service';
-import { shiftOwnerEntriesForTripWindow } from '../../../src/nest/vacay/vacay.bridge';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
 // VACAY-SVC-001 through VACAY-SVC-066 moved 1:1 from the legacy
 // tests/unit/services/vacayService.test.ts (the named-function imports became
 // method calls on a directly constructed VacayService; the legacy
-// updateUserYearSettings is the class's updateYearSettings). VACAY-SVC-067
-// pins the vacay.bridge delegation for the one outside-container consumer.
+// updateUserYearSettings is the class's updateYearSettings).
+// VACAY-SVC-067 (vacay.bridge delegation) died with the bridge — its only
+// consumer, the legacy tripService, folded into the DI-native TripsService.
 const svc = new VacayService(new DatabaseService(testDb), new RealtimeService());
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
@@ -1364,20 +1364,6 @@ describe('getSharedCalendars', () => {
 
     expect(calendars).toHaveLength(1);
     expect(calendars[0].entries).toEqual([{ date: '2025-03-03', fraction: 1, kind: 'vacation' }]);
-  });
-});
-
-// ── vacay.bridge delegation ───────────────────────────────────────────────────
-
-describe('vacay.bridge', () => {
-  it('VACAY-SVC-067: shiftOwnerEntriesForTripWindow shifts the owner entries through the bridge', () => {
-    const { user, plan } = setupUserWithPlan();
-    svc.toggleEntry(user.id, plan.id, '2025-05-10', 1);
-
-    shiftOwnerEntriesForTripWindow(user.id, '2025-05-08', '2025-05-12', '2025-05-15');
-
-    const dates = testDb.prepare('SELECT date FROM vacay_entries WHERE plan_id = ? ORDER BY date').all(plan.id);
-    expect(dates).toEqual([{ date: '2025-05-17' }]);
   });
 });
 

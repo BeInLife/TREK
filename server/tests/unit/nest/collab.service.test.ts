@@ -1,7 +1,7 @@
 /**
  * Unit tests for the DI-native CollabService — COLLAB-SVC-001 to COLLAB-SVC-038
  * (001–030 moved 1:1 from the legacy tests/unit/services/collabService.test.ts;
- * 031–033 pin the collab.bridge delegation; 034–038 pin the post-migration
+ * 031–033 (collab.bridge delegation) died with the bridge; 034–038 pin the post-migration
  * hardening: transactional writes, trip-scoped getFormattedNoteById, the
  * integer vote guard and malformed-URL absorption). Covers votePoll edge
  * cases, listMessages pagination, deleteMessage ownership, updateNote partial
@@ -61,7 +61,6 @@ import { avatarUrl } from '../../../src/services/avatarUrl';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { CollabService } from '../../../src/nest/collab/collab.service';
-import { listNotes as bridgeListNotes, listPolls as bridgeListPolls, countMessages as bridgeCountMessages } from '../../../src/nest/collab/collab.bridge';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
 const svc = new CollabService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new RealtimeService());
@@ -406,35 +405,9 @@ describe('linkPreview', () => {
   });
 });
 
-// ── collab.bridge delegation (out-of-container consumers) ─────────────────────
-
-describe('collab.bridge', () => {
-  it('COLLAB-SVC-031: listNotes delegates to CollabService over the shared db', () => {
-    const { user1, trip } = setup();
-    svc.createNote(trip.id, user1.id, { title: 'Bridged note' });
-
-    const notes = bridgeListNotes(trip.id);
-    expect(notes).toHaveLength(1);
-    expect(notes[0].title).toBe('Bridged note');
-  });
-
-  it('COLLAB-SVC-032: listPolls delegates to CollabService over the shared db', () => {
-    const { user1, trip } = setup();
-    svc.createPoll(trip.id, user1.id, { question: 'Bridged?', options: ['A', 'B'] });
-
-    const polls = bridgeListPolls(trip.id);
-    expect(polls).toHaveLength(1);
-    expect(polls[0]!.question).toBe('Bridged?');
-  });
-
-  it('COLLAB-SVC-033: countMessages delegates to CollabService over the shared db', () => {
-    const { user1, trip } = setup();
-    svc.createMessage(trip.id, user1.id, 'one');
-    svc.createMessage(trip.id, user1.id, 'two');
-
-    expect(bridgeCountMessages(trip.id)).toBe(2);
-  });
-});
+// COLLAB-SVC-031..033 (collab.bridge delegation) were deleted with the bridge —
+// its last consumers (the legacy tripService and the legacy get_trip_summary
+// registrar) migrated into the DI-native TripsService/TripsMcp.
 
 // ── Post-migration hardening (transactions, scoping, guards) ──────────────────
 

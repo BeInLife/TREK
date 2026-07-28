@@ -58,8 +58,9 @@ export interface LinkPreviewResult {
  * run in db.transaction(), getFormattedNoteById is trip-scoped and null-safe,
  * votePoll rejects non-integer indexes, and linkPreview absorbs malformed URLs
  * instead of throwing.
- * Non-Nest consumers (legacy tripService, the legacy MCP trips registrar) go
- * through collab.bridge.ts instead of importing this class directly.
+ * All consumers are in-container since the trip fold (TripsService and
+ * TripsMcp inject this class); collab.bridge.ts was deleted with its last
+ * outside-container consumers.
  */
 @Injectable()
 export class CollabService {

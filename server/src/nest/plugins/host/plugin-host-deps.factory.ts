@@ -14,7 +14,7 @@ import fsMod from 'node:fs';
 import pathMod from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { PermissionsService } from '../../permissions/permissions.service';
-import { listTrips, updateTrip, createTrip, removeMember as removeTripMemberSvc, NotFoundError, ValidationError } from '../../../services/tripService';
+import { TripsService, NotFoundError, ValidationError } from '../../trips/trips.service';
 import { createPlace, updatePlace, deletePlace } from '../../../services/placeService';
 import { AddonsService } from '../../addons/addons.service';
 import { isDemoEmail } from '../../../services/demo';
@@ -125,7 +125,7 @@ export interface PluginCallRouter {
  *
  * DI-native domain services (budget, exchange-rates, reservations, tags,
  * categories, todo, packing, day-notes, assignments, oauth, files, collab,
- * vacay, the LLM config resolver) and
+ * vacay, trips, the LLM config resolver) and
  * the DatabaseService (all inline SQL + the trip-access helper) are
  * constructor-injected; legacy `services/*` domains stay plain function
  * imports until their own migration lands (DI-MIGRATION.md), at which point
@@ -153,6 +153,7 @@ export class PluginHostDepsFactory {
     private readonly exchangeRates: ExchangeRatesService,
     private readonly addons: AddonsService,
     private readonly realtime: RealtimeService,
+    private readonly trips: TripsService,
   ) {}
 
   /**
@@ -347,7 +348,7 @@ export class PluginHostDepsFactory {
         // transfer is a separate, deliberate action, not a member-management side effect.
         const trip = this.db.prepare('SELECT user_id FROM trips WHERE id = ?').get(tripId) as { user_id: number } | undefined;
         if (trip && trip.user_id === targetUserId) throw new ForbiddenResource('cannot remove the trip owner');
-        removeTripMemberSvc(tripId, targetUserId);
+        this.trips.removeMember(tripId, targetUserId);
         return { removed: true };
       },
       // --- Host-mediated notifications. Recipient resolution + channel fan-out +
@@ -431,7 +432,7 @@ export class PluginHostDepsFactory {
       // Cross-trip: every accessible trip's budget items (membership predicate is
       // baked into listTrips). Reuses the hydrated list so members/payers come too.
       listCostsForUser: (userId) => {
-        const trips = listTrips(userId, null) as Array<{ id: number }>;
+        const trips = this.trips.list(userId, null) as Array<{ id: number }>;
         return trips.flatMap((t) => this.budget.listBudgetItems(t.id));
       },
       // Reuses BudgetService.create (frozen FX + members/payers), then broadcasts
@@ -528,7 +529,7 @@ export class PluginHostDepsFactory {
       },
       createTripForUser: (userId, input) => {
         try {
-          const result = createTrip(userId, input as unknown as Parameters<typeof createTrip>[1]);
+          const result = this.trips.create(userId, input as unknown as Parameters<TripsService['create']>[1]);
           return result.trip;
         } catch (e) {
           if (e instanceof ValidationError) throw new BadParams(e.message);
@@ -552,7 +553,9 @@ export class PluginHostDepsFactory {
         }
         const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
         try {
-          const result = updateTrip(tripId, userId, input as Parameters<typeof updateTrip>[2], u?.role ?? 'user');
+          // The no-rebase updateTrip core — parity with the legacy host path,
+          // which never re-anchored the budget currency.
+          const result = this.trips.updateTrip(tripId, userId, input as Parameters<TripsService['updateTrip']>[2], u?.role ?? 'user');
           this.realtime.broadcast(tripId, 'trip:updated', { trip: result.updatedTrip });
           return result.updatedTrip;
         } catch (e) {
@@ -564,9 +567,9 @@ export class PluginHostDepsFactory {
       // --- Cross-trip reads. The membership predicate is baked into listTrips, so a
       // plugin only ever sees the acting user's own trips/reservations (no raw
       // cross-tenant SELECT). Reuses the same hydrated services as the REST paths. ---
-      listTripsForUser: (userId) => listTrips(userId, null),
+      listTripsForUser: (userId) => this.trips.list(userId, null),
       listReservationsForUser: (userId) => {
-        const trips = listTrips(userId, null) as Array<{ id: number }>;
+        const trips = this.trips.list(userId, null) as Array<{ id: number }>;
         return trips.flatMap((t) => this.reservations.list(String(t.id)));
       },
       // --- Trip-scoped hydrated reads (membership already checked by tripRead). Same

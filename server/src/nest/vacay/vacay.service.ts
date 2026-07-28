@@ -155,8 +155,9 @@ function windowEndYear(end: string): number {
  * an AbortSignal timeout and the nager.at responses are ok-checked;
  * applyHolidayCalendars honors the cache TTL; addYear no longer swallows real
  * errors; the holiday cache is instance state instead of a module-level map.
- * The only consumer outside the Nest container is the legacy tripService,
- * which goes through vacay.bridge.ts instead of importing this class.
+ * All consumers are in-container since the trip fold (TripsService injects
+ * this class); vacay.bridge.ts was deleted with its last outside-container
+ * consumer.
  */
 @Injectable()
 export class VacayService {

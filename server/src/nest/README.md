@@ -28,8 +28,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
-  collab, vacay, reservations, day, permissions, audit — see the migration
-  recipe below.
+  collab, vacay, reservations, day, permissions, audit, budget, trip — see the
+  migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -203,9 +203,30 @@ MCP class) and BookingImportService inject `BudgetService`; a 4-export
 trips/transports registrars; `exchange-rates.bridge.ts` was deleted with its
 last consumers, and the controller adopted `budget.dto.ts` — all nine
 allow-list entries removed).
+tripService followed (the 1121-line Wave-4 hub — the biggest fold — moved into
+the wrapper `TripsService`: TRIP_SELECT + list/create/get, the
+`generateDays` two-phase renumber engine, the updateTrip date-shift
+transaction, the member/guest lifecycle (#973/#1362), the ICS export with its
+module-scoped tz-validity cache, `copyTripById` and `getTripSummary`; its six
+bridge imports became injected services (CollabService + VacayService joined
+the constructor); the 10-tool trips registrar + 3 `resources.ts` trip
+resources + the trip-summary prompt moved to `trips.mcp.ts` — the first
+`@Prompt` use, with the fire-once static-token deprecation notice now riding
+the `registry.attach` ctx — and the 3 share-link tools it carried moved to
+`share.mcp.ts` on the `canShareTrips` predicate (delete_trip and the
+canReadTrips reads are predicates too — the broadened legacy gates have no
+declarative equivalent); FeedsService and the plugin host inject
+`TripsService` (its 20th constructor dep); a 3-export `trips.bridge.ts`
+serves the legacy prompts registrar and budget.mcp.ts's owner/member seam
+(injecting there would need a forwardRef'd TripsModule↔BudgetModule cycle);
+`todo.bridge.ts`, `share.bridge.ts`, `collab.bridge.ts` and `vacay.bridge.ts`
+were deleted with their last consumers and the unused days/budget bridge
+exports pruned; the controller adopted `trips.dto.ts` — all seven allow-list
+entries removed).
 Repeat these steps per
-service (next up: **tripService** — the budget fold was its unblock, per the
-dependency-honest order in `migration-graph.md`). This is a
+service (next up: the **mapsService → transitService → placeService** chain —
+or the notifications fan-in — per the dependency-honest order in
+`migration-graph.md`). This is a
 **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it

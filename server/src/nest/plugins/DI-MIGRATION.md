@@ -36,10 +36,11 @@ DI-only service and the legacy function module was deleted, but the wiring
 layer didn't inject — so a module-level shim re-exported the legacy names over
 a hand-built instance. Option A deleted `tags.bridge.ts` and
 `categories.bridge.ts` (the plugin host was their only consumer).
-**`todo.bridge.ts` survives** for exactly one remaining consumer that genuinely
-runs outside the container: the legacy `get_trip_summary` registrar in
-`src/mcp/tools/trips.ts`. Delete it when that registrar migrates to the
-DI-discovered MCP registry. New bridges should only be added for genuinely
+`todo.bridge.ts`, `share.bridge.ts`, `collab.bridge.ts` and `vacay.bridge.ts`
+followed with the 2026-07 trip fold — their last consumers (the legacy
+`src/mcp/tools/trips.ts` registrar and the legacy tripService itself) migrated
+into the DI-discovered `trips.mcp.ts`/`share.mcp.ts` and the DI-native
+`TripsService`. New bridges should only be added for genuinely
 non-Nest consumers (legacy MCP registrars, scheduler, websocket) — the plugin
 host no longer needs them, ever.
 
@@ -118,8 +119,12 @@ host's audit trail is the separate `plugin-audit.ts`); exchangeRateService
 swapped in 2026-07 with the budget-domain fold — its `getRates` import became
 the injected `ExchangeRatesService`; budgetService swapped in 2026-07 with the
 budget migration — its `listBudgetItems` import became the already-injected
-`BudgetService`, so no constructor change at all; the remaining factory
-imports are all Wave-4+ domains: trips, places, journeys, atlas, collections).
+`BudgetService`, so no constructor change at all; tripService swapped in
+2026-07 with the trip fold — its six imported symbols (`listTrips`,
+`updateTrip`, `createTrip`, `removeMember`, `NotFoundError`, `ValidationError`)
+became the injected `TripsService`, with the error classes now imported from
+`nest/trips/trips.service`; the remaining factory
+imports are all Wave-4+/5 domains: places, journeys, atlas, collections).
 
 ### Test impact (as landed)
 
@@ -127,7 +132,10 @@ imports are all Wave-4+ domains: trips, places, journeys, atlas, collections).
   `PluginRpcHost` directly with hand-built `HostDeps`).
 - `tests/unit/plugins/plugin-host-deps.factory.test.ts` (was
   `create-rpc-host.test.ts`) — the six DI-domain path mocks became constructor
-  stubs (sixteen stubs as of the 2026-07 exchange-rates fold); the ~22
+  stubs (sixteen stubs as of the 2026-07 exchange-rates fold, plus `tripsStub`
+  with the 2026-07 trip fold — the tripService path mock's sentinel behaviors
+  moved onto the stub, its throws now built from the real
+  `nest/trips/trips.service` error classes); the ~22
   legacy-service path mocks shrank by one with the 2026-07 budget migration
   (the budgetService satisfy-the-import mock died with the legacy file — the
   `budgetStub` gained `listBudgetItems` for the two swapped closures); a
