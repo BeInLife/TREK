@@ -376,7 +376,11 @@ export class VacayService {
   // WebSocket notifications
   // -------------------------------------------------------------------------
 
-  notifyPlanUsers(planId: number, excludeSid: string | undefined, event = 'vacay:update'): void {
+  notifyPlanUsers(
+    planId: number,
+    excludeSid: string | undefined,
+    event: 'vacay:update' | 'vacay:settings' | 'vacay:accepted' | 'vacay:declined' = 'vacay:update',
+  ): void {
     try {
       const plan = this.db.get<{ owner_id: number }>('SELECT owner_id FROM vacay_plans WHERE id = ?', planId);
       if (!plan) return;
@@ -385,8 +389,10 @@ export class VacayService {
       members.forEach(m => userIds.push(m.user_id));
       userIds.forEach(id => this.realtime.broadcastToUser(id, { type: event }, excludeSid));
       // Pending-invite events carry nothing a read-only viewer could see; every
-      // other event may change entries, colors or company holidays.
-      if (event !== 'vacay:invite' && event !== 'vacay:declined' && event !== 'vacay:cancelled') {
+      // other event may change entries, colors or company holidays. (The event
+      // union proves invite/cancelled never reach this method — their senders
+      // call broadcastToUser directly — so only declined needs excluding here.)
+      if (event !== 'vacay:declined') {
         this.notifyShareViewers(userIds, excludeSid);
       }
     } catch { /* websocket not available */ }

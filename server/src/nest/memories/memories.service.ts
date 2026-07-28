@@ -38,6 +38,7 @@ import {
 } from '../../services/memories/synologyService';
 import { canAccessUserPhoto } from '../../services/memories/helpersService';
 import type { Selection } from '../../services/memories/helpersService';
+import type { TrekWsPayload, TrekWsTripEventName } from '@trek/shared';
 import { RealtimeService } from '../realtime/realtime.service';
 
 /**
@@ -56,7 +57,7 @@ export class MemoriesService {
     return canAccessUserPhoto(requestingUserId, ownerUserId, tripId, assetId, provider);
   }
 
-  broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId?: string): void {
+  broadcast<E extends TrekWsTripEventName>(tripId: string, event: E, payload: TrekWsPayload<E>, socketId?: string): void {
     this.realtime.broadcast(tripId, event, payload, socketId);
   }
 

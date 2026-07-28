@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { TrekWsPayload, TrekWsTripEventName } from '@trek/shared';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
@@ -54,7 +55,7 @@ export class PackingService {
     return this.permissions.checkPermission('packing_edit', user.role, trip.user_id, user.id, trip.user_id !== user.id);
   }
 
-  broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
+  broadcast<E extends TrekWsTripEventName>(tripId: string, event: E, payload: TrekWsPayload<E>, socketId: string | undefined): void {
     this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
@@ -63,14 +64,14 @@ export class PackingService {
    * screens: when the item is private the event is delivered only to its owner's
    * sockets. Shared items broadcast to the whole trip room as before.
    */
-  broadcastItem(tripId: string, event: string, payload: Record<string, unknown>, item: PrivacyFields | null | undefined, socketId: string | undefined): void {
+  broadcastItem<E extends TrekWsTripEventName>(tripId: string, event: E, payload: TrekWsPayload<E>, item: PrivacyFields | null | undefined, socketId: string | undefined): void {
     const onlyUserId = item?.is_private && item.owner_id != null ? item.owner_id : undefined;
     this.realtime.broadcast(tripId, event, payload, socketId, onlyUserId);
   }
 
   /** Deliver an item event to a specific set of viewers (#858 shared items) — the
    *  owner plus the recipients it was shared with — without leaking to the room. */
-  broadcastToViewers(tripId: string, event: string, payload: Record<string, unknown>, viewerIds: number[], socketId: string | undefined): void {
+  broadcastToViewers<E extends TrekWsTripEventName>(tripId: string, event: E, payload: TrekWsPayload<E>, viewerIds: number[], socketId: string | undefined): void {
     for (const uid of new Set(viewerIds)) {
       if (uid != null) this.realtime.broadcast(tripId, event, payload, socketId, uid);
     }

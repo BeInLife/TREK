@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { TrekWsPayload, TrekWsTripEventName } from '@trek/shared';
 import { readEnv } from '../../../app-config';
 import { RealtimeService } from '../../realtime/realtime.service';
 import { isUpdateConflict } from '../../../services/conflictResult';
@@ -72,7 +73,7 @@ function packingViewersOf(item: PackingPrivacy | null | undefined): number[] | n
 }
 
 /** CREATE/DELETE fan-out: whole room for a Common item, else owner + recipients only. */
-function emitPackingToViewers(realtime: RealtimeService, tripId: number, event: string, payload: Record<string, unknown>, item: PackingPrivacy): void {
+function emitPackingToViewers<E extends TrekWsTripEventName>(realtime: RealtimeService, tripId: number, event: E, payload: TrekWsPayload<E>, item: PackingPrivacy): void {
   const viewers = packingViewersOf(item);
   if (viewers === null) {
     realtime.broadcast(tripId, event, payload, undefined);
@@ -82,7 +83,7 @@ function emitPackingToViewers(realtime: RealtimeService, tripId: number, event: 
 }
 
 /** An item event delivered owner-only when the item is private (else to the room). */
-function broadcastPackingItem(realtime: RealtimeService, tripId: number, event: string, payload: Record<string, unknown>, item: PackingPrivacy): void {
+function broadcastPackingItem<E extends TrekWsTripEventName>(realtime: RealtimeService, tripId: number, event: E, payload: TrekWsPayload<E>, item: PackingPrivacy): void {
   const onlyUserId = item?.is_private && item.owner_id != null ? item.owner_id : undefined;
   realtime.broadcast(tripId, event, payload, undefined, onlyUserId);
 }

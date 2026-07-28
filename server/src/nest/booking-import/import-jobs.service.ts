@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { RealtimeService } from '../realtime/realtime.service';
 import { BookingImportService } from './booking-import.service';
-import type { BookingImportMode, BookingImportPreviewResponse } from '@trek/shared';
+import type { BookingImportMode, BookingImportPreviewResponse, TrekWsPayload } from '@trek/shared';
 
 type JobStatus = 'running' | 'done' | 'error';
 
@@ -79,7 +79,18 @@ export class ImportJobsService {
     }
   }
 
-  private push(job: ImportJob, type: string, payload: Record<string, unknown>): void {
-    this.realtime.broadcastToUser(job.userId, { type, jobId: job.id, tripId: job.tripId, ...payload });
+  private push<E extends 'import:progress' | 'import:done' | 'import:error'>(
+    job: ImportJob,
+    type: E,
+    payload: Omit<TrekWsPayload<E>, 'jobId' | 'tripId'>,
+  ): void {
+    // jobId/tripId are injected here; TS can't re-associate the spread with the
+    // deferred generic payload, so re-assert the completed shape it just built.
+    this.realtime.broadcastToUser(job.userId, {
+      type,
+      jobId: job.id,
+      tripId: job.tripId,
+      ...payload,
+    } as { type: E } & TrekWsPayload<E>);
   }
 }
