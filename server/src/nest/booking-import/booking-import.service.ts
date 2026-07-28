@@ -1,5 +1,5 @@
 import { Injectable, HttpException } from '@nestjs/common';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { ReservationsService } from '../reservations/reservations.service';
@@ -27,6 +27,7 @@ export class BookingImportService {
     private readonly permissions: PermissionsService,
     private readonly budget: BudgetService,
     private readonly addons: AddonsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   private get db() {
@@ -181,7 +182,7 @@ export class BookingImportService {
             phone: _venue.phone,
           });
           placeId = (place as any).id;
-          broadcast(tripId, 'place:created', { place }, socketId);
+          this.realtime.broadcast(tripId, 'place:created', { place }, socketId);
         }
 
         // Geocode transport endpoints (stations/stops/terminals/rental desks) that
@@ -229,9 +230,9 @@ export class BookingImportService {
           create_accommodation: createAccommodation,
         } as any);
 
-        broadcast(tripId, 'reservation:created', { reservation }, socketId);
+        this.realtime.broadcast(tripId, 'reservation:created', { reservation }, socketId);
         if (accommodationCreated) {
-          broadcast(tripId, 'accommodation:created', {}, socketId);
+          this.realtime.broadcast(tripId, 'accommodation:created', {}, socketId);
         }
 
         // Turn an extracted price into a real linked cost (Costs addon), so the
@@ -255,7 +256,7 @@ export class BookingImportService {
               // settled position isn't re-opened when live rates drift (#1445).
               await this.budget.freezeForeignRate(tripId, budgetData);
               const budgetItem = this.budget.createBudgetItem(tripId, budgetData);
-              broadcast(tripId, 'budget:created', { item: budgetItem }, socketId);
+              this.realtime.broadcast(tripId, 'budget:created', { item: budgetItem }, socketId);
             } catch (err) {
               console.error(
                 `[booking-import] Failed to create cost for "${item.title}":`,

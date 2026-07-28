@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import type { User } from '../../types';
 import * as tripSvc from '../../services/tripService';
@@ -31,6 +31,7 @@ export class TripsService {
     private readonly days: DaysService,
     private readonly permissions: PermissionsService,
     private readonly budget: BudgetService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   private get db() {
@@ -46,7 +47,7 @@ export class TripsService {
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
-    broadcast(tripId, event, payload, socketId);
+    this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
   list(userId: number, archived: number) {

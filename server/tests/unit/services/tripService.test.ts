@@ -39,8 +39,9 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 import { DaysService } from '../../../src/nest/days/days.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import fs from 'fs';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
-const daysSvc = new DaysService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
+const daysSvc = new DaysService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new RealtimeService());
 const createAccommodation = daysSvc.createAccommodation.bind(daysSvc);
 
 beforeAll(() => {

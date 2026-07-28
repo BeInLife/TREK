@@ -43,8 +43,9 @@ import { isUpdateConflict } from '../../../src/services/conflictResult';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PackingService } from '../../../src/nest/packing/packing.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
-const packing = new PackingService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
+const packing = new PackingService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new RealtimeService());
 
 beforeAll(() => {
   createTables(testDb);

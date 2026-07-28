@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { readEnv } from '../../../app-config';
-import { broadcast, broadcastToUser } from '../../../websocket';
+import { RealtimeService } from '../../realtime/realtime.service';
 import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
 import { BLOCKED_EXTENSIONS, filesDir } from '../../files/files.constants';
@@ -72,35 +72,35 @@ function packingViewersOf(item: PackingPrivacy | null | undefined): number[] | n
 }
 
 /** CREATE/DELETE fan-out: whole room for a Common item, else owner + recipients only. */
-function emitPackingToViewers(tripId: number, event: string, payload: Record<string, unknown>, item: PackingPrivacy): void {
+function emitPackingToViewers(realtime: RealtimeService, tripId: number, event: string, payload: Record<string, unknown>, item: PackingPrivacy): void {
   const viewers = packingViewersOf(item);
   if (viewers === null) {
-    broadcast(tripId, event, payload, undefined);
+    realtime.broadcast(tripId, event, payload, undefined);
     return;
   }
-  for (const uid of new Set(viewers)) if (uid != null) broadcast(tripId, event, payload, undefined, uid);
+  for (const uid of new Set(viewers)) if (uid != null) realtime.broadcast(tripId, event, payload, undefined, uid);
 }
 
 /** An item event delivered owner-only when the item is private (else to the room). */
-function broadcastPackingItem(tripId: number, event: string, payload: Record<string, unknown>, item: PackingPrivacy): void {
+function broadcastPackingItem(realtime: RealtimeService, tripId: number, event: string, payload: Record<string, unknown>, item: PackingPrivacy): void {
   const onlyUserId = item?.is_private && item.owner_id != null ? item.owner_id : undefined;
-  broadcast(tripId, event, payload, undefined, onlyUserId);
+  realtime.broadcast(tripId, event, payload, undefined, onlyUserId);
 }
 
 /** The four public<->private transitions (packing.controller.broadcastUpdate). `wasPrivate`
  * is read BEFORE the write — getting this wrong LEAKS a freshly-privatized item. */
-function broadcastPackingUpdate(tripId: number, itemId: number, item: PackingPrivacy, wasPrivate: boolean): void {
+function broadcastPackingUpdate(realtime: RealtimeService, tripId: number, itemId: number, item: PackingPrivacy, wasPrivate: boolean): void {
   const nowPrivate = !!item.is_private;
   if (nowPrivate) {
     if (wasPrivate) {
-      broadcastPackingItem(tripId, 'packing:updated', { item }, item); // stays private -> owner-only
+      broadcastPackingItem(realtime, tripId, 'packing:updated', { item }, item); // stays private -> owner-only
     } else {
-      broadcast(tripId, 'packing:deleted', { itemId }, undefined); // public->private: drop from the room...
-      broadcastPackingItem(tripId, 'packing:created', { item }, item); // ...then re-add for the owner
+      realtime.broadcast(tripId, 'packing:deleted', { itemId }, undefined); // public->private: drop from the room...
+      broadcastPackingItem(realtime, tripId, 'packing:created', { item }, item); // ...then re-add for the owner
     }
   } else {
-    if (wasPrivate) broadcast(tripId, 'packing:created', { item }, undefined); // private->public: add for members who lacked it
-    broadcast(tripId, 'packing:updated', { item }, undefined);
+    if (wasPrivate) realtime.broadcast(tripId, 'packing:created', { item }, undefined); // private->public: add for members who lacked it
+    realtime.broadcast(tripId, 'packing:updated', { item }, undefined);
   }
 }
 
@@ -118,9 +118,9 @@ export interface PluginCallRouter {
 
 /**
  * Wires a plugin's capability host to the REAL privileged modules (#plugins,
- * M1). This is the ONLY plugin file that imports the websocket — it runs in the
- * host (parent), never in the child. Broadcasts are force-namespaced to
- * `plugin:{id}:{event}` so a plugin can't forge a core event.
+ * M1). This is the ONLY plugin file that touches the realtime broadcast facade
+ * — it runs in the host (parent), never in the child. Broadcasts are
+ * force-namespaced to `plugin:{id}:{event}` so a plugin can't forge a core event.
  *
  * DI-native domain services (budget, exchange-rates, reservations, tags,
  * categories, todo, packing, day-notes, assignments, oauth, files, collab,
@@ -151,6 +151,7 @@ export class PluginHostDepsFactory {
     private readonly permissions: PermissionsService,
     private readonly exchangeRates: ExchangeRatesService,
     private readonly addons: AddonsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /**
@@ -206,8 +207,8 @@ export class PluginHostDepsFactory {
               LIMIT 1`,
           )
           .get(actingUserId, targetUserId, actingUserId, targetUserId),
-      broadcastToTrip: (tripId, event, payload) => broadcast(tripId, `plugin:${id}:${event}`, payload),
-      broadcastToUser: (userId, payload) => broadcastToUser(userId, { type: `plugin:${id}`, ...payload }),
+      broadcastToTrip: (tripId, event, payload) => this.realtime.broadcast(tripId, `plugin:${id}:${event}`, payload),
+      broadcastToUser: (userId, payload) => this.realtime.broadcastToUser(userId, { type: `plugin:${id}`, ...payload }),
       audit: (entry) => appendAudit(this.db.connection, entry),
       // --- Costs (budget items) ---
       budgetAddonEnabled: () => this.addons.isAddonEnabled(ADDON_IDS.BUDGET),
@@ -273,7 +274,7 @@ export class PluginHostDepsFactory {
           actingUserId,
           { place_id: i.place_id != null ? String(i.place_id) : null, reservation_id: i.reservation_id != null ? String(i.reservation_id) : null, description: i.description ?? null },
         );
-        broadcast(tripId, 'file:created', { file }, undefined);
+        this.realtime.broadcast(tripId, 'file:created', { file }, undefined);
         return file;
       },
       createTripFileLink: (tripId, fileId, opts) => {
@@ -290,13 +291,13 @@ export class PluginHostDepsFactory {
         const foreign = this.files.findForeignLinkTarget(tripId, { reservation_id: i.reservation_id ?? null, place_id: i.place_id ?? null });
         if (foreign) throw new ForbiddenResource(`${foreign} does not belong to trip ${tripId}`);
         const file = this.files.updateFile(fileId, current, { description: i.description, place_id: i.place_id != null ? String(i.place_id) : i.place_id === null ? null : undefined, reservation_id: i.reservation_id != null ? String(i.reservation_id) : i.reservation_id === null ? null : undefined });
-        broadcast(tripId, 'file:updated', { file }, undefined);
+        this.realtime.broadcast(tripId, 'file:updated', { file }, undefined);
         return file;
       },
       softDeleteTripFile: (tripId, fileId) => {
         if (!this.files.getFileById(fileId, tripId)) throw new ForbiddenResource(`no file ${fileId} on trip ${tripId}`);
         this.files.softDeleteFile(fileId);
-        broadcast(tripId, 'file:deleted', { fileId }, undefined);
+        this.realtime.broadcast(tripId, 'file:deleted', { fileId }, undefined);
         return { deleted: true };
       },
       // --- Collab reads (collab addon; membership checked by the host). Same hydrated
@@ -309,27 +310,27 @@ export class PluginHostDepsFactory {
       createCollabNote: (tripId, input, actingUserId) => {
         requireAddon(ADDON_IDS.COLLAB, 'collab');
         const note = this.collab.createNote(String(tripId), actingUserId, input as never);
-        broadcast(tripId, 'collab:note:created', { note }, undefined);
+        this.realtime.broadcast(tripId, 'collab:note:created', { note }, undefined);
         return note;
       },
       createCollabPoll: (tripId, input, actingUserId) => {
         requireAddon(ADDON_IDS.COLLAB, 'collab');
         const poll = this.collab.createPoll(String(tripId), actingUserId, input as never);
-        broadcast(tripId, 'collab:poll:created', { poll }, undefined);
+        this.realtime.broadcast(tripId, 'collab:poll:created', { poll }, undefined);
         return poll;
       },
       voteCollabPoll: (tripId, pollId, optionIndex, actingUserId) => {
         requireAddon(ADDON_IDS.COLLAB, 'collab');
         const result = this.collab.votePoll(String(tripId), String(pollId), actingUserId, optionIndex);
         if (result.error) throw new BadParams(result.error);
-        broadcast(tripId, 'collab:poll:voted', { poll: result.poll }, undefined);
+        this.realtime.broadcast(tripId, 'collab:poll:voted', { poll: result.poll }, undefined);
         return result.poll;
       },
       createCollabMessage: (tripId, text, replyTo, actingUserId) => {
         requireAddon(ADDON_IDS.COLLAB, 'collab');
         const result = this.collab.createMessage(String(tripId), actingUserId, text, replyTo ?? null);
         if (result.error) throw new BadParams(result.error);
-        broadcast(tripId, 'collab:message:created', { message: result.message }, undefined);
+        this.realtime.broadcast(tripId, 'collab:message:created', { message: result.message }, undefined);
         return result.message;
       },
       // --- Member add (member_manage). Grants trip access — the target must exist;
@@ -437,7 +438,7 @@ export class PluginHostDepsFactory {
       // live. No X-Socket-Id — a plugin has no originating socket.
       createCost: async (tripId, input) => {
         const item = await this.budget.create(String(tripId), input);
-        broadcast(tripId, 'budget:created', { item });
+        this.realtime.broadcast(tripId, 'budget:created', { item });
         return item;
       },
       // Reuses BudgetService.update (re-frozen FX on a currency change), then
@@ -446,7 +447,7 @@ export class PluginHostDepsFactory {
       updateCost: async (tripId, itemId, input) => {
         const item = await this.budget.update(String(itemId), String(tripId), input);
         if (item == null) throw new ForbiddenResource(`no cost ${itemId} on trip ${tripId}`);
-        broadcast(tripId, 'budget:updated', { item });
+        this.realtime.broadcast(tripId, 'budget:updated', { item });
         return item;
       },
       // Reuses BudgetService.remove, then broadcasts 'budget:deleted' with the
@@ -454,7 +455,7 @@ export class PluginHostDepsFactory {
       deleteCost: (tripId, itemId) => {
         const deleted = this.budget.remove(String(itemId), String(tripId));
         if (!deleted) throw new ForbiddenResource(`no cost ${itemId} on trip ${tripId}`);
-        broadcast(tripId, 'budget:deleted', { itemId });
+        this.realtime.broadcast(tripId, 'budget:deleted', { itemId });
         return { deleted: true };
       },
       // --- Places (place_edit). Delegate to the same placeService the REST/MCP paths
@@ -462,19 +463,19 @@ export class PluginHostDepsFactory {
       canEditPlaces: (tripId, userId) => this.canEditTripAs('place_edit', tripId, userId),
       createPlace: (tripId, input) => {
         const place = createPlace(String(tripId), input as Parameters<typeof createPlace>[1]);
-        broadcast(tripId, 'place:created', { place });
+        this.realtime.broadcast(tripId, 'place:created', { place });
         return place;
       },
       updatePlace: (tripId, placeId, input) => {
         const place = updatePlace(String(tripId), String(placeId), input as Parameters<typeof updatePlace>[2]);
         if (place === null) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
-        broadcast(tripId, 'place:updated', { place });
+        this.realtime.broadcast(tripId, 'place:updated', { place });
         return place;
       },
       deletePlace: (tripId, placeId) => {
         const deleted = deletePlace(String(tripId), String(placeId));
         if (!deleted) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
-        broadcast(tripId, 'place:deleted', { placeId });
+        this.realtime.broadcast(tripId, 'place:deleted', { placeId });
         return { deleted: true };
       },
       // --- Days (day_edit). getDay scopes the row to the trip before any write. ---
@@ -482,21 +483,21 @@ export class PluginHostDepsFactory {
       createDay: (tripId, input) => {
         const i = input as { date?: string; notes?: string };
         const day = this.days.create(tripId, i.date, i.notes);
-        broadcast(tripId, 'day:created', { day });
+        this.realtime.broadcast(tripId, 'day:created', { day });
         return day;
       },
       updateDay: (tripId, dayId, input) => {
         const current = this.days.getDay(dayId, tripId);
         if (!current) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
         const day = this.days.update(dayId, current, input as { notes?: string; title?: string | null });
-        broadcast(tripId, 'day:updated', { day });
+        this.realtime.broadcast(tripId, 'day:updated', { day });
         return day;
       },
       deleteDay: (tripId, dayId) => {
         const current = this.days.getDay(dayId, tripId);
         if (!current) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
         this.days.remove(dayId);
-        broadcast(tripId, 'day:deleted', { dayId });
+        this.realtime.broadcast(tripId, 'day:deleted', { dayId });
         return { deleted: true };
       },
       // --- Itinerary (day_edit). Both the day AND the place must belong to the trip,
@@ -506,7 +507,7 @@ export class PluginHostDepsFactory {
         if (!this.assignments.dayExists(dayId, tripId)) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
         if (!this.assignments.placeExists(placeId, tripId)) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
         const assignment = this.assignments.createAssignment(dayId, placeId, notes);
-        broadcast(tripId, 'assignment:created', { assignment });
+        this.realtime.broadcast(tripId, 'assignment:created', { assignment });
         return assignment;
       },
       unassignPlace: (tripId, assignmentId) => {
@@ -515,7 +516,7 @@ export class PluginHostDepsFactory {
         this.assignments.deleteAssignment(assignmentId);
         // Same payload shape as the REST/MCP delete, so client stores can
         // evict the assignment from the right day.
-        broadcast(tripId, 'assignment:deleted', { assignmentId, dayId: existing.day_id });
+        this.realtime.broadcast(tripId, 'assignment:deleted', { assignmentId, dayId: existing.day_id });
         return { deleted: true };
       },
       // --- Trip creation (trip_create; owner = acting user). No broadcast — a new trip
@@ -551,7 +552,7 @@ export class PluginHostDepsFactory {
         const u = this.db.prepare('SELECT role FROM users WHERE id = ?').get(userId) as { role?: string } | undefined;
         try {
           const result = updateTrip(tripId, userId, input as Parameters<typeof updateTrip>[2], u?.role ?? 'user');
-          broadcast(tripId, 'trip:updated', { trip: result.updatedTrip });
+          this.realtime.broadcast(tripId, 'trip:updated', { trip: result.updatedTrip });
           return result.updatedTrip;
         } catch (e) {
           if (e instanceof ValidationError) throw new BadParams(e.message);
@@ -588,8 +589,8 @@ export class PluginHostDepsFactory {
           check_in: i.check_in ?? undefined, check_in_end: i.check_in_end ?? undefined,
           check_out: i.check_out ?? undefined, confirmation: i.confirmation ?? undefined, notes: i.notes ?? undefined,
         });
-        broadcast(tripId, 'accommodation:created', { accommodation });
-        broadcast(tripId, 'reservation:created', {});
+        this.realtime.broadcast(tripId, 'accommodation:created', { accommodation });
+        this.realtime.broadcast(tripId, 'reservation:created', {});
         return accommodation;
       },
       updateAccommodation: (tripId, accommodationId, input) => {
@@ -599,15 +600,15 @@ export class PluginHostDepsFactory {
         const errors = this.days.validateAccommodationRefs(tripId, i.place_id, i.start_day_id, i.end_day_id);
         if (errors.length > 0) throw new ForbiddenResource(errors[0].message);
         const accommodation = this.days.updateAccommodation(accommodationId, existing, i);
-        broadcast(tripId, 'accommodation:updated', { accommodation });
+        this.realtime.broadcast(tripId, 'accommodation:updated', { accommodation });
         return accommodation;
       },
       deleteAccommodation: (tripId, accommodationId) => {
         if (!this.days.getAccommodation(accommodationId, tripId)) throw new ForbiddenResource(`no accommodation ${accommodationId} on trip ${tripId}`);
         const { linkedReservationId, deletedBudgetItemId } = this.days.deleteAccommodation(accommodationId);
-        if (linkedReservationId) broadcast(tripId, 'reservation:deleted', { reservationId: linkedReservationId });
-        if (deletedBudgetItemId) broadcast(tripId, 'budget:deleted', { itemId: deletedBudgetItemId });
-        broadcast(tripId, 'accommodation:deleted', { accommodationId });
+        if (linkedReservationId) this.realtime.broadcast(tripId, 'reservation:deleted', { reservationId: linkedReservationId });
+        if (deletedBudgetItemId) this.realtime.broadcast(tripId, 'budget:deleted', { itemId: deletedBudgetItemId });
+        this.realtime.broadcast(tripId, 'accommodation:deleted', { accommodationId });
         return { deleted: true };
       },
       // --- User-scoped addon reads (the acting user's own data across all trips). Each
@@ -712,21 +713,21 @@ export class PluginHostDepsFactory {
         if (!this.dayNotes.dayExists(dayId, tripId)) throw new ForbiddenResource(`no day ${dayId} on trip ${tripId}`);
         const i = input as { text?: string; time?: string; icon?: string; sort_order?: number };
         const note = this.dayNotes.create(dayId, tripId, i.text ?? '', i.time, i.icon, i.sort_order);
-        broadcast(tripId, 'dayNote:created', { dayId, note }, undefined);
+        this.realtime.broadcast(tripId, 'dayNote:created', { dayId, note }, undefined);
         return note;
       },
       updateDayNote: (tripId, dayId, noteId, input) => {
         const current = this.dayNotes.getNote(noteId, dayId, tripId);
         if (!current) throw new ForbiddenResource(`no note ${noteId} on day ${dayId}`);
         const note = this.dayNotes.update(noteId, current as never, input as { text?: string; time?: string; icon?: string; sort_order?: number });
-        broadcast(tripId, 'dayNote:updated', { dayId, note }, undefined);
+        this.realtime.broadcast(tripId, 'dayNote:updated', { dayId, note }, undefined);
         return note;
       },
       deleteDayNote: (tripId, dayId, noteId) => {
         const current = this.dayNotes.getNote(noteId, dayId, tripId);
         if (!current) throw new ForbiddenResource(`no note ${noteId} on day ${dayId}`);
         this.dayNotes.remove(noteId);
-        broadcast(tripId, 'dayNote:deleted', { noteId, dayId }, undefined);
+        this.realtime.broadcast(tripId, 'dayNote:deleted', { noteId, dayId }, undefined);
         return { deleted: true };
       },
       // --- Reservations (bookings, reservation_edit). Delegates to ReservationsService
@@ -735,10 +736,10 @@ export class PluginHostDepsFactory {
       canEditReservations: (tripId, userId) => this.canEditTripAs('reservation_edit', tripId, userId),
       createReservation: (tripId, input, actingUserId) => {
         const { reservation, accommodationCreated } = this.reservations.create(String(tripId), input as never);
-        if (accommodationCreated) broadcast(tripId, 'accommodation:created', {}, undefined);
+        if (accommodationCreated) this.realtime.broadcast(tripId, 'accommodation:created', {}, undefined);
         const i = input as { title?: string; type?: string; create_budget_entry?: unknown };
         this.reservations.syncBudgetOnCreate(String(tripId), reservation.id, i.title ?? '', i.type, i.create_budget_entry as never, undefined);
-        broadcast(tripId, 'reservation:created', { reservation }, undefined);
+        this.realtime.broadcast(tripId, 'reservation:created', { reservation }, undefined);
         this.notifyBooking(actingUserId, tripId, i.title ?? '', i.type ?? '');
         return reservation;
       },
@@ -746,20 +747,20 @@ export class PluginHostDepsFactory {
         const current = this.reservations.getReservation(String(reservationId), String(tripId));
         if (!current) throw new ForbiddenResource(`no reservation ${reservationId} on trip ${tripId}`);
         const { reservation, accommodationChanged } = this.reservations.update(String(reservationId), String(tripId), input as never, current as never);
-        if (accommodationChanged) broadcast(tripId, 'accommodation:updated', {}, undefined);
+        if (accommodationChanged) this.realtime.broadcast(tripId, 'accommodation:updated', {}, undefined);
         const cur = current as { title: string; type?: string };
         const i = input as { title?: string; type?: string; create_budget_entry?: unknown };
         this.reservations.syncBudgetOnUpdate(String(tripId), String(reservationId), i.title ?? '', i.type, cur.title, cur.type, i.create_budget_entry as never, undefined);
-        broadcast(tripId, 'reservation:updated', { reservation }, undefined);
+        this.realtime.broadcast(tripId, 'reservation:updated', { reservation }, undefined);
         this.notifyBooking(actingUserId, tripId, i.title || cur.title, i.type || cur.type || '');
         return reservation;
       },
       deleteReservation: (tripId, reservationId, actingUserId) => {
         const { deleted, accommodationDeleted, deletedBudgetItemId } = this.reservations.remove(String(reservationId), String(tripId));
         if (!deleted) throw new ForbiddenResource(`no reservation ${reservationId} on trip ${tripId}`);
-        if (accommodationDeleted) broadcast(tripId, 'accommodation:deleted', { accommodationId: deleted.accommodation_id }, undefined);
-        if (deletedBudgetItemId) broadcast(tripId, 'budget:deleted', { itemId: deletedBudgetItemId }, undefined);
-        broadcast(tripId, 'reservation:deleted', { reservationId: Number(reservationId) }, undefined);
+        if (accommodationDeleted) this.realtime.broadcast(tripId, 'accommodation:deleted', { accommodationId: deleted.accommodation_id }, undefined);
+        if (deletedBudgetItemId) this.realtime.broadcast(tripId, 'budget:deleted', { itemId: deletedBudgetItemId }, undefined);
+        this.realtime.broadcast(tripId, 'reservation:deleted', { reservationId: Number(reservationId) }, undefined);
         this.notifyBooking(actingUserId, tripId, deleted.title, deleted.type || '');
         return { deleted: true };
       },
@@ -770,7 +771,7 @@ export class PluginHostDepsFactory {
       createPackingItem: (tripId, input, actingUserId) => {
         const i = input as { name: string; category?: string; checked?: boolean; is_private?: boolean; visibility?: 'common' | 'personal' | 'shared'; recipient_ids?: number[] };
         const item = this.packing.createItem(String(tripId), i, actingUserId) as PackingPrivacy;
-        emitPackingToViewers(tripId, 'packing:created', { item }, item);
+        emitPackingToViewers(this.realtime, tripId, 'packing:created', { item }, item);
         return item;
       },
       updatePackingItem: (tripId, itemId, input, actingUserId) => {
@@ -779,13 +780,13 @@ export class PluginHostDepsFactory {
         const updated = this.packing.updateItem(String(tripId), String(itemId), input as never, Object.keys(input), undefined, actingUserId);
         if (!updated) throw new ForbiddenResource(`no packing item ${itemId} on trip ${tripId}`);
         if (isUpdateConflict(updated)) throw new BadParams('packing item was modified concurrently');
-        broadcastPackingUpdate(tripId, itemId, updated as PackingPrivacy, !!before?.is_private);
+        broadcastPackingUpdate(this.realtime, tripId, itemId, updated as PackingPrivacy, !!before?.is_private);
         return updated;
       },
       deletePackingItem: (tripId, itemId) => {
         const deleted = this.packing.deleteItem(String(tripId), String(itemId)) as PackingPrivacy | null;
         if (!deleted) throw new ForbiddenResource(`no packing item ${itemId} on trip ${tripId}`);
-        emitPackingToViewers(tripId, 'packing:deleted', { itemId }, deleted);
+        emitPackingToViewers(this.realtime, tripId, 'packing:deleted', { itemId }, deleted);
         return { deleted: true };
       },
       // --- Packing bags (no privacy — plain room broadcasts). ---
@@ -793,24 +794,24 @@ export class PluginHostDepsFactory {
       createPackingBag: (tripId, input) => {
         const i = input as { name: string; color?: string };
         const bag = this.packing.createBag(String(tripId), { name: i.name, color: i.color });
-        broadcast(tripId, 'packing:bag-created', { bag }, undefined);
+        this.realtime.broadcast(tripId, 'packing:bag-created', { bag }, undefined);
         return bag;
       },
       updatePackingBag: (tripId, bagId, input) => {
         const bag = this.packing.updateBag(String(tripId), String(bagId), input as never, Object.keys(input));
         if (!bag) throw new ForbiddenResource(`no packing bag ${bagId} on trip ${tripId}`);
-        broadcast(tripId, 'packing:bag-updated', { bag }, undefined);
+        this.realtime.broadcast(tripId, 'packing:bag-updated', { bag }, undefined);
         return bag;
       },
       deletePackingBag: (tripId, bagId) => {
         if (!this.packing.deleteBag(String(tripId), String(bagId))) throw new ForbiddenResource(`no packing bag ${bagId} on trip ${tripId}`);
-        broadcast(tripId, 'packing:bag-deleted', { bagId }, undefined);
+        this.realtime.broadcast(tripId, 'packing:bag-deleted', { bagId }, undefined);
         return { deleted: true };
       },
       setPackingBagMembers: (tripId, bagId, userIds) => {
         const members = this.packing.setBagMembers(String(tripId), String(bagId), userIds);
         if (!members) throw new ForbiddenResource(`no packing bag ${bagId} on trip ${tripId}`);
-        broadcast(tripId, 'packing:bag-members-updated', { bagId, members }, undefined);
+        this.realtime.broadcast(tripId, 'packing:bag-members-updated', { bagId, members }, undefined);
         return members;
       },
       // --- Read-convenience: weather (host cache, tenant-free), categories (global), roster ---
@@ -835,18 +836,18 @@ export class PluginHostDepsFactory {
       listTodos: (tripId) => this.todos.listItems(String(tripId)) as unknown[],
       createTodo: (tripId, input) => {
         const item = this.todos.createItem(String(tripId), input as never);
-        broadcast(tripId, 'todo:created', { item }, undefined);
+        this.realtime.broadcast(tripId, 'todo:created', { item }, undefined);
         return item;
       },
       updateTodo: (tripId, todoId, input) => {
         const updated = this.todos.updateItem(String(tripId), String(todoId), input as never, Object.keys(input));
         if (!updated) throw new ForbiddenResource(`no todo ${todoId} on trip ${tripId}`);
-        broadcast(tripId, 'todo:updated', { item: updated }, undefined);
+        this.realtime.broadcast(tripId, 'todo:updated', { item: updated }, undefined);
         return updated;
       },
       deleteTodo: (tripId, todoId) => {
         if (!this.todos.deleteItem(String(tripId), String(todoId))) throw new ForbiddenResource(`no todo ${todoId} on trip ${tripId}`);
-        broadcast(tripId, 'todo:deleted', { itemId: todoId }, undefined);
+        this.realtime.broadcast(tripId, 'todo:deleted', { itemId: todoId }, undefined);
         return { deleted: true };
       },
       // --- Plugin metadata (db:meta). A per-plugin namespaced key/value store keyed

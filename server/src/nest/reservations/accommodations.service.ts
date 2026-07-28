@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { DatabaseService } from '../database/database.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import type { User } from '../../types';
@@ -19,6 +19,7 @@ export class AccommodationsService {
     private readonly dbs: DatabaseService,
     private readonly days: DaysService,
     private readonly permissions: PermissionsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   /** Mirrors the requireTripAccess middleware (owner or member), returning the trip. */
@@ -31,7 +32,7 @@ export class AccommodationsService {
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
-    broadcast(tripId, event, payload, socketId);
+    this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
   list(tripId: string) {

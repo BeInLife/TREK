@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { avatarUrl } from '../../services/avatarUrl';
@@ -42,6 +42,7 @@ export class PackingService {
   constructor(
     private readonly db: DatabaseService,
     private readonly permissions: PermissionsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
@@ -54,7 +55,7 @@ export class PackingService {
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
-    broadcast(tripId, event, payload, socketId);
+    this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
   /**
@@ -64,14 +65,14 @@ export class PackingService {
    */
   broadcastItem(tripId: string, event: string, payload: Record<string, unknown>, item: PrivacyFields | null | undefined, socketId: string | undefined): void {
     const onlyUserId = item?.is_private && item.owner_id != null ? item.owner_id : undefined;
-    broadcast(tripId, event, payload, socketId, onlyUserId);
+    this.realtime.broadcast(tripId, event, payload, socketId, onlyUserId);
   }
 
   /** Deliver an item event to a specific set of viewers (#858 shared items) — the
    *  owner plus the recipients it was shared with — without leaking to the room. */
   broadcastToViewers(tripId: string, event: string, payload: Record<string, unknown>, viewerIds: number[], socketId: string | undefined): void {
     for (const uid of new Set(viewerIds)) {
-      if (uid != null) broadcast(tripId, event, payload, socketId, uid);
+      if (uid != null) this.realtime.broadcast(tripId, event, payload, socketId, uid);
     }
   }
 

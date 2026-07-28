@@ -1,5 +1,6 @@
 import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { VacayService } from './vacay.service';
 
 /**
@@ -15,7 +16,7 @@ import { VacayService } from './vacay.service';
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.
  */
-const vacay = new VacayService(new DatabaseService(db));
+const vacay = new VacayService(new DatabaseService(db), new RealtimeService());
 
 export function shiftOwnerEntriesForTripWindow(
   ownerId: number,

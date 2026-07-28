@@ -21,6 +21,7 @@ import { VacayService } from '../../src/nest/vacay/vacay.service';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { AuditService } from '../../src/nest/audit/audit.service';
 import { AddonsService } from '../../src/nest/addons/addons.service';
+import { RealtimeService } from '../../src/nest/realtime/realtime.service';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -31,27 +32,29 @@ import { AddonsService } from '../../src/nest/addons/addons.service';
 export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFactory {
   const permissions = new PermissionsService(dbs);
   const exchangeRates = new ExchangeRatesService();
-  const budget = new BudgetService(dbs, permissions, exchangeRates);
+  const realtime = new RealtimeService();
+  const budget = new BudgetService(dbs, permissions, exchangeRates, realtime);
   const addons = new AddonsService(dbs);
   return new PluginHostDepsFactory(
     budget,
-    new ReservationsService(dbs, permissions, budget),
+    new ReservationsService(dbs, permissions, budget, realtime),
     new TagsService(dbs),
     new CategoriesService(dbs),
-    new TodoService(dbs, permissions),
-    new PackingService(dbs, permissions),
+    new TodoService(dbs, permissions, realtime),
+    new PackingService(dbs, permissions, realtime),
     new PluginOAuthService(dbs),
-    new DayNotesService(dbs, permissions),
-    new AssignmentsService(dbs, permissions),
+    new DayNotesService(dbs, permissions, realtime),
+    new AssignmentsService(dbs, permissions, realtime),
     new LlmConfigResolver(new SettingsService(dbs), dbs, addons),
     dbs,
-    new FilesService(dbs, permissions),
-    new CollabService(dbs, permissions),
-    new VacayService(dbs),
-    new DaysService(dbs, permissions),
+    new FilesService(dbs, permissions, realtime),
+    new CollabService(dbs, permissions, realtime),
+    new VacayService(dbs, realtime),
+    new DaysService(dbs, permissions, realtime),
     permissions,
     exchangeRates,
     addons,
+    realtime,
   );
 }
 

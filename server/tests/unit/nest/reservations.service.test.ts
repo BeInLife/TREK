@@ -53,8 +53,9 @@ import type { PermissionsService } from '../../../src/nest/permissions/permissio
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
 import type { BudgetService } from '../../../src/nest/budget/budget.service';
 import * as bridge from '../../../src/nest/reservations/reservations.bridge';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
-const svc = new ReservationsService(new DatabaseService(testDb), permissionsStub, budget as unknown as BudgetService);
+const svc = new ReservationsService(new DatabaseService(testDb), permissionsStub, budget as unknown as BudgetService, new RealtimeService());
 
 beforeAll(() => { createTables(testDb); runMigrations(testDb); });
 beforeEach(() => {

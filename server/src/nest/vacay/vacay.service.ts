@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { broadcastToUser } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { DatabaseService } from '../database/database.service';
 
 // ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ function windowEndYear(end: string): number {
  */
 @Injectable()
 export class VacayService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(private readonly db: DatabaseService, private readonly realtime: RealtimeService) {}
 
   private readonly holidayCache = new Map<string, { data: unknown; time: number }>();
 
@@ -383,7 +383,7 @@ export class VacayService {
       const userIds = [plan.owner_id];
       const members = this.db.all<{ user_id: number }>("SELECT user_id FROM vacay_plan_members WHERE plan_id = ? AND status = 'accepted'", planId);
       members.forEach(m => userIds.push(m.user_id));
-      userIds.forEach(id => broadcastToUser(id, { type: event }, excludeSid));
+      userIds.forEach(id => this.realtime.broadcastToUser(id, { type: event }, excludeSid));
       // Pending-invite events carry nothing a read-only viewer could see; every
       // other event may change entries, colors or company holidays.
       if (event !== 'vacay:invite' && event !== 'vacay:declined' && event !== 'vacay:cancelled') {
@@ -399,7 +399,7 @@ export class VacayService {
         `SELECT DISTINCT user_id FROM vacay_shares WHERE owner_id IN (${ownerIds.map(() => '?').join(',')})`,
         ...ownerIds
       );
-      rows.forEach(r => broadcastToUser(r.user_id, { type: 'vacay:shared-update' }, excludeSid));
+      rows.forEach(r => this.realtime.broadcastToUser(r.user_id, { type: 'vacay:shared-update' }, excludeSid));
     } catch { /* websocket not available */ }
   }
 
@@ -619,7 +619,7 @@ export class VacayService {
     this.db.run('INSERT INTO vacay_plan_members (plan_id, user_id, status) VALUES (?, ?, ?)', planId, targetUserId, 'pending');
 
     try {
-      broadcastToUser(targetUserId, {
+      this.realtime.broadcastToUser(targetUserId, {
         type: 'vacay:invite',
         from: { id: inviterId, username: inviterUsername },
         planId,
@@ -693,7 +693,7 @@ export class VacayService {
     this.db.run("DELETE FROM vacay_plan_members WHERE plan_id = ? AND user_id = ? AND status = 'pending'", planId, targetUserId);
 
     try {
-      broadcastToUser(targetUserId, { type: 'vacay:cancelled' });
+      this.realtime.broadcastToUser(targetUserId, { type: 'vacay:cancelled' });
     } catch { /* */ }
   }
 
@@ -733,7 +733,7 @@ export class VacayService {
     });
 
     try {
-      allUserIds.filter(id => id !== userId).forEach(id => broadcastToUser(id, { type: 'vacay:dissolved' }));
+      allUserIds.filter(id => id !== userId).forEach(id => this.realtime.broadcastToUser(id, { type: 'vacay:dissolved' }));
     } catch { /* */ }
     // Everyone's entries just moved back to their own plans — refresh read-only viewers.
     this.notifyShareViewers(allUserIds, socketId);
@@ -853,9 +853,9 @@ export class VacayService {
     this.db.run('INSERT INTO vacay_shares (owner_id, user_id) VALUES (?, ?)', ownerId, targetUserId);
 
     try {
-      broadcastToUser(targetUserId, { type: 'vacay:share', from: { id: ownerId } });
+      this.realtime.broadcastToUser(targetUserId, { type: 'vacay:share', from: { id: ownerId } });
       // The owner's other devices refresh their outgoing list too.
-      broadcastToUser(ownerId, { type: 'vacay:share', from: { id: ownerId } }, socketId);
+      this.realtime.broadcastToUser(ownerId, { type: 'vacay:share', from: { id: ownerId } }, socketId);
     } catch { /* websocket not available */ }
 
     import('../../services/notificationService').then(({ send }) => {
@@ -871,8 +871,8 @@ export class VacayService {
     if (!share || (share.owner_id !== userId && share.user_id !== userId)) return false;
     this.db.run('DELETE FROM vacay_shares WHERE id = ?', shareId);
     try {
-      broadcastToUser(share.owner_id, { type: 'vacay:share-removed' }, socketId);
-      broadcastToUser(share.user_id, { type: 'vacay:share-removed' }, socketId);
+      this.realtime.broadcastToUser(share.owner_id, { type: 'vacay:share-removed' }, socketId);
+      this.realtime.broadcastToUser(share.user_id, { type: 'vacay:share-removed' }, socketId);
     } catch { /* websocket not available */ }
     return true;
   }
@@ -883,7 +883,7 @@ export class VacayService {
     this.db.run('UPDATE vacay_shares SET hidden = ? WHERE id = ?', hidden ? 1 : 0, shareId);
     try {
       // Keep the viewer's other devices in sync; nobody else is affected.
-      broadcastToUser(userId, { type: 'vacay:shared-update' }, socketId);
+      this.realtime.broadcastToUser(userId, { type: 'vacay:shared-update' }, socketId);
     } catch { /* websocket not available */ }
     return true;
   }

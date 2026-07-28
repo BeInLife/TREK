@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import path from 'path';
 import fs from 'fs';
 import type { Request } from 'express';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { avatarUrl } from '../../services/avatarUrl';
 import { consumeEphemeralToken } from '../../services/ephemeralTokens';
@@ -57,6 +57,7 @@ export class FilesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly permissions: PermissionsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
@@ -68,7 +69,7 @@ export class FilesService {
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
-    broadcast(tripId, event, payload, socketId);
+    this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
   getAllowedExtensions(): string {

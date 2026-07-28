@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { TRACK_COLORS } from '@trek/shared';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { DatabaseService } from '../database/database.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import type { User } from '../../types';
@@ -22,6 +22,7 @@ export class PlacesService {
   constructor(
     private readonly dbs: DatabaseService,
     private readonly permissions: PermissionsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   verifyTripAccess(tripId: string, userId: number) {
@@ -33,7 +34,7 @@ export class PlacesService {
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
-    broadcast(tripId, event, payload, socketId);
+    this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
   list(tripId: string, filters: { search?: string; category?: string; tag?: string }) {

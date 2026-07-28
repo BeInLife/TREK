@@ -47,8 +47,9 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { TodoService } from '../../../src/nest/todo/todo.service';
 import { listItems, createItem, updateItem, deleteItem } from '../../../src/nest/todo/todo.bridge';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
-const svc = new TodoService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
+const svc = new TodoService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new RealtimeService());
 
 beforeAll(() => {
   createTables(testDb);

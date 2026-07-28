@@ -62,11 +62,13 @@ import { PermissionsService } from '../../../src/nest/permissions/permissions.se
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import * as bridge from '../../../src/nest/budget/budget.bridge';
 import { createGuest, deleteGuest } from '../../../src/services/tripService';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
 const budget = new BudgetService(
   new DatabaseService(testDb),
   new PermissionsService(new DatabaseService(testDb)),
   new ExchangeRatesService(),
+  new RealtimeService(),
 );
 
 beforeAll(() => {

@@ -1,5 +1,6 @@
 import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { BudgetService } from './budget.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { ExchangeRatesService } from './exchange-rates.service';
@@ -21,7 +22,7 @@ import { ExchangeRatesService } from './exchange-rates.service';
  * cache module-scoped on purpose so this instance and the DI singleton share
  * one cache.
  */
-const budget = new BudgetService(new DatabaseService(db), new PermissionsService(new DatabaseService(db)), new ExchangeRatesService());
+const budget = new BudgetService(new DatabaseService(db), new PermissionsService(new DatabaseService(db)), new ExchangeRatesService(), new RealtimeService());
 
 export function listBudgetItems(tripId: string | number) {
   return budget.listBudgetItems(tripId);

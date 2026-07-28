@@ -1,5 +1,6 @@
 import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { TodoService } from './todo.service';
 import { PermissionsService } from '../permissions/permissions.service';
 
@@ -16,7 +17,7 @@ import { PermissionsService } from '../permissions/permissions.service';
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.
  */
-const todos = new TodoService(new DatabaseService(db), new PermissionsService(new DatabaseService(db)));
+const todos = new TodoService(new DatabaseService(db), new PermissionsService(new DatabaseService(db)), new RealtimeService());
 
 export function listItems(tripId: string | number) {
   return todos.listItems(tripId);

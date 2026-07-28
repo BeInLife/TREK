@@ -36,6 +36,7 @@ import type { FilesService } from '../../../src/nest/files/files.service';
 import type { ReservationsService } from '../../../src/nest/reservations/reservations.service';
 import type { DaysService } from '../../../src/nest/days/days.service';
 import type { BudgetService } from '../../../src/nest/budget/budget.service';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
 // Constructor-injected since the budget fold (was a path mock of the deleted
 // services/budgetService).
@@ -48,7 +49,7 @@ const packingStub = { listItems: packingListItems } as unknown as PackingService
 const filesStub = { listFiles: () => [] } as unknown as FilesService;
 const reservationsStub = { list: () => [] } as unknown as ReservationsService;
 const daysStub = { list: () => ({ days: [1] }), listAccommodations: () => [] } as unknown as DaysService;
-function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub, filesStub, reservationsStub, daysStub, permissionsStub, budgetStub); }
+function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub, filesStub, reservationsStub, daysStub, permissionsStub, budgetStub, new RealtimeService()); }
 beforeEach(() => vi.clearAllMocks());
 beforeAll(async () => {
   // Warm the (mocked) notificationService module: notifyInvite does a

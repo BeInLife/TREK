@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { broadcastToUser } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { BookingImportService } from './booking-import.service';
 import type { BookingImportMode, BookingImportPreviewResponse } from '@trek/shared';
 
@@ -36,7 +36,7 @@ export class ImportJobsService {
   /** Tail of each user's job chain — parses run one at a time per user, not all at once. */
   private readonly chains = new Map<number, Promise<void>>();
 
-  constructor(private readonly bookingImport: BookingImportService) {}
+  constructor(private readonly bookingImport: BookingImportService, private readonly realtime: RealtimeService) {}
 
   /** Create a job and queue it behind the user's other parses; returns the job id at once. */
   start(tripId: string, files: Express.Multer.File[], mode: BookingImportMode, userId: number): string {
@@ -80,6 +80,6 @@ export class ImportJobsService {
   }
 
   private push(job: ImportJob, type: string, payload: Record<string, unknown>): void {
-    broadcastToUser(job.userId, { type, jobId: job.id, tripId: job.tripId, ...payload });
+    this.realtime.broadcastToUser(job.userId, { type, jobId: job.id, tripId: job.tripId, ...payload });
   }
 }

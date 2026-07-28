@@ -59,8 +59,9 @@ import {
   restampReservationDates as bridgeRestampReservationDates,
   resyncAccommodationDays as bridgeResyncAccommodationDays,
 } from '../../../src/nest/days/days.bridge';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
-const svc = new DaysService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)));
+const svc = new DaysService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new RealtimeService());
 
 beforeAll(() => {
   createTables(testDb);

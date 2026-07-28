@@ -26,6 +26,7 @@ import { TodoMcp } from '../../src/nest/todo/todo.mcp';
 import { TodoService } from '../../src/nest/todo/todo.service';
 import { VacayMcp } from '../../src/nest/vacay/vacay.mcp';
 import { VacayService } from '../../src/nest/vacay/vacay.service';
+import { RealtimeService } from '../../src/nest/realtime/realtime.service';
 
 /**
  * Hand-wired counterpart of the boot-time discovery in McpRegistryService,
@@ -37,22 +38,23 @@ import { VacayService } from '../../src/nest/vacay/vacay.service';
 export function createMcpTestRegistry(): McpRegistry {
   const dbService = new DatabaseService(db);
   const permissionsService = new PermissionsService(dbService);
-  const daysService = new DaysService(dbService, permissionsService);
+  const realtimeService = new RealtimeService();
+  const daysService = new DaysService(dbService, permissionsService, realtimeService);
   const exchangeRatesService = new ExchangeRatesService();
-  const budgetService = new BudgetService(dbService, permissionsService, exchangeRatesService);
+  const budgetService = new BudgetService(dbService, permissionsService, exchangeRatesService, realtimeService);
   return createTestRegistry(
     [
       new TagsMcp(new TagsService(dbService)),
       new CategoriesMcp(new CategoriesService(dbService)),
-      new TodoMcp(new TodoService(dbService, permissionsService)),
-      new PackingMcp(new PackingService(dbService, permissionsService)),
+      new TodoMcp(new TodoService(dbService, permissionsService, realtimeService)),
+      new PackingMcp(new PackingService(dbService, permissionsService, realtimeService)),
       new BudgetMcp(budgetService, exchangeRatesService, dbService),
-      new ReservationsMcp(new ReservationsService(dbService, permissionsService, budgetService), daysService, budgetService),
-      new DayNotesMcp(new DayNotesService(dbService, permissionsService)),
+      new ReservationsMcp(new ReservationsService(dbService, permissionsService, budgetService, realtimeService), daysService, budgetService),
+      new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService)),
       new DaysMcp(daysService, dbService),
-      new AssignmentsMcp(new AssignmentsService(dbService, permissionsService), daysService),
-      new CollabMcp(new CollabService(dbService, permissionsService)),
-      new VacayMcp(new VacayService(dbService)),
+      new AssignmentsMcp(new AssignmentsService(dbService, permissionsService, realtimeService), daysService),
+      new CollabMcp(new CollabService(dbService, permissionsService, realtimeService)),
+      new VacayMcp(new VacayService(dbService, realtimeService)),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },
   );

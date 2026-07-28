@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import type { DayNote, User } from '../../types';
 import { DatabaseService, type TripAccess } from '../database/database.service';
@@ -16,6 +16,7 @@ export class DayNotesService {
   constructor(
     private readonly dbs: DatabaseService,
     private readonly permissions: PermissionsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   verifyTripAccess(tripId: string | number, userId: number): TripAccess | undefined {
@@ -27,7 +28,7 @@ export class DayNotesService {
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
-    broadcast(tripId, event, payload, socketId);
+    this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
   list(dayId: string | number, tripId: string | number) {

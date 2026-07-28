@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import type { User } from '../../types';
@@ -21,6 +21,7 @@ export class TodoService {
   constructor(
     private readonly db: DatabaseService,
     private readonly permissions: PermissionsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
@@ -32,7 +33,7 @@ export class TodoService {
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
-    broadcast(tripId, event, payload, socketId);
+    this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
   listItems(tripId: string | number) {

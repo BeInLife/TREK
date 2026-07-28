@@ -2,7 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { avatarUrl } from '../../services/avatarUrl';
@@ -65,6 +65,7 @@ export class CollabService {
   constructor(
     private readonly db: DatabaseService,
     private readonly permissions: PermissionsService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
@@ -80,7 +81,7 @@ export class CollabService {
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
-    broadcast(tripId, event, payload, socketId);
+    this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
   /* ------------------------------------------------------------------ */

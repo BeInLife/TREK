@@ -59,8 +59,9 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { PackingService } from '../../../src/nest/packing/packing.service';
 import { listItems as bridgeListItems } from '../../../src/nest/packing/packing.bridge';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 
-const svc = new PackingService(new DatabaseService(testDb), permissionsStub);
+const svc = new PackingService(new DatabaseService(testDb), permissionsStub, new RealtimeService());
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 

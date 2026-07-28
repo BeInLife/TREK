@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { broadcast } from '../../websocket';
+import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { avatarUrl } from '../../services/avatarUrl';
@@ -41,6 +41,7 @@ export class BudgetService {
     private readonly db: DatabaseService,
     private readonly permissions: PermissionsService,
     private readonly exchangeRates: ExchangeRatesService,
+    private readonly realtime: RealtimeService,
   ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
@@ -52,7 +53,7 @@ export class BudgetService {
   }
 
   broadcast(tripId: string, event: string, payload: Record<string, unknown>, socketId: string | undefined): void {
-    broadcast(tripId, event, payload, socketId);
+    this.realtime.broadcast(tripId, event, payload, socketId);
   }
 
   // -------------------------------------------------------------------------
@@ -893,7 +894,7 @@ export class BudgetService {
       meta.price = String(totalPrice);
       this.db.run('UPDATE reservations SET metadata = ? WHERE id = ?', JSON.stringify(meta), reservation.id);
       const updatedRes = this.db.get('SELECT * FROM reservations WHERE id = ?', reservation.id);
-      broadcast(tripId, 'reservation:updated', { reservation: updatedRes }, socketId);
+      this.realtime.broadcast(tripId, 'reservation:updated', { reservation: updatedRes }, socketId);
     } catch (err) {
       console.error('[budget] Failed to sync price to reservation:', err);
     }
