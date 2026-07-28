@@ -6,6 +6,8 @@
 // each documented against the producing service). Re-exported here so the rest
 // of the client keeps importing from '../types' unchanged.
 import type {
+  TrekWsEventName,
+  TrekWsPluginEventName,
   Trip,
   TripMember,
   Day,
@@ -256,9 +258,14 @@ export interface AppConfig {
 // Translation function type
 export type TranslationFn = (key: string, params?: Record<string, string | number | null>) => string
 
-// WebSocket event type
+// WebSocket event type — `type` is derived from the shared WS event registry
+// (TREK_WS_EVENTS): a registered name, the reserved plugin namespace, or (via
+// the `string & {}` widening) a transport control frame the registry
+// deliberately excludes (welcome/joined/left/error). Payload fields stay
+// index-typed at this boundary; per-event payload contracts live in
+// TrekWsPayload<E> from @trek/shared.
 export interface WebSocketEvent {
-  type: string
+  type: TrekWsEventName | TrekWsPluginEventName | (string & {})
   [key: string]: unknown
 }
 
