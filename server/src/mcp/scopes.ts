@@ -36,6 +36,9 @@ export const SCOPES = {
 
 export type Scope = typeof SCOPES[keyof typeof SCOPES];
 
+/** 'trips' | 'places' | ... — derived from SCOPES; adding a scope extends it. */
+export type ScopeGroup = Scope extends `${infer G}:${string}` ? G : never;
+
 export const ALL_SCOPES: Scope[] = Object.values(SCOPES) as Scope[];
 
 export interface ScopeInfo {
@@ -88,13 +91,13 @@ export function canReadTrips(scopes: string[] | null): boolean {
 }
 
 /** group:write grants write access; for trips canReadTrips handles read */
-export function canWrite(scopes: string[] | null, group: string): boolean {
+export function canWrite(scopes: string[] | null, group: ScopeGroup): boolean {
   if (!scopes) return true;
   return scopes.includes(`${group}:write`);
 }
 
 /** group:read OR group:write grant read access */
-export function canRead(scopes: string[] | null, group: string): boolean {
+export function canRead(scopes: string[] | null, group: ScopeGroup): boolean {
   if (!scopes) return true;
   return scopes.some(s => s === `${group}:read` || s === `${group}:write`);
 }

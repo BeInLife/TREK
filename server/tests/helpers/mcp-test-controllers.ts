@@ -1,6 +1,6 @@
 import { createTestRegistry, type McpRegistry } from '@trek/nest-mcp';
 import { db } from '../../src/db/database';
-import { trekMcpAccessPolicy } from '../../src/mcp/nest-mcp-policy';
+import { trekMcpAccessPolicy, trekMcpValidateAccess } from '../../src/mcp/nest-mcp-policy';
 import { AssignmentsMcp } from '../../src/nest/assignments/assignments.mcp';
 import { AssignmentsService } from '../../src/nest/assignments/assignments.service';
 import { BudgetMcp } from '../../src/nest/budget/budget.mcp';
@@ -54,6 +54,6 @@ export function createMcpTestRegistry(): McpRegistry {
       new CollabMcp(new CollabService(dbService, permissionsService)),
       new VacayMcp(new VacayService(dbService)),
     ],
-    { accessPolicy: trekMcpAccessPolicy },
+    { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },
   );
 }

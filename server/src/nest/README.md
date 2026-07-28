@@ -228,8 +228,12 @@ bridges.
    reinitialize-proof, same pattern as `nest/todo/todo.bridge.ts` — and exports
    the legacy function names 1:1.
    Container code injects the service; only outside-container code imports the
-   bridge. *(Design decision, settled with the tags pilot: MCP tools stay outside
-   the container and use the bridge. The alternative — handing the Nest app to the
+   bridge. When porting an MCP registrar, note the `access: { group, mode }`
+   markers are typed against the scope-derived `ScopeGroup` union and
+   boot-validated by `trekMcpValidateAccess` (`src/mcp/nest-mcp-policy.ts`) —
+   an unknown group, or `mode: 'write'` on a read-only group (`geo`,
+   `weather`), fails app boot. *(Design decision, settled with the tags pilot:
+   MCP tools stay outside the container and use the bridge. The alternative — handing the Nest app to the
    MCP layer via `app.get(XService)` — was rejected: it would thread the container
    through `mcpHandler` + every tool registrar and force a Nest bootstrap into the
    container-less `tests/helpers/mcp-harness.ts` used by ~25 MCP suites.)*
