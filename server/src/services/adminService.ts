@@ -565,22 +565,6 @@ export function deleteInvite(id: string) {
   return {};
 }
 
-// ── Bag Tracking ───────────────────────────────────────────────────────────
-
-export function getBagTracking() {
-  const row = db.prepare("SELECT value FROM app_settings WHERE key = 'bag_tracking_enabled'").get() as
-    | { value: string }
-    | undefined;
-  return { enabled: row?.value === 'true' };
-}
-
-export function updateBagTracking(enabled: boolean) {
-  db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('bag_tracking_enabled', ?)").run(
-    enabled ? 'true' : 'false',
-  );
-  return { enabled: !!enabled };
-}
-
 // ── Places Photos ─────────────────────────────────────────────────────────
 
 export function getPlacesPhotos() {
@@ -627,56 +611,6 @@ export function updatePlacesDetails(enabled: boolean) {
     enabled ? 'true' : 'false',
   );
   return { enabled: !!enabled };
-}
-
-// ── Collab Features ───────────────────────────────────────────────────────
-
-const COLLAB_FEATURE_KEYS = [
-  'collab_chat_enabled',
-  'collab_notes_enabled',
-  'collab_polls_enabled',
-  'collab_whatsnext_enabled',
-] as const;
-
-export function getCollabFeatures() {
-  const rows = db
-    .prepare(
-      "SELECT key, value FROM app_settings WHERE key IN ('collab_chat_enabled', 'collab_notes_enabled', 'collab_polls_enabled', 'collab_whatsnext_enabled')",
-    )
-    .all() as { key: string; value: string }[];
-  const map: Record<string, string> = {};
-  for (const r of rows) map[r.key] = r.value;
-  return {
-    chat: map['collab_chat_enabled'] !== 'false',
-    notes: map['collab_notes_enabled'] !== 'false',
-    polls: map['collab_polls_enabled'] !== 'false',
-    whatsnext: map['collab_whatsnext_enabled'] !== 'false',
-  };
-}
-
-export function updateCollabFeatures(features: {
-  chat?: boolean;
-  notes?: boolean;
-  polls?: boolean;
-  whatsnext?: boolean;
-}) {
-  const mapping: Record<string, string> = {
-    chat: 'collab_chat_enabled',
-    notes: 'collab_notes_enabled',
-    polls: 'collab_polls_enabled',
-    whatsnext: 'collab_whatsnext_enabled',
-  };
-  const before = getCollabFeatures();
-  const stmt = db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)');
-  for (const [feat, key] of Object.entries(mapping)) {
-    if (features[feat] !== undefined) stmt.run(key, features[feat] ? 'true' : 'false');
-  }
-  const after = getCollabFeatures();
-  // Collab flags gate MCP tool/resource registration, so callers must know
-  // whether anything actually flipped — a no-op save must not tear down every
-  // live MCP session (#1414).
-  const changed = (Object.keys(after) as Array<keyof typeof after>).some((k) => after[k] !== before[k]);
-  return { features: after, changed };
 }
 
 // ── Packing Templates ──────────────────────────────────────────────────────
@@ -804,11 +738,10 @@ export function deleteTemplateItem(itemId: string) {
 }
 
 // ── Addons ─────────────────────────────────────────────────────────────────
-
-export function isAddonEnabled(addonId: string): boolean {
-  const addon = db.prepare('SELECT enabled FROM addons WHERE id = ?').get(addonId) as { enabled: number } | undefined;
-  return !!addon?.enabled;
-}
+// isAddonEnabled and the bag-tracking/collab-features flags moved to
+// nest/addons/addons.service.ts (bridge: nest/addons/addons.bridge.ts) —
+// finding `admin-1`. listAddons/updateAddon + photo-provider CRUD stay here
+// until the Wave-5 admin migration.
 
 export function listAddons() {
   const addons = db.prepare('SELECT * FROM addons ORDER BY sort_order, id').all() as Addon[];

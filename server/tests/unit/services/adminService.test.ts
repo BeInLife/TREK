@@ -58,8 +58,6 @@ import {
   listInvites,
   createInvite,
   deleteInvite,
-  getBagTracking,
-  updateBagTracking,
   listPackingTemplates,
   createPackingTemplate,
   updatePackingTemplate,
@@ -78,7 +76,6 @@ import {
   checkVersion,
   listAddons,
   updateAddon,
-  updateCollabFeatures,
   listMcpTokens,
   deleteMcpToken,
 } from '../../../src/services/adminService';
@@ -306,22 +303,6 @@ describe('Invites', () => {
   it('ADMIN-SVC-028 — deleteInvite returns 404 for non-existent invite', () => {
     const result = deleteInvite('99999') as any;
     expect(result.status).toBe(404);
-  });
-});
-
-// ── Bag tracking ──────────────────────────────────────────────────────────────
-
-describe('Bag tracking', () => {
-  it('ADMIN-SVC-029 — getBagTracking returns enabled state', () => {
-    const result = getBagTracking() as any;
-    expect(typeof result.enabled).toBe('boolean');
-  });
-
-  it('ADMIN-SVC-030 — updateBagTracking persists the value', () => {
-    updateBagTracking(true);
-    expect((getBagTracking() as any).enabled).toBe(true);
-    updateBagTracking(false);
-    expect((getBagTracking() as any).enabled).toBe(false);
   });
 });
 
@@ -692,19 +673,6 @@ describe('updateAddon', () => {
     // real flip of an addon with no MCP surface → sessions survive
     const docsFlip = updateAddon('documents', { enabled: false }) as any;
     if (!docsFlip.error) expect(docsFlip.mcpAffected).toBe(false);
-  });
-});
-
-describe('updateCollabFeatures', () => {
-  it('ADMIN-SVC-070 — reports whether a flag actually flipped (#1414)', () => {
-    const first = updateCollabFeatures({ chat: false });
-    expect(first.changed).toBe(true);
-    expect(first.features.chat).toBe(false);
-    // identical save → no change, MCP sessions must survive
-    const second = updateCollabFeatures({ chat: false });
-    expect(second.changed).toBe(false);
-    const third = updateCollabFeatures({ chat: true });
-    expect(third.changed).toBe(true);
   });
 });
 

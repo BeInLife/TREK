@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as oauth from '../../services/oauthService';
-import { isAddonEnabled } from '../../services/adminService';
+import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
 import { getMcpSafeUrl } from '../../app-config';
 
@@ -11,7 +11,9 @@ import { getMcpSafeUrl } from '../../app-config';
  */
 @Injectable()
 export class OauthService {
-  mcpEnabled(): boolean { return isAddonEnabled(ADDON_IDS.MCP); }
+  constructor(private readonly addons: AddonsService) {}
+
+  mcpEnabled(): boolean { return this.addons.isAddonEnabled(ADDON_IDS.MCP); }
   mcpSafeUrl(): string { return getMcpSafeUrl(); }
 
   consumeAuthCode(code: string) { return oauth.consumeAuthCode(code); }

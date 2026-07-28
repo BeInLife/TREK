@@ -27,7 +27,7 @@ import { assertHostCompatible, PluginRegistryService, RegistryError } from './re
 import { hostSatisfies, hostVersion } from './install/host-compat';
 import { keyFingerprint } from './signature-status';
 import { AuditService } from '../audit/audit.service';
-import { isAddonEnabled } from '../../services/adminService';
+import { AddonsService } from '../addons/addons.service';
 import type { PluginDependency } from './install/manifest';
 import type { VersionMismatch, PluginDepRow } from './dependencies';
 import { parseDependencies, disabledRequiredAddons, resolveDependencyState, enableOrder, findDependentsTransitive, DependencyCycleError } from './dependencies';
@@ -166,6 +166,7 @@ export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly dbs: DatabaseService,
     private readonly audit: AuditService,
+    private readonly addons: AddonsService,
     private readonly registry?: PluginRegistryService,
     private readonly hostDeps?: PluginHostDepsFactory,
   ) {}
@@ -514,7 +515,7 @@ export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
     }
 
     const deps = parseDependencies(row.dependencies);
-    const disabledAddons = disabledRequiredAddons(deps, isAddonEnabled);
+    const disabledAddons = disabledRequiredAddons(deps, (id) => this.addons.isAddonEnabled(id));
     if (disabledAddons.length) {
       throw new PluginDependencyError(`plugin ${id} requires disabled addon(s): ${disabledAddons.join(', ')}`, 'ADDON_DISABLED', {
         addons: disabledAddons,

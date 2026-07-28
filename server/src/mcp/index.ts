@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { User } from '../types';
 import { verifyMcpToken, verifyJwtToken } from '../services/authService';
 import { getUserByAccessToken } from '../services/oauthService';
-import { isAddonEnabled } from '../services/adminService';
+import { isAddonEnabled } from '../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../addons';
 import { registerResources } from './resources';
 import { registerTools } from './tools';

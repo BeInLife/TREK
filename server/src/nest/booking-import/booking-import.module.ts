@@ -8,9 +8,10 @@ import { LlmParseModule } from '../llm-parse/llm-parse.module';
 import { ReservationsModule } from '../reservations/reservations.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { BudgetModule } from '../budget/budget.module';
+import { AddonsModule } from '../addons/addons.module';
 
 @Module({
-  imports: [LlmParseModule, ReservationsModule, PermissionsModule, BudgetModule],
+  imports: [LlmParseModule, ReservationsModule, PermissionsModule, BudgetModule, AddonsModule],
   controllers: [BookingImportController, FeaturesController],
   providers: [BookingImportService, KitineraryExtractorService, ImportJobsService],
 })

@@ -1,7 +1,7 @@
 import { ADDON_IDS } from '../../addons';
 import { db } from '../../db/database';
 import { broadcast } from '../../websocket';
-import { isAddonEnabled } from '../adminService';
+import { isAddonEnabled } from '../../nest/addons/addons.bridge';
 import { logError, logInfo } from '../../nest/audit/audit-log.logger';
 import { getReservation, getReservationWithJoins, updateReservation } from '../../nest/reservations/reservations.bridge';
 import {

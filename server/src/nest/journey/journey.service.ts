@@ -4,7 +4,7 @@ import * as svc from '../../services/journeyService';
 import * as share from '../../services/journeyShareService';
 import { uploadToImmich, streamImmichAsset } from '../../services/memories/immichService';
 import { streamPhoto } from '../../services/memories/photoResolverService';
-import { isAddonEnabled } from '../../services/adminService';
+import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
 import type { Response } from 'express';
 
@@ -16,14 +16,17 @@ import type { Response } from 'express';
  */
 @Injectable()
 export class JourneyService {
-  constructor(private readonly dbs: DatabaseService) {}
+  constructor(
+    private readonly dbs: DatabaseService,
+    private readonly addons: AddonsService,
+  ) {}
 
   private get db() {
     return this.dbs.connection;
   }
 
   journeyAddonEnabled(): boolean {
-    return isAddonEnabled(ADDON_IDS.JOURNEY);
+    return this.addons.isAddonEnabled(ADDON_IDS.JOURNEY);
   }
 
   // Journeys

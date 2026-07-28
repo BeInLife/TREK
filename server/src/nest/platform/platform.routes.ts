@@ -7,7 +7,7 @@ import { verifyJwtAndLoadUser } from '../../middleware/auth';
 import { db } from '../../db/database';
 import { mcpHandler } from '../../mcp';
 import { trekOAuthProvider, trekClientsStore } from '../../mcp/oauthProvider';
-import { isAddonEnabled } from '../../services/adminService';
+import { isAddonEnabled } from '../addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import { ALL_SCOPES } from '../../mcp/scopes';
 import { mcpAuthMetadataRouter } from '@modelcontextprotocol/sdk/server/auth/router';

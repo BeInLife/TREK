@@ -7,7 +7,7 @@ import { maybe_encrypt_api_key, decrypt_api_key } from '../../services/apiKeyCry
 import { readAudit } from './host/plugin-audit';
 import { keyFingerprint } from './signature-status';
 import { pluginBudgetUsage } from './host/plugin-host-state';
-import { isAddonEnabled } from '../../services/adminService';
+import { AddonsService } from '../addons/addons.service';
 import { parseDependencies, disabledRequiredAddons, resolveDependencyState, type PluginDepRow, type PluginDependencies, type VersionMismatch } from './dependencies';
 import { hostSatisfies, hostVersion } from './install/host-compat';
 import type { PluginDependency } from './install/manifest';
@@ -91,7 +91,10 @@ export interface PluginListItem {
 
 @Injectable()
 export class PluginsService {
-  constructor(private readonly dbs: DatabaseService) {}
+  constructor(
+    private readonly dbs: DatabaseService,
+    private readonly addons: AddonsService,
+  ) {}
 
   private get db() {
     return this.dbs.connection;
@@ -121,7 +124,7 @@ export class PluginsService {
     );
     const plugins: PluginListItem[] = rows.map((r) => {
       const deps = parseDependencies(r.dependencies);
-      const disabledAddons = disabledRequiredAddons(deps, isAddonEnabled);
+      const disabledAddons = disabledRequiredAddons(deps, (id) => this.addons.isAddonEnabled(id));
       const state = resolveDependencyState(deps, installed);
       // Mirrors the order of assertActivatable's gate, so the card explains the same
       // blocker the activate call would hit rather than a second, lesser one.

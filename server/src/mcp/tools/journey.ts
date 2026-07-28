@@ -11,7 +11,7 @@ import {
 import {
   createOrUpdateJourneyShareLink, deleteJourneyShareLink, getJourneyShareLink,
 } from '../../services/journeyShareService';
-import { isAddonEnabled } from '../../services/adminService';
+import { isAddonEnabled } from '../../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import {
   TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,

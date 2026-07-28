@@ -37,7 +37,6 @@ vi.mock('../../src/app-config', async (importOriginal) => {
 });
 
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn(() => true) }));
-vi.mock('../../src/services/adminService', () => ({ isAddonEnabled }));
 
 const { oauthSvc } = vi.hoisted(() => ({
   oauthSvc: {
@@ -51,6 +50,7 @@ const { oauthSvc } = vi.hoisted(() => ({
 vi.mock('../../src/services/oauthService', () => oauthSvc);
 
 import { OauthModule } from '../../src/nest/oauth/oauth.module';
+import { AddonsService } from '../../src/nest/addons/addons.service';
 import { DatabaseModule } from '../../src/nest/database/database.module';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 
@@ -59,7 +59,10 @@ describe('OAuth e2e (real guards + temp SQLite)', () => {
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, OauthModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, OauthModule] })
+      .overrideProvider(AddonsService)
+      .useValue({ isAddonEnabled })
+      .compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());

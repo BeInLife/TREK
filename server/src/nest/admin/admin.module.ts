@@ -4,9 +4,10 @@ import { AdminService } from './admin.service';
 import { PluginsModule } from '../plugins/plugins.module';
 import { SettingsModule } from '../settings/settings.module';
 import { AuditModule } from '../audit/audit.module';
+import { AddonsModule } from '../addons/addons.module';
 
 @Module({
-  imports: [PluginsModule, SettingsModule, AuditModule],
+  imports: [PluginsModule, SettingsModule, AuditModule, AddonsModule],
   controllers: [AdminController],
   providers: [AdminService],
 })

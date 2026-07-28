@@ -12,7 +12,7 @@ import {
 import {
   createOrUpdateShareLink, getShareLink, deleteShareLink,
 } from '../../nest/share/share.bridge';
-import { isAddonEnabled, getCollabFeatures } from '../../services/adminService';
+import { isAddonEnabled, getCollabFeatures } from '../../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import { countMessages, listPolls } from '../../nest/collab/collab.bridge';
 import {

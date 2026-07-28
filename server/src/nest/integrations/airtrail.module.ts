@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { AirtrailController } from './airtrail.controller';
 import { AirtrailImportController } from './airtrail-import.controller';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { AddonsModule } from '../addons/addons.module';
+import { AirtrailAddonGuard } from './airtrail-addon.guard';
 
 /**
  * AirTrail integration domain. The connection lives under
@@ -10,7 +12,8 @@ import { PermissionsModule } from '../permissions/permissions.module';
  * services/airtrail/* (plain functions over better-sqlite3).
  */
 @Module({
-  imports: [PermissionsModule],
+  imports: [PermissionsModule, AddonsModule],
   controllers: [AirtrailController, AirtrailImportController],
+  providers: [AirtrailAddonGuard],
 })
 export class AirtrailModule {}

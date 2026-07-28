@@ -26,7 +26,6 @@ const { db } = vi.hoisted(() => {
 vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: () => {} }));
 
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn(() => true) }));
-vi.mock('../../src/services/adminService', () => ({ isAddonEnabled }));
 // The controller's pure helpers (isVideoExtension/isVideoMime/MAX_VIDEO_SIZE)
 // now come from the real files.constants; only the request-time app_settings
 // read is mocked, preserving the old '*'-allowlist semantics for the fixtures.
@@ -43,6 +42,7 @@ const { sharesvc } = vi.hoisted(() => ({ sharesvc: { getPublicJourney: vi.fn() }
 vi.mock('../../src/services/journeyShareService', () => sharesvc);
 
 import { JourneyModule } from '../../src/nest/journey/journey.module';
+import { AddonsService } from '../../src/nest/addons/addons.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 
 describe('Journey e2e (real auth guard + temp SQLite)', () => {
@@ -50,7 +50,10 @@ describe('Journey e2e (real auth guard + temp SQLite)', () => {
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, JourneyModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, JourneyModule] })
+      .overrideProvider(AddonsService)
+      .useValue({ isAddonEnabled })
+      .compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());

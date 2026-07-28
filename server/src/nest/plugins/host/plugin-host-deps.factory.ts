@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { PermissionsService } from '../../permissions/permissions.service';
 import { listTrips, updateTrip, createTrip, removeMember as removeTripMemberSvc, NotFoundError, ValidationError } from '../../../services/tripService';
 import { createPlace, updatePlace, deletePlace } from '../../../services/placeService';
-import { isAddonEnabled } from '../../../services/adminService';
+import { AddonsService } from '../../addons/addons.service';
 import { isDemoEmail } from '../../../services/demo';
 import { ADDON_IDS } from '../../../addons';
 import { listJourneys, listEntries as listJournalEntriesSvc, createEntry as createJournalEntrySvc, updateEntry as updateJournalEntrySvc, deleteEntry as deleteJournalEntrySvc, createJourney as createJourneySvc, deleteJourney as deleteJourneySvc } from '../../../services/journeyService';
@@ -39,12 +39,6 @@ import { VacayService } from '../../vacay/vacay.service';
 import { PluginRpcHost, ForbiddenResource, BadParams } from './rpc-host';
 import { appendAudit } from './plugin-audit';
 import { getPluginDataDb, budgetFor } from './plugin-host-state';
-
-// A subsystem read is refused when its addon is off — parity with the app, where a
-// disabled addon means there is simply nothing to read (same shape as the Costs gate).
-function requireAddon(addonId: string, noun: string): void {
-  if (!isAddonEnabled(addonId)) throw new ForbiddenResource(`the ${noun} addon is disabled`);
-}
 
 // collectionsService self-gates per-collection role by THROWING status-tagged errors
 // (assertAccess 404, assertCanEdit 403, validation 400). Map them onto the RPC error
@@ -156,6 +150,7 @@ export class PluginHostDepsFactory {
     private readonly days: DaysService,
     private readonly permissions: PermissionsService,
     private readonly exchangeRates: ExchangeRatesService,
+    private readonly addons: AddonsService,
   ) {}
 
   /**
@@ -179,6 +174,11 @@ export class PluginHostDepsFactory {
   }
 
   create(id: string, granted: ReadonlySet<string>, router: PluginCallRouter): PluginRpcHost {
+    // A subsystem read is refused when its addon is off — parity with the app, where a
+    // disabled addon means there is simply nothing to read (same shape as the Costs gate).
+    const requireAddon = (addonId: string, noun: string): void => {
+      if (!this.addons.isAddonEnabled(addonId)) throw new ForbiddenResource(`the ${noun} addon is disabled`);
+    };
     return new PluginRpcHost(id, granted, {
       // Resolve the data handle lazily on every access rather than capturing it once.
       // disable()/uninstall() drop the entry from `running` BEFORE awaiting the kill grace
@@ -210,7 +210,7 @@ export class PluginHostDepsFactory {
       broadcastToUser: (userId, payload) => broadcastToUser(userId, { type: `plugin:${id}`, ...payload }),
       audit: (entry) => appendAudit(this.db.connection, entry),
       // --- Costs (budget items) ---
-      budgetAddonEnabled: () => isAddonEnabled(ADDON_IDS.BUDGET),
+      budgetAddonEnabled: () => this.addons.isAddonEnabled(ADDON_IDS.BUDGET),
       // Same gate as a REST/MCP budget mutation: the acting user must have trip
       // access AND the 'budget_edit' permission for their global role.
       canEditCosts: (tripId, userId) => {

@@ -7,7 +7,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  */
 
 vi.mock('../../../src/db/database', () => ({ db: { prepare: vi.fn() } }));
-vi.mock('../../../src/services/adminService', () => ({ isAddonEnabled: vi.fn(() => true) }));
+vi.mock('../../../src/nest/addons/addons.bridge', () => ({ isAddonEnabled: vi.fn(() => true) }));
 vi.mock('../../../src/nest/audit/audit-log.logger', () => ({ logError: vi.fn(), logInfo: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
 vi.mock('../../../src/nest/reservations/reservations.bridge', () => ({

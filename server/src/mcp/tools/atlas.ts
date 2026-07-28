@@ -6,7 +6,7 @@ import {
   getStats as getAtlasStats, listManuallyVisitedRegions,
   markRegionVisited, unmarkRegionVisited, getCountryPlaces, updateBucketItem,
 } from '../../services/atlasService';
-import { isAddonEnabled } from '../../services/adminService';
+import { isAddonEnabled } from '../../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import {
   TOOL_ANNOTATIONS_WRITE, TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,

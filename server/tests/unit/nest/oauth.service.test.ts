@@ -26,7 +26,6 @@ const { oauth } = vi.hoisted(() => ({
 vi.mock('../../../src/services/oauthService', () => oauth);
 
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn() }));
-vi.mock('../../../src/services/adminService', () => ({ isAddonEnabled }));
 
 const { getMcpSafeUrl } = vi.hoisted(() => ({ getMcpSafeUrl: vi.fn() }));
 vi.mock('../../../src/app-config', async (importOriginal) => {
@@ -35,9 +34,11 @@ vi.mock('../../../src/app-config', async (importOriginal) => {
 });
 
 import { OauthService } from '../../../src/nest/oauth/oauth.service';
+import type { AddonsService } from '../../../src/nest/addons/addons.service';
 import { ADDON_IDS } from '../../../src/addons';
 
-function svc() { return new OauthService(); }
+const addonsStub = { isAddonEnabled } as unknown as AddonsService;
+function svc() { return new OauthService(addonsStub); }
 
 beforeEach(() => vi.clearAllMocks());
 

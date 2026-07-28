@@ -1,5 +1,5 @@
 import { ADDON_IDS } from '../../addons';
-import { isAddonEnabled } from '../../services/adminService';
+import { AddonsService } from '../addons/addons.service';
 import { decryptLlmApiKey, LLM_PROVIDERS, type LlmProvider, type ResolvedLlmConfig } from '../../services/llmConfig';
 import { DatabaseService } from '../database/database.service';
 import { SettingsService } from '../settings/settings.service';
@@ -19,6 +19,7 @@ export class LlmConfigResolver {
   constructor(
     private readonly settings: SettingsService,
     private readonly dbService: DatabaseService,
+    private readonly addons: AddonsService,
   ) {}
 
   /**
@@ -27,7 +28,7 @@ export class LlmConfigResolver {
    * else null. This is the single place the API key is decrypted.
    */
   resolve(userId: number): ResolvedLlmConfig | null {
-    if (!isAddonEnabled(ADDON_IDS.LLM_PARSING)) return null;
+    if (!this.addons.isAddonEnabled(ADDON_IDS.LLM_PARSING)) return null;
     return this.readInstanceConfig() ?? this.readUserConfig(userId);
   }
 

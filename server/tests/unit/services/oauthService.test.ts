@@ -37,7 +37,7 @@ vi.mock('../../../src/services/apiKeyCrypto', () => ({
 vi.mock('../../../src/mcp/sessionManager', () => ({ revokeUserSessions: vi.fn(), revokeUserSessionsForClient: vi.fn(), sessions: new Map() }));
 import { revokeUserSessionsForClient } from '../../../src/mcp/sessionManager';
 vi.mock('../../../src/demo/demo-reset', () => ({ saveBaseline: vi.fn() }));
-vi.mock('../../../src/services/adminService', () => ({
+vi.mock('../../../src/nest/addons/addons.bridge', () => ({
   isAddonEnabled: vi.fn().mockReturnValue(true),
   getCollabFeatures: vi.fn().mockReturnValue({ chat: true, notes: true, polls: true, whatsnext: true }),
 }));
@@ -73,7 +73,7 @@ import {
   getConsent,
   isConsentSufficient,
 } from '../../../src/services/oauthService';
-import { isAddonEnabled } from '../../../src/services/adminService';
+import { isAddonEnabled } from '../../../src/nest/addons/addons.bridge';
 
 beforeAll(() => {
   createTables(testDb);

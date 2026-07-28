@@ -2,7 +2,7 @@ import { Controller, Get, Param, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { DatabaseService } from '../database/database.service';
 import { canAccessJourney } from '../../services/journeyService';
-import { isAddonEnabled } from '../../services/adminService';
+import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { pluginsEnabled } from './kill-switch';
@@ -69,6 +69,7 @@ export class JournalEntryRowsController {
   constructor(
     private readonly runtime: PluginRuntimeService,
     private readonly dbs: DatabaseService,
+    private readonly addons: AddonsService,
   ) {}
 
   @Get(':entryId')
@@ -76,7 +77,7 @@ export class JournalEntryRowsController {
     @Param('entryId') entryIdRaw: string,
     @Req() req: Request & { user?: { id: number } },
   ): Promise<{ providers: ProviderResult[] }> {
-    if (!pluginsEnabled() || !isAddonEnabled(ADDON_IDS.JOURNEY)) return { providers: [] };
+    if (!pluginsEnabled() || !this.addons.isAddonEnabled(ADDON_IDS.JOURNEY)) return { providers: [] };
     const entryId = Number(entryIdRaw);
     const userId = req.user?.id;
     if (!Number.isFinite(entryId) || userId == null) return { providers: [] };

@@ -7,7 +7,7 @@ import {
 } from '@trek/nest-mcp';
 import { z } from 'zod';
 import { isDemoUser, getCurrentUser } from '../../services/authService';
-import { isAddonEnabled } from '../../services/adminService';
+import { isAddonEnabled } from '../addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import { VacayService } from './vacay.service';
 

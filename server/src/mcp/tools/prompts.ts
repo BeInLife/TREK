@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { canAccessTrip } from '../../db/database';
 import { getTripSummary } from '../../services/tripService';
 import { listItems as listPackingItems } from '../../nest/packing/packing.bridge';
-import { isAddonEnabled } from '../../services/adminService';
+import { isAddonEnabled } from '../../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 
 export function registerMcpPrompts(server: McpServer, _userId: number, isStaticToken = false): void {

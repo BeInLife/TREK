@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as svc from '../../services/adminService';
+import { AddonsService } from '../addons/addons.service';
 import { SettingsService } from '../settings/settings.service';
 import { invalidateMcpSessions } from '../../mcp';
 import { getPreferencesMatrix, setAdminPreferences } from '../../services/notificationPreferencesService';
@@ -13,7 +14,10 @@ import { adminResetPasskeys } from '../../services/passkeyService';
  */
 @Injectable()
 export class AdminService {
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly addons: AddonsService,
+  ) {}
 
   // Users
   listUsers() { return svc.listUsers(); }
@@ -41,16 +45,16 @@ export class AdminService {
   deleteInvite(id: string) { return svc.deleteInvite(id); }
 
   // Feature toggles
-  getBagTracking() { return svc.getBagTracking(); }
-  updateBagTracking(enabled: unknown) { return svc.updateBagTracking(enabled as boolean); }
+  getBagTracking() { return this.addons.getBagTracking(); }
+  updateBagTracking(enabled: unknown) { return this.addons.updateBagTracking(enabled as boolean); }
   getPlacesPhotos() { return svc.getPlacesPhotos(); }
   updatePlacesPhotos(enabled: boolean) { return svc.updatePlacesPhotos(enabled); }
   getPlacesAutocomplete() { return svc.getPlacesAutocomplete(); }
   updatePlacesAutocomplete(enabled: boolean) { return svc.updatePlacesAutocomplete(enabled); }
   getPlacesDetails() { return svc.getPlacesDetails(); }
   updatePlacesDetails(enabled: boolean) { return svc.updatePlacesDetails(enabled); }
-  getCollabFeatures() { return svc.getCollabFeatures(); }
-  updateCollabFeatures(body: unknown) { return svc.updateCollabFeatures(body as Parameters<typeof svc.updateCollabFeatures>[0]); }
+  getCollabFeatures() { return this.addons.getCollabFeatures(); }
+  updateCollabFeatures(body: unknown) { return this.addons.updateCollabFeatures(body as Parameters<AddonsService['updateCollabFeatures']>[0]); }
 
   // Packing templates
   listPackingTemplates() { return svc.listPackingTemplates(); }

@@ -6,7 +6,8 @@ import {
 } from '@trek/nest-mcp';
 import { z } from 'zod';
 import { isDemoUser } from '../../services/authService';
-import { isAddonEnabled, deletePackingTemplate } from '../../services/adminService';
+import { isAddonEnabled } from '../addons/addons.bridge';
+import { deletePackingTemplate } from '../../services/adminService';
 import { ADDON_IDS } from '../../addons';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied, isAdminUser, adminRequired } from '../../mcp/tools/_shared';
 import { PackingService } from './packing.service';

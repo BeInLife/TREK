@@ -4,6 +4,7 @@ import { OauthApiController } from './oauth-api.controller';
 import { OauthService } from './oauth.service';
 import { RateLimitService } from '../auth/rate-limit.service';
 import { AuditModule } from '../audit/audit.module';
+import { AddonsModule } from '../addons/addons.module';
 
 /**
  * OAuth 2.1 server (MCP). Public token/userinfo/revoke endpoints + the SPA's
@@ -12,7 +13,7 @@ import { AuditModule } from '../audit/audit.module';
  * strangler lists /oauth/token, /oauth/userinfo, /oauth/revoke explicitly.
  */
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, AddonsModule],
   controllers: [OauthPublicController, OauthApiController],
   providers: [OauthService, RateLimitService],
 })

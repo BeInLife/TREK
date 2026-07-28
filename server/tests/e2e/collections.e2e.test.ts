@@ -32,7 +32,6 @@ vi.mock('../../src/db/database', () => ({
 }));
 
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn(() => true) }));
-vi.mock('../../src/services/adminService', () => ({ isAddonEnabled }));
 vi.mock('../../src/websocket', () => ({ broadcastToUser: vi.fn(), broadcast: vi.fn() }));
 vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
@@ -40,6 +39,7 @@ import { createTables } from '../../src/db/schema';
 import { runMigrations } from '../../src/db/migrations';
 import { createUser, createTrip, createCategory } from '../helpers/factories';
 import { CollectionsModule } from '../../src/nest/collections/collections.module';
+import { AddonsService } from '../../src/nest/addons/addons.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 import { ZodValidationPipe } from '../../src/nest/common/zod-validation.pipe';
 
@@ -51,7 +51,10 @@ describe('Collections e2e (real auth guard + real service + temp SQLite)', () =>
   let tripId: number;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [CollectionsModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [CollectionsModule] })
+      .overrideProvider(AddonsService)
+      .useValue({ isAddonEnabled })
+      .compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());

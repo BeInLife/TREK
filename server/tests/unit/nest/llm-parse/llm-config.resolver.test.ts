@@ -6,12 +6,12 @@ const { dbMock } = vi.hoisted(() => {
 });
 vi.mock('../../../../src/db/database', () => ({ db: dbMock, closeDb: () => {}, reinitialize: () => {} }));
 
-const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn() }));
-vi.mock('../../../../src/services/adminService', () => ({ isAddonEnabled }));
+const isAddonEnabled = vi.fn();
 
 import { LlmConfigResolver } from '../../../../src/nest/llm-parse/llm-config.resolver';
 import { DatabaseService } from '../../../../src/nest/database/database.service';
 import type { SettingsService } from '../../../../src/nest/settings/settings.service';
+import type { AddonsService } from '../../../../src/nest/addons/addons.service';
 
 // The resolver injects SettingsService — a stub instance instead of the old
 // legacy-module path mock (same behaviors as before the DI move). The
@@ -20,7 +20,8 @@ const getUserSettings = vi.fn(() => ({}) as Record<string, unknown>);
 const getDecryptedUserSetting = vi.fn(() => null as string | null);
 const settingsStub = { getUserSettings, getDecryptedUserSetting } as unknown as SettingsService;
 
-const resolver = new LlmConfigResolver(settingsStub, new DatabaseService(dbMock as never));
+const addonsStub = { isAddonEnabled } as unknown as AddonsService;
+const resolver = new LlmConfigResolver(settingsStub, new DatabaseService(dbMock as never), addonsStub);
 
 function setInstanceConfig(config: unknown) {
   dbMock._stmt.get.mockReturnValue(config === undefined ? undefined : { config: JSON.stringify(config) });

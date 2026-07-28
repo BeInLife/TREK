@@ -20,7 +20,7 @@ vi.mock('../../../src/middleware/auth', () => ({ verifyJwtAndLoadUser: h.verifyJ
 vi.mock('../../../src/db/database', () => ({ db: { prepare: h.dbPrepare } }));
 vi.mock('../../../src/mcp', () => ({ mcpHandler: h.mcpHandler }));
 vi.mock('../../../src/mcp/oauthProvider', () => ({ trekOAuthProvider: {}, trekClientsStore: {} }));
-vi.mock('../../../src/services/adminService', () => ({ isAddonEnabled: h.isAddonEnabled }));
+vi.mock('../../../src/nest/addons/addons.bridge', () => ({ isAddonEnabled: h.isAddonEnabled }));
 vi.mock('../../../src/app-config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/app-config')>();
   return { ...actual, getMcpSafeUrl: h.getMcpSafeUrl };

@@ -20,6 +20,7 @@ import { CollabService } from '../../src/nest/collab/collab.service';
 import { VacayService } from '../../src/nest/vacay/vacay.service';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { AuditService } from '../../src/nest/audit/audit.service';
+import { AddonsService } from '../../src/nest/addons/addons.service';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -31,6 +32,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
   const permissions = new PermissionsService(dbs);
   const exchangeRates = new ExchangeRatesService();
   const budget = new BudgetService(dbs, permissions, exchangeRates);
+  const addons = new AddonsService(dbs);
   return new PluginHostDepsFactory(
     budget,
     new ReservationsService(dbs, permissions, budget),
@@ -41,7 +43,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     new PluginOAuthService(dbs),
     new DayNotesService(dbs, permissions),
     new AssignmentsService(dbs, permissions),
-    new LlmConfigResolver(new SettingsService(dbs), dbs),
+    new LlmConfigResolver(new SettingsService(dbs), dbs, addons),
     dbs,
     new FilesService(dbs, permissions),
     new CollabService(dbs, permissions),
@@ -49,10 +51,11 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     new DaysService(dbs, permissions),
     permissions,
     exchangeRates,
+    addons,
   );
 }
 
 /** A PluginRuntimeService constructed the way Nest would: with a real host-deps factory. */
 export function createPluginRuntime(dbs: DatabaseService, registry?: PluginRegistryService): PluginRuntimeService {
-  return new PluginRuntimeService(dbs, new AuditService(dbs), registry, createHostDepsFactory(dbs));
+  return new PluginRuntimeService(dbs, new AuditService(dbs), new AddonsService(dbs), registry, createHostDepsFactory(dbs));
 }

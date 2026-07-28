@@ -1,6 +1,6 @@
 import crypto, { randomBytes, createHash, randomUUID } from 'crypto';
 import { db } from '../db/database';
-import { isAddonEnabled } from './adminService';
+import { isAddonEnabled } from '../nest/addons/addons.bridge';
 import { validateScopes } from '../mcp/scopes';
 import { ADDON_IDS } from '../addons';
 import { User } from '../types';

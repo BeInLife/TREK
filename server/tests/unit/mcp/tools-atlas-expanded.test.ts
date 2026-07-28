@@ -35,7 +35,7 @@ vi.mock('../../../src/config', () => ({
 const { broadcastMock } = vi.hoisted(() => ({ broadcastMock: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 
-vi.mock('../../../src/services/adminService', () => ({
+vi.mock('../../../src/nest/addons/addons.bridge', () => ({
   isAddonEnabled: vi.fn().mockReturnValue(true),
   getCollabFeatures: vi.fn().mockReturnValue({ chat: true, notes: true, polls: true, whatsnext: true }),
 }));

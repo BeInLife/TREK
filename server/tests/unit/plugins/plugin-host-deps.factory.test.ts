@@ -47,7 +47,6 @@ vi.mock('../../../src/db/database', () => {
 vi.mock('../../../src/websocket', () => ({ broadcast, broadcastToUser }));
 // Addon gate — flip per test to exercise the "addon disabled" branch of the reads.
 const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn(() => true as boolean) }));
-vi.mock('../../../src/services/adminService', () => ({ isAddonEnabled }));
 // DI-native services are constructor-injected into PluginHostDepsFactory below —
 // stub instances instead of path mocks (same behaviors as before the DI move).
 const budgetStub = {
@@ -324,7 +323,8 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 // The factory under test, wired exactly like PluginsModule does — but with the
 // DI-native domain services replaced by the stubs above. The shim keeps the
 // ~45 historical call sites unchanged and supplies a default no-op router.
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub);
+const addonsStub = { isAddonEnabled } as unknown as import('../../../src/nest/addons/addons.service').AddonsService;
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub, addonsStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 

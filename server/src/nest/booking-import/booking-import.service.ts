@@ -5,7 +5,7 @@ import { verifyTripAccess } from '../../services/tripAccess';
 import { ReservationsService } from '../reservations/reservations.service';
 import { createPlace } from '../../services/placeService';
 import { BudgetService } from '../budget/budget.service';
-import { isAddonEnabled } from '../../services/adminService';
+import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
 import { searchNominatim } from '../../services/mapsService';
 import { DatabaseService } from '../database/database.service';
@@ -26,6 +26,7 @@ export class BookingImportService {
     private readonly reservations: ReservationsService,
     private readonly permissions: PermissionsService,
     private readonly budget: BudgetService,
+    private readonly addons: AddonsService,
   ) {}
 
   private get db() {
@@ -235,7 +236,7 @@ export class BookingImportService {
 
         // Turn an extracted price into a real linked cost (Costs addon), so the
         // booking shows up as an expense — not just a price in metadata.
-        if (isAddonEnabled(ADDON_IDS.BUDGET)) {
+        if (this.addons.isAddonEnabled(ADDON_IDS.BUDGET)) {
           const meta =
             reservationData.metadata && typeof reservationData.metadata === 'object'
               ? (reservationData.metadata as Record<string, unknown>)

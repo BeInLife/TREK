@@ -4,7 +4,7 @@ import { listTrips, getTrip, getTripOwner, listMembers } from '../services/tripS
 import { listPlaces } from '../services/placeService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
-import { isAddonEnabled } from '../services/adminService';
+import { isAddonEnabled } from '../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../addons';
 import { canAccessJourney, getJourneyFull, listEntries, listJourneys } from '../services/journeyService';
 import { canRead, canReadTrips } from './scopes';

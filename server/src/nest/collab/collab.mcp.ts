@@ -6,7 +6,7 @@ import {
 } from '@trek/nest-mcp';
 import { z } from 'zod';
 import { isDemoUser } from '../../services/authService';
-import { isAddonEnabled, getCollabFeatures } from '../../services/adminService';
+import { isAddonEnabled, getCollabFeatures } from '../addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
 import { CollabService } from './collab.service';
