@@ -26,6 +26,15 @@ describe('createTestRegistry', () => {
     expect(() => createTestRegistry([new One(), new Two()])).toThrow(/no accessPolicy was configured/);
   });
 
+  it('surfaces a validateAccess rejection on construction', () => {
+    expect(() =>
+      createTestRegistry([new Two()], {
+        accessPolicy: () => true,
+        validateAccess: ({ group, mode }) => `unknown group '${group}' (mode '${mode}')`,
+      }),
+    ).toThrow(/invalid access declarations: tool "two_tool" \(Two\.two\): unknown group 't' \(mode 'write'\)/);
+  });
+
   it('forwards the accessPolicy option', () => {
     const calls: string[] = [];
     const policy: McpAccessPolicy = (access, ctx) => {

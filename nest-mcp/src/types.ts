@@ -15,11 +15,29 @@ import type { ZodRawShape } from 'zod';
 export interface McpContext {}
 
 /**
+ * Host-augmentable registry of valid `access.group` values — the `McpContext`
+ * augmentation trick applied to groups. Augment once:
+ *
+ *   declare module '@trek/nest-mcp' {
+ *     interface McpAccessGroupRegistry extends Record<MyGroupUnion, true> {}
+ *   }
+ *
+ * Unaugmented, `McpAccessGroup` stays `string` — the package attaches no
+ * semantics to groups, same contract as `McpContext`.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface McpAccessGroupRegistry {}
+
+export type McpAccessGroup = keyof McpAccessGroupRegistry extends never
+  ? string
+  : keyof McpAccessGroupRegistry & string;
+
+/**
  * Declarative access marker resolved by the host-supplied `accessPolicy`.
  * The package attaches no semantics to `group`/`mode` — the policy does.
  */
 export interface McpDeclarativeAccess {
-  group: string;
+  group: McpAccessGroup;
   mode: 'read' | 'write';
 }
 
@@ -90,8 +108,25 @@ export type McpEntry =
   | { kind: 'resourceTemplate'; methodName: string; options: ResourceTemplateOptions }
   | { kind: 'prompt'; methodName: string; options: PromptOptions };
 
+/** Introspection view of one recorded entry (see `McpRegistry.list()`). */
+export interface McpRegistryListing {
+  kind: McpEntryKind;
+  name: string;
+  className: string;
+  methodName: string;
+  access?: McpAccess;
+}
+
+/**
+ * Host-supplied per-entry check run by `validate()`. Return a problem
+ * description to fail boot, null/undefined to accept. Only called for
+ * entries with DECLARATIVE access (predicates are opaque to the host).
+ */
+export type McpAccessValidator = (access: McpDeclarativeAccess, entry: McpRegistryListing) => string | null | undefined;
+
 export interface McpModuleOptions {
   accessPolicy?: McpAccessPolicy;
+  validateAccess?: McpAccessValidator;
 }
 
 /** Injection token for the options object given to `McpModule.forRoot()`. */

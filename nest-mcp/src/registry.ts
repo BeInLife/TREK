@@ -1,10 +1,10 @@
 import { getEntry, isMcpController, type ClassRef } from './metadata';
 import type {
-  McpAccess,
   McpAccessPolicy,
+  McpAccessValidator,
   McpContext,
   McpEntry,
-  McpEntryKind,
+  McpRegistryListing,
   PromptOptions,
   ResourceOptions,
   ResourceTemplateOptions,
@@ -20,16 +20,9 @@ interface BoundEntry {
   instance: object;
 }
 
-export interface McpRegistryListing {
-  kind: McpEntryKind;
-  name: string;
-  className: string;
-  methodName: string;
-  access?: McpAccess;
-}
-
 export interface McpRegistryOptions {
   accessPolicy?: McpAccessPolicy;
+  validateAccess?: McpAccessValidator;
 }
 
 type AnyHandler = (this: unknown, ...handlerArgs: unknown[]) => unknown;
@@ -79,9 +72,11 @@ function enumerateMethodNames(instance: object): string[] {
 export class McpRegistry {
   private readonly bound: BoundEntry[] = [];
   private readonly accessPolicy?: McpAccessPolicy;
+  private readonly validateAccess?: McpAccessValidator;
 
   constructor(options: McpRegistryOptions = {}) {
     this.accessPolicy = options.accessPolicy;
+    this.validateAccess = options.validateAccess;
   }
 
   /**
@@ -134,12 +129,17 @@ export class McpRegistry {
    * session creation:
    * - duplicate names per kind (fixed resources: duplicate URIs), which the
    *   SDK would otherwise reject per-session at attach();
-   * - declarative access without a configured accessPolicy.
+   * - declarative access without a configured accessPolicy;
+   * - declarative access the host-supplied `validateAccess` hook rejects
+   *   (predicates are opaque to the host and never passed to it).
+   * All problems are aggregated into one error so a single boot failure
+   * reports every misconfiguration.
    */
   validate(): void {
     const seen = new Map<string, BoundEntry>();
     const duplicates: string[] = [];
     const unresolvable: string[] = [];
+    const invalidAccess: string[] = [];
     for (const bound of this.bound) {
       const { entry } = bound;
       const key =
@@ -148,9 +148,10 @@ export class McpRegistry {
       if (prior) duplicates.push(`${key} (${describeBound(prior)} and ${describeBound(bound)})`);
       else seen.set(key, bound);
       const access = entry.options.access;
-      if (!this.accessPolicy && access !== undefined && typeof access !== 'function') {
-        unresolvable.push(`${key} (${describeBound(bound)})`);
-      }
+      if (access === undefined || typeof access === 'function') continue;
+      if (!this.accessPolicy) unresolvable.push(`${key} (${describeBound(bound)})`);
+      const problem = this.validateAccess?.(access, this.toListing(bound));
+      if (problem) invalidAccess.push(`${key} (${describeBound(bound)}): ${problem}`);
     }
     const problems: string[] = [];
     if (duplicates.length) problems.push(`duplicate MCP registrations: ${duplicates.join(', ')}`);
@@ -160,18 +161,23 @@ export class McpRegistry {
           `(McpModule.forRoot({ accessPolicy })): ${unresolvable.join(', ')}`,
       );
     }
+    if (invalidAccess.length) problems.push(`invalid access declarations: ${invalidAccess.join(', ')}`);
     if (problems.length) throw new Error(`Invalid MCP registry: ${problems.join('; ')}`);
   }
 
   /** Introspection: every recorded entry, regardless of access. */
   list(): McpRegistryListing[] {
-    return this.bound.map(({ entry, instance }) => ({
+    return this.bound.map((bound) => this.toListing(bound));
+  }
+
+  private toListing({ entry, instance }: BoundEntry): McpRegistryListing {
+    return {
       kind: entry.kind,
       name: entry.options.name,
       className: (instance as { constructor: { name: string } }).constructor.name,
       methodName: entry.methodName,
       access: entry.options.access,
-    }));
+    };
   }
 
   private allowed(entry: McpEntry, ctx: McpContext): boolean {

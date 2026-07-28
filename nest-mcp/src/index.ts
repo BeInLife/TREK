@@ -13,18 +13,22 @@ export {
 } from './helpers';
 export { McpRegistryService } from './mcp-registry.service';
 export { McpModule } from './mcp.module';
-export { McpRegistry, type McpRegistryListing, type McpRegistryOptions } from './registry';
+export { McpRegistry, type McpRegistryOptions } from './registry';
 export { createTestRegistry } from './testing';
 export {
   MCP_MODULE_OPTIONS,
   type McpAccess,
+  type McpAccessGroup,
+  type McpAccessGroupRegistry,
   type McpAccessPolicy,
   type McpAccessPredicate,
+  type McpAccessValidator,
   type McpContext,
   type McpDeclarativeAccess,
   type McpEntry,
   type McpEntryKind,
   type McpModuleOptions,
+  type McpRegistryListing,
   type PromptOptions,
   type ResourceOptions,
   type ResourceTemplateOptions,

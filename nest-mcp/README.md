@@ -40,7 +40,7 @@ export class ThingsMcp {
 
 Every decorator accepts `access` and `when`:
 
-- **Declarative** — `access: { group: 'things', mode: 'read' | 'write' }`, resolved by the `accessPolicy` given once at `McpModule.forRoot(...)`.
+- **Declarative** — `access: { group: 'things', mode: 'read' | 'write' }`, resolved by the `accessPolicy` given once at `McpModule.forRoot(...)`. `group` is typed as `McpAccessGroup` — plain `string` until the host augments `McpAccessGroupRegistry` (see below), after which only the host's registered groups compile.
 - **Predicate** — `access: (ctx) => boolean`, bypasses the policy.
 - **Availability gate** — `when: (ctx) => boolean`, evaluated *before* `access` (both must pass). Use it for feature/addon toggles so scope markers stay declarative: `when: () => isAddonEnabled(...)`, `access: { group: 'packing', mode: 'read' }`.
 - **Omitted `access`** — the entry is always registered (subject to `when`).
@@ -64,7 +64,20 @@ Six `TOOL_ANNOTATIONS_*` presets cover the read/write/delete/idempotency matrix 
 `McpRegistryService` runs `registry.validate()` at boot (`onModuleInit`), and `createTestRegistry` runs it on construction, so misconfiguration breaks startup instead of MCP session creation:
 
 - duplicate names per kind (fixed resources: duplicate URIs);
-- declarative `access` without a configured `accessPolicy`.
+- declarative `access` without a configured `accessPolicy`;
+- declarative `access` rejected by the optional host-supplied `validateAccess` hook.
+
+All problems are aggregated into one `Invalid MCP registry: ...` error, so a single boot failure reports every misconfiguration.
+
+`validateAccess?: (access, entry) => string | null | undefined` (on both `McpModule.forRoot(...)` and `createTestRegistry(...)` options) is called once per entry with declarative access — predicates are opaque to the host and skipped. Return a problem description to fail boot, null/undefined to accept:
+
+```ts
+McpModule.forRoot({
+  accessPolicy,
+  validateAccess: ({ group, mode }) =>
+    hostKnowsGroupMode(group, mode) ? null : `no '${group}:${mode}' scope`,
+})
+```
 
 ### Context typing
 
@@ -77,6 +90,16 @@ declare module '@trek/nest-mcp' {
     scopes: string[] | null;
     isStaticToken: boolean;
   }
+}
+```
+
+### Access-group typing
+
+Same trick for `access.group`: the package exports an empty `McpAccessGroupRegistry` interface, and `McpAccessGroup` (the type of `group`) is `string` until the host augments it — after which every decorator's `group` is checked against the host's union at compile time:
+
+```ts
+declare module '@trek/nest-mcp' {
+  interface McpAccessGroupRegistry extends Record<MyGroupUnion, true> {}
 }
 ```
 

@@ -1,6 +1,6 @@
-import { McpController, McpRegistry, Resource, Tool } from '../src';
+import { McpController, McpRegistry, Resource, Tool, type McpAccessValidator } from '../src';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 @McpController()
 class Alpha {
@@ -103,6 +103,79 @@ describe('McpRegistry.validate', () => {
     registry.register(new Alpha());
     expect(() => registry.validate()).toThrow(
       /declare declarative access but no accessPolicy was configured.*tool "alpha_two" \(Alpha\.two\)/,
+    );
+  });
+});
+
+@McpController()
+class MixedAccess {
+  @Tool({ name: 'open_tool' })
+  open() {}
+
+  @Tool({ name: 'predicate_tool', access: () => true })
+  predicated() {}
+
+  @Tool({ name: 'declared_read', access: { group: 'a', mode: 'read' } })
+  declaredRead() {}
+
+  @Tool({ name: 'declared_write', access: { group: 'b', mode: 'write' } })
+  declaredWrite() {}
+}
+
+describe('McpRegistry.validate — validateAccess hook', () => {
+  it('invokes the hook once per declarative entry, never for predicate/omitted access', () => {
+    const validateAccess = vi.fn<McpAccessValidator>(() => null);
+    const registry = new McpRegistry({ accessPolicy: () => true, validateAccess });
+    registry.register(new MixedAccess());
+    expect(() => registry.validate()).not.toThrow();
+    expect(validateAccess).toHaveBeenCalledTimes(2);
+    expect(validateAccess).toHaveBeenCalledWith(
+      { group: 'a', mode: 'read' },
+      expect.objectContaining({
+        kind: 'tool',
+        name: 'declared_read',
+        className: 'MixedAccess',
+        methodName: 'declaredRead',
+      }),
+    );
+    expect(validateAccess).toHaveBeenCalledWith(
+      { group: 'b', mode: 'write' },
+      expect.objectContaining({
+        kind: 'tool',
+        name: 'declared_write',
+        className: 'MixedAccess',
+        methodName: 'declaredWrite',
+      }),
+    );
+  });
+
+  it('accepts null and undefined returns', () => {
+    const returns: (string | null | undefined)[] = [null, undefined];
+    const registry = new McpRegistry({ accessPolicy: () => true, validateAccess: () => returns.shift() });
+    registry.register(new MixedAccess());
+    expect(() => registry.validate()).not.toThrow();
+  });
+
+  it('aggregates every rejected entry into one error naming each origin', () => {
+    const registry = new McpRegistry({
+      accessPolicy: () => true,
+      validateAccess: ({ group, mode }) => `no '${group}:${mode}' scope`,
+    });
+    registry.register(new MixedAccess());
+    expect(() => registry.validate()).toThrow(
+      /Invalid MCP registry: invalid access declarations: tool "declared_read" \(MixedAccess\.declaredRead\): no 'a:read' scope, tool "declared_write" \(MixedAccess\.declaredWrite\): no 'b:write' scope/,
+    );
+  });
+
+  it('composes with duplicate-name problems in the same aggregated error', () => {
+    const registry = new McpRegistry({
+      accessPolicy: () => true,
+      validateAccess: ({ mode }) => (mode === 'write' ? 'bad group' : null),
+    });
+    registry.register(new Alpha());
+    registry.register(new AlphaClone());
+    expect(() => registry.validate()).toThrow(
+      /duplicate MCP registrations: tool "alpha_one".*; invalid access declarations: tool "alpha_two" \(Alpha\.two\): bad group/,
     );
   });
 });
