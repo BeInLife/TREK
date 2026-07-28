@@ -65,17 +65,15 @@ export const TREK_WS_EVENTS = {
   'assignment:created': { scope: 'trip', payload: z.object({ assignment: entity }) },
   'assignment:updated': { scope: 'trip', payload: z.object({ assignment: entity }) },
   'assignment:deleted': { scope: 'trip', payload: z.object({ assignmentId: id, dayId: id }) },
-  // DRIFT: REST sends { assignment, oldDayId, newDayId }; the MCP tool omits
-  // newDayId (assignments.mcp.ts) — the client keys a day map on `undefined`.
+  // (MCP drift fixed 2026-07-29: move_assignment now includes newDayId and
+  // reorder_day_assignments sends orderedIds, matching REST.)
   'assignment:moved': {
     scope: 'trip',
-    payload: z.object({ assignment: entity, oldDayId: id, newDayId: id.optional() }),
+    payload: z.object({ assignment: entity, oldDayId: id, newDayId: id }),
   },
-  // DRIFT: REST sends { dayId, orderedIds }; the MCP tool sends
-  // { dayId, assignmentIds } — the client only reads orderedIds.
   'assignment:reordered': {
     scope: 'trip',
-    payload: z.union([z.object({ dayId: id, orderedIds: idList }), z.object({ dayId: id, assignmentIds: idList })]),
+    payload: z.object({ dayId: id, orderedIds: idList }),
   },
   'assignment:participants': {
     scope: 'trip',
@@ -85,11 +83,8 @@ export const TREK_WS_EVENTS = {
   // ── Days ─────────────────────────────────────────────────────────────────
   'day:created': { scope: 'trip', payload: z.object({ day: entity }) },
   'day:updated': { scope: 'trip', payload: z.object({ day: entity }) },
-  // DRIFT: REST + plugins send { dayId }; the MCP tool sends { id }.
-  'day:deleted': {
-    scope: 'trip',
-    payload: z.union([z.object({ dayId: id }), z.object({ id })]),
-  },
+  // (MCP drift fixed 2026-07-29: delete_day now sends { dayId }, matching REST.)
+  'day:deleted': { scope: 'trip', payload: z.object({ dayId: id }) },
   // Two legitimate shapes: a plain reorder sends { orderedIds }; the
   // insert-at-position create path re-uses the event with { day }.
   'day:reordered': {

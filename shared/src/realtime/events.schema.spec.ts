@@ -113,9 +113,6 @@ const FIXTURES: Record<TrekWsEventName, Record<string, unknown>> = {
 
 /** Divergent shapes emitted for the same event today (see DRIFT notes in the registry). */
 const DRIFT_VARIANTS: Partial<Record<TrekWsEventName, Record<string, unknown>[]>> = {
-  'assignment:moved': [{ assignment: { id: 9, day_id: 4 }, oldDayId: 2 }],
-  'assignment:reordered': [{ dayId: 2, assignmentIds: [3, 1, 2] }],
-  'day:deleted': [{ id: 2 }],
   'day:reordered': [{ day: { id: 2 } }],
   'budget:reordered': [{ orderedCategories: ['food', 'transport'] }],
   'reservation:created': [{}],
