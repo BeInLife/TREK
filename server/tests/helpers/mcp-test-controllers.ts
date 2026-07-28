@@ -22,8 +22,14 @@ import { ReservationsMcp } from '../../src/nest/reservations/reservations.mcp';
 import { ReservationsService } from '../../src/nest/reservations/reservations.service';
 import { TagsMcp } from '../../src/nest/tags/tags.mcp';
 import { TagsService } from '../../src/nest/tags/tags.service';
+import { SettingsService } from '../../src/nest/settings/settings.service';
+import { ShareMcp } from '../../src/nest/share/share.mcp';
+import { ShareService } from '../../src/nest/share/share.service';
 import { TodoMcp } from '../../src/nest/todo/todo.mcp';
 import { TodoService } from '../../src/nest/todo/todo.service';
+import { FilesService } from '../../src/nest/files/files.service';
+import { TripsMcp } from '../../src/nest/trips/trips.mcp';
+import { TripsService } from '../../src/nest/trips/trips.service';
 import { VacayMcp } from '../../src/nest/vacay/vacay.mcp';
 import { VacayService } from '../../src/nest/vacay/vacay.service';
 import { RealtimeService } from '../../src/nest/realtime/realtime.service';
@@ -42,19 +48,37 @@ export function createMcpTestRegistry(): McpRegistry {
   const daysService = new DaysService(dbService, permissionsService, realtimeService);
   const exchangeRatesService = new ExchangeRatesService();
   const budgetService = new BudgetService(dbService, permissionsService, exchangeRatesService, realtimeService);
+  const todoService = new TodoService(dbService, permissionsService, realtimeService);
+  const packingService = new PackingService(dbService, permissionsService, realtimeService);
+  const collabService = new CollabService(dbService, permissionsService, realtimeService);
+  const tripsService = new TripsService(
+    dbService,
+    todoService,
+    packingService,
+    new FilesService(dbService, permissionsService, realtimeService),
+    new ReservationsService(dbService, permissionsService, budgetService, realtimeService),
+    daysService,
+    permissionsService,
+    budgetService,
+    collabService,
+    new VacayService(dbService, realtimeService),
+    realtimeService,
+  );
   return createTestRegistry(
     [
       new TagsMcp(new TagsService(dbService)),
       new CategoriesMcp(new CategoriesService(dbService)),
-      new TodoMcp(new TodoService(dbService, permissionsService, realtimeService)),
-      new PackingMcp(new PackingService(dbService, permissionsService, realtimeService)),
+      new TodoMcp(todoService),
+      new PackingMcp(packingService),
       new BudgetMcp(budgetService, exchangeRatesService, dbService),
       new ReservationsMcp(new ReservationsService(dbService, permissionsService, budgetService, realtimeService), daysService, budgetService),
       new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService)),
       new DaysMcp(daysService, dbService),
       new AssignmentsMcp(new AssignmentsService(dbService, permissionsService, realtimeService), daysService),
-      new CollabMcp(new CollabService(dbService, permissionsService, realtimeService)),
+      new CollabMcp(collabService),
       new VacayMcp(new VacayService(dbService, realtimeService)),
+      new TripsMcp(tripsService, todoService, collabService),
+      new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService)),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },
   );

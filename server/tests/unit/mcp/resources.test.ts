@@ -1,7 +1,9 @@
 /**
  * Unit tests for MCP resources (resources.ts).
- * Tests all 6 legacy-registrar resources via InMemoryTransport + Client
- * (trek://trips/{tripId}/budget, .../budget/per-person and
+ * Tests the remaining legacy-registrar resources via InMemoryTransport + Client
+ * (trek://trips, trek://trips/{tripId} and .../members moved to the
+ * DI-discovered TripsMcp — see tools-trips.test.ts;
+ * trek://trips/{tripId}/budget, .../budget/per-person and
  * .../budget/settlement moved to the DI-discovered BudgetMcp — see
  * tools-budget.test.ts and tools-budget-advanced.test.ts;
  * trek://categories moved to the DI-discovered CategoriesMcp — see
@@ -76,85 +78,10 @@ async function withHarness(userId: number, fn: (harness: McpHarness) => Promise<
   }
 }
 
-describe('Resource: trek://trips', () => {
-  it('returns all trips the user owns or is a member of', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    createTrip(testDb, user.id, { title: 'My Trip' });
-    const sharedTrip = createTrip(testDb, other.id, { title: 'Shared Trip' });
-    addTripMember(testDb, sharedTrip.id, user.id);
-    // Trip from another user (not accessible)
-    createTrip(testDb, other.id, { title: 'Other Trip' });
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: 'trek://trips' });
-      const trips = parseResourceResult(result) as any[];
-      expect(trips).toHaveLength(2);
-      const titles = trips.map((t) => t.title);
-      expect(titles).toContain('My Trip');
-      expect(titles).toContain('Shared Trip');
-      expect(titles).not.toContain('Other Trip');
-    });
-  });
-
-  it('excludes archived trips', async () => {
-    const { user } = createUser(testDb);
-    createTrip(testDb, user.id, { title: 'Active Trip' });
-    const archived = createTrip(testDb, user.id, { title: 'Archived Trip' });
-    testDb.prepare('UPDATE trips SET is_archived = 1 WHERE id = ?').run(archived.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: 'trek://trips' });
-      const trips = parseResourceResult(result) as any[];
-      expect(trips).toHaveLength(1);
-      expect(trips[0].title).toBe('Active Trip');
-    });
-  });
-
-  it('returns empty array when user has no trips', async () => {
-    const { user } = createUser(testDb);
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: 'trek://trips' });
-      const trips = parseResourceResult(result) as any[];
-      expect(trips).toEqual([]);
-    });
-  });
-});
-
-describe('Resource: trek://trips/{tripId}', () => {
-  it('returns trip data for an accessible trip', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id, { title: 'Paris Trip' });
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}` });
-      const data = parseResourceResult(result) as any;
-      expect(data.title).toBe('Paris Trip');
-      expect(data.id).toBe(trip.id);
-    });
-  });
-
-  it('returns access denied for inaccessible trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const otherTrip = createTrip(testDb, other.id, { title: 'Private' });
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${otherTrip.id}` });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-
-  it('returns access denied for non-existent ID', async () => {
-    const { user } = createUser(testDb);
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: 'trek://trips/99999' });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-});
+// trek://trips and trek://trips/{tripId} moved to tools-trips.test.ts: they
+// now register via the nest-mcp registry inside registerTools (TripsMcp
+// @Resource/@ResourceTemplate), which this file's withTools: false harness
+// never attaches.
 
 // The trek://trips/{tripId}/days resource moved to the DI-discovered
 // DaysMcp — see tools-days.test.ts.
@@ -205,35 +132,8 @@ describe('Resource: trek://trips/{tripId}/places', () => {
 // The trek://trips/{tripId}/accommodations resource moved to the
 // DI-discovered DaysMcp — see tools-days-accommodations.test.ts.
 
-describe('Resource: trek://trips/{tripId}/members', () => {
-  it('returns owner and collaborators', async () => {
-    const { user } = createUser(testDb);
-    const { user: member } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    addTripMember(testDb, trip.id, member.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/members` });
-      const data = parseResourceResult(result) as any;
-      expect(data.owner).toBeTruthy();
-      expect(data.owner.id).toBe(user.id);
-      expect(data.members).toHaveLength(1);
-      expect(data.members[0].id).toBe(member.id);
-    });
-  });
-
-  it('returns access denied for unauthorized trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/members` });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-});
+// trek://trips/{tripId}/members moved to tools-trips.test.ts (TripsMcp
+// @ResourceTemplate) for the same reason.
 
 // trek://trips/{tripId}/collab-notes moved to tools-notes.test.ts: it now
 // registers via the nest-mcp registry inside registerTools (CollabMcp

@@ -5,14 +5,16 @@ import { registerNotificationTools } from './tools/notifications';
 import { registerAtlasTools } from './tools/atlas';
 import { registerPlaceTools } from './tools/places';
 import { registerCollectionTools } from './tools/collections';
-import { registerTripTools } from './tools/trips';
 import { registerTransportTools } from './tools/transports';
 import { registerTransitTools } from './tools/transit';
 import { registerMcpPrompts } from './tools/prompts';
 import { getMcpRegistry } from './registry-handoff';
 
 export function registerTools(server: McpServer, userId: number, scopes: string[] | null, isStaticToken = false, getDeprecationNotice: () => string | null = () => null): void {
-  registerTripTools(server, userId, scopes, getDeprecationNotice);
+  // The trip tools moved to the DI-discovered src/nest/trips/trips.mcp.ts and
+  // the share-link tools to src/nest/share/share.mcp.ts (@McpController,
+  // attached via the nest-mcp registry below — getDeprecationNotice rides the
+  // attach ctx).
 
   registerPlaceTools(server, userId, scopes);
 
@@ -61,5 +63,5 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   // callers without a Nest app, e.g. unit tests) ⇒ skip; the test harness
   // attaches its own via createTestRegistry + setMcpRegistry.
   const registry = getMcpRegistry();
-  if (registry) registry.attach(server, { userId, scopes, isStaticToken });
+  if (registry) registry.attach(server, { userId, scopes, isStaticToken, getDeprecationNotice });
 }

@@ -1,13 +1,12 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp';
 import { canAccessTrip } from '../db/database';
-import { listTrips, getTrip, getTripOwner, listMembers } from '../services/tripService';
 import { listPlaces } from '../services/placeService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
 import { isAddonEnabled } from '../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../addons';
 import { canAccessJourney, getJourneyFull, listEntries, listJourneys } from '../services/journeyService';
-import { canRead, canReadTrips } from './scopes';
+import { canRead } from './scopes';
 
 function parseId(value: string | string[]): number | null {
   const n = Number(Array.isArray(value) ? value[0] : value);
@@ -45,29 +44,9 @@ function jsonContent(uri: string, data: unknown) {
 }
 
 export function registerResources(server: McpServer, userId: number, scopes: string[] | null): void {
-  // List all accessible trips
-  if (canReadTrips(scopes)) server.registerResource(
-    'trips',
-    'trek://trips',
-    { description: 'All trips the user owns or is a member of', mimeType: 'application/json' },
-    async (uri) => {
-      const trips = listTrips(userId, 0);
-      return jsonContent(uri.href, trips);
-    }
-  );
-
-  // Single trip detail
-  if (canReadTrips(scopes)) server.registerResource(
-    'trip',
-    new ResourceTemplate('trek://trips/{tripId}', { list: undefined }),
-    { description: 'A single trip with metadata and member count', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const trip = getTrip(id, userId);
-      return jsonContent(uri.href, trip);
-    }
-  );
+  // The trips and trip (trek://trips, trek://trips/{tripId}) resources moved
+  // to the DI-discovered src/nest/trips/trips.mcp.ts (@Resource /
+  // @ResourceTemplate, attached via the nest-mcp registry in registerTools).
 
   // The trip-days resource moved to the DI-discovered
   // src/nest/days/days.mcp.ts (@ResourceTemplate).
@@ -101,20 +80,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
   // The trip-accommodations resource moved to the DI-discovered
   // src/nest/days/days.mcp.ts (@ResourceTemplate).
 
-  // Trip members (owner + collaborators)
-  if (canReadTrips(scopes)) server.registerResource(
-    'trip-members',
-    new ResourceTemplate('trek://trips/{tripId}/members', { list: undefined }),
-    { description: 'Owner and collaborators of a trip', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const ownerRow = getTripOwner(id);
-      if (!ownerRow) return accessDenied(uri.href);
-      const { owner, members } = listMembers(id, ownerRow.user_id);
-      return jsonContent(uri.href, { owner, members });
-    }
-  );
+  // The trip-members resource moved to the DI-discovered
+  // src/nest/trips/trips.mcp.ts (@ResourceTemplate).
 
   // The trek://trips/{tripId}/collab-notes, …/collab/polls and …/collab/messages
   // resources moved to the DI-discovered src/nest/collab/collab.mcp.ts

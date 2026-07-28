@@ -9,7 +9,7 @@ import { isDemoUser } from '../../services/authService';
 import { isAddonEnabled } from '../addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
-import { getTripOwner, listMembers } from '../../services/tripService';
+import { getTripOwner, listMembers } from '../trips/trips.bridge';
 import { DatabaseService } from '../database/database.service';
 import { BudgetService } from './budget.service';
 import { ExchangeRatesService } from './exchange-rates.service';
