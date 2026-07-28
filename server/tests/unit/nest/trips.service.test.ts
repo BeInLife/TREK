@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 
 const { dbMock } = vi.hoisted(() => {
   const stmt = { get: vi.fn(() => ({ id: 42 })), all: vi.fn(() => []), run: vi.fn() };
@@ -12,6 +12,8 @@ import type { PermissionsService } from '../../../src/nest/permissions/permissio
 
 const { broadcast } = vi.hoisted(() => ({ broadcast: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast }));
+// notifyInvite fires a notification via a dynamic import — keep it out of unit scope
+vi.mock('../../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 const checkPermission = vi.fn(() => true);
 const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
@@ -48,6 +50,12 @@ const reservationsStub = { list: () => [] } as unknown as ReservationsService;
 const daysStub = { list: () => ({ days: [1] }), listAccommodations: () => [] } as unknown as DaysService;
 function svc() { return new TripsService(new DatabaseService(dbConn), todoStub, packingStub, filesStub, reservationsStub, daysStub, permissionsStub, budgetStub); }
 beforeEach(() => vi.clearAllMocks());
+beforeAll(async () => {
+  // Warm the (mocked) notificationService module: notifyInvite does a
+  // fire-and-forget dynamic import of it, and a cold load can otherwise race
+  // the worker teardown ("Cannot load ... after the environment was torn down").
+  await import('../../../src/services/notificationService');
+});
 
 describe('TripsService (wrapper delegation + bundle/copy/notify helpers)', () => {
   it('delegates the simple wrappers to tripService', async () => {
