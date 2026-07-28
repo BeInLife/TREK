@@ -17,7 +17,7 @@ export default defineConfig({
     root: '.',
     include: ['tests/**/*.test.ts'],
     globals: true,
-    setupFiles: ['tests/setup.ts'],
+    setupFiles: ['tests/setup.ts', 'tests/setup.console-noise.ts'],
     testTimeout: 15000,
     hookTimeout: 15000,
     pool: 'forks',
