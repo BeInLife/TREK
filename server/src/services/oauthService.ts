@@ -6,7 +6,7 @@ import { ADDON_IDS } from '../addons';
 import { User } from '../types';
 import { writeAudit, logWarn } from '../nest/audit/audit.bridge';
 import { revokeUserSessionsForClient } from '../mcp/sessionManager';
-import { getMcpSafeUrl } from './notifications';
+import { getMcpSafeUrl } from '../app-config';
 
 // ---------------------------------------------------------------------------
 // Constants

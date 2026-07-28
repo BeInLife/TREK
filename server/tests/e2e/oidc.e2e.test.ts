@@ -10,7 +10,10 @@ import cookieParser from 'cookie-parser';
 import type { Server } from 'http';
 import { Test } from '@nestjs/testing';
 
-vi.mock('../../src/services/notifications', () => ({ getAppUrl: () => 'https://app' }));
+vi.mock('../../src/app-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/app-config')>();
+  return { ...actual, getAppUrl: () => 'https://app' };
+});
 
 const { toggles } = vi.hoisted(() => ({ toggles: { oidc_login: true } }));
 vi.mock('../../src/services/authService', () => ({ resolveAuthToggles: () => toggles }));

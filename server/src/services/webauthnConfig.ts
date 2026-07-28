@@ -1,6 +1,6 @@
 import { readEnv } from '../app-config';
 import { db } from '../db/database';
-import { getAppUrl } from './notifications';
+import { getAppUrl } from '../app-config';
 
 /**
  * Resolves the WebAuthn Relying Party ID + allowed origins for this deployment.

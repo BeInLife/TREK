@@ -14,7 +14,7 @@ import { mcpAuthMetadataRouter } from '@modelcontextprotocol/sdk/server/auth/rou
 import { authorizationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/authorize';
 import { clientRegistrationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/register';
 import type { OAuthMetadata } from '@modelcontextprotocol/sdk/shared/auth';
-import { getMcpSafeUrl } from '../../services/notifications';
+import { getMcpSafeUrl } from '../../app-config';
 
 // Platform / transport routes extracted verbatim from createApp() (app.ts) so they can be
 // mounted on either the legacy Express app or the NestJS Express instance (strangler A6/A8).
@@ -126,8 +126,8 @@ export function applyPlatformTransport(app: express.Application): void {
     next();
   };
 
-  // SDK metadata router — built lazily on first request so getAppUrl() (which queries the DB)
-  // is not called at createApp() time, before test tables have been created.
+  // SDK metadata router — built lazily on first request so the issuer URL is
+  // resolved from the live env, not frozen at createApp() time.
   // mcpAuthMetadataRouter serves:
   //   /.well-known/oauth-authorization-server   — RFC 8414 AS metadata
   //   /.well-known/oauth-protected-resource/mcp — RFC 9728 path-based PRM (fixes issue #959 bug 1)

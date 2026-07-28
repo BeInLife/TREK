@@ -1,6 +1,6 @@
 import { readEnv } from '../app-config';
 import { buildUserAgent } from './mapsService';
-import { getAppUrl } from './notifications';
+import { getAppUrl } from '../app-config';
 
 /**
  * Public transit routing (#1065) backed by Transitous (api.transitous.org), the

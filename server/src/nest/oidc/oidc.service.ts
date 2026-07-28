@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as oidc from '../../services/oidcService';
-import { getAppUrl } from '../../services/notifications';
+import { getAppUrl } from '../../app-config';
 import { resolveAuthToggles } from '../../services/authService';
 import { setAuthCookie } from '../../services/cookie';
 

@@ -24,9 +24,10 @@ vi.mock('../../../src/db/database', () => ({
   },
 }));
 
-vi.mock('../../../src/services/notifications', () => ({
-  getAppUrl: () => appUrlRef.value,
-}));
+vi.mock('../../../src/app-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/app-config')>();
+  return { ...actual, getAppUrl: () => appUrlRef.value };
+});
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { resolveWebauthnConfig, isPasskeyConfigured } from '../../../src/services/webauthnConfig';

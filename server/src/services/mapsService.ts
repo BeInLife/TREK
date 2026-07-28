@@ -2,7 +2,7 @@ import { readEnv } from '../app-config';
 import { db } from '../db/database';
 import { safeFetchFollow, SsrfBlockedError } from '../utils/ssrfGuard';
 import { decrypt_api_key } from './apiKeyCrypto';
-import { getAppUrl } from './notifications';
+import { getAppUrl } from '../app-config';
 // ── Photo cache (disk-backed) ────────────────────────────────────────────────
 import * as placePhotoCache from './placePhotoCache';
 

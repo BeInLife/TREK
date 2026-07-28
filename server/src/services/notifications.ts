@@ -1,4 +1,4 @@
-import { readEnv } from '../app-config';
+import { getAppUrl, readEnv } from '../app-config';
 import { db } from '../db/database';
 import { checkSsrf, createPinnedDispatcher } from '../utils/ssrfGuard';
 import { decrypt_api_key } from './apiKeyCrypto';
@@ -66,46 +66,6 @@ function getSmtpConfig(): SmtpConfig | null {
     from,
     secure: parseInt(port, 10) === 465,
   };
-}
-
-// Exported for use by notificationService
-export function getAppUrl(): string {
-  const appUrl = readEnv().app.appUrl;
-  if (appUrl) {
-    try {
-      const _ = new URL(appUrl);
-      return appUrl.replace(/\/+$/, '');
-    } catch (_ignored) {}
-  }
-  const origins = readEnv().http.allowedOriginsRaw;
-  if (origins) {
-    const first = origins.split(',')[0]?.trim();
-    if (first) {
-      try {
-        const _ = new URL(first);
-        return first.replace(/\/+$/, '');
-      } catch (_ignored) {}
-    }
-  }
-  const port = readEnv().app.port;
-  return `http://localhost:${port}`;
-}
-
-/** Returns a URL guaranteed to satisfy the MCP SDK's issuer requirements (HTTPS or localhost).
- *  Falls back to http://localhost:{PORT} when APP_URL/ALLOWED_ORIGINS use a non-HTTPS, non-localhost scheme
- *  that would cause checkIssuerUrl to throw "Issuer URL must be HTTPS". */
-export function getMcpSafeUrl(): string {
-  const candidate = getAppUrl();
-  try {
-    const u = new URL(candidate);
-    if (u.protocol === 'https:' || u.hostname === 'localhost' || u.hostname === '127.0.0.1') {
-      return candidate;
-    }
-  } catch {
-    // candidate was somehow invalid — fall through to localhost
-  }
-  const port = readEnv().app.port;
-  return `http://localhost:${port}`;
 }
 
 /** Is SMTP configured at the instance level? (Independent of any one user's address.) */

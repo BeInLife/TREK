@@ -24,8 +24,7 @@ const tmpDir = path.join(__dirname, '../data/tmp');
 });
 
 import * as scheduler from './scheduler';
-import { readEnv } from './app-config';
-import { getAppUrl, getMcpSafeUrl } from './services/notifications';
+import { getAppUrl, getMcpSafeUrl, readEnv } from './app-config';
 
 const PORT = readEnv().app.port;
 const HOST = readEnv().app.host;

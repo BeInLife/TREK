@@ -7,7 +7,10 @@ import { deriveTransitStats, geocode, plan, type TransitLeg } from '../../../src
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-vi.mock('../../../src/services/notifications', () => ({ getAppUrl: () => 'https://trek.example.com' }));
+vi.mock('../../../src/app-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/app-config')>();
+  return { ...actual, getAppUrl: () => 'https://trek.example.com' };
+});
 vi.mock('../../../src/services/mapsService', () => ({ buildUserAgent: () => 'TREK-Test-UA' }));
 
 const fetchMock = vi.fn();

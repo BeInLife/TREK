@@ -61,7 +61,7 @@ export function csvListFiltered(raw: string | undefined): string[] | null {
     : null;
 }
 
-/** Strip ALL trailing slashes (`/\/+$/`) — notifications.getAppUrl / TRANSIT_API_URL variant. */
+/** Strip ALL trailing slashes (`/\/+$/`) — app-url.getAppUrl / TRANSIT_API_URL variant. */
 export function stripTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, '');
 }

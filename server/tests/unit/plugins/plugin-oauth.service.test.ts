@@ -10,7 +10,10 @@ vi.mock('../../../src/services/apiKeyCrypto', () => ({
   encrypt_api_key: (v: unknown) => (typeof v === 'string' ? `enc:${v}` : v),
   decrypt_api_key: (v: unknown) => (typeof v === 'string' && v.startsWith('enc:') ? v.slice(4) : v),
 }));
-vi.mock('../../../src/services/notifications', () => ({ getAppUrl: () => 'https://trek.example' }));
+vi.mock('../../../src/app-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/app-config')>();
+  return { ...actual, getAppUrl: () => 'https://trek.example' };
+});
 
 const { getDb } = vi.hoisted(() => ({ getDb: { current: null as unknown } }));
 vi.mock('../../../src/db/database', () => ({ get db() { return getDb.current; } }));

@@ -2,7 +2,8 @@ import { Injectable } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as auth from '../../services/authService';
 import { setAuthCookie, clearAuthCookie } from '../../services/cookie';
-import { sendPasswordResetEmail, getAppUrl } from '../../services/notifications';
+import { sendPasswordResetEmail } from '../../services/notifications';
+import { getAppUrl } from '../../app-config';
 import type { User } from '../../types';
 
 /**

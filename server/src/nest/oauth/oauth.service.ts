@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import * as oauth from '../../services/oauthService';
 import { isAddonEnabled } from '../../services/adminService';
 import { ADDON_IDS } from '../../addons';
-import { getMcpSafeUrl } from '../../services/notifications';
+import { getMcpSafeUrl } from '../../app-config';
 
 /**
  * Thin Nest wrapper around the existing OAuth 2.1 service. The grant handling,

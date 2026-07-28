@@ -29,7 +29,10 @@ const { isAddonEnabled } = vi.hoisted(() => ({ isAddonEnabled: vi.fn() }));
 vi.mock('../../../src/services/adminService', () => ({ isAddonEnabled }));
 
 const { getMcpSafeUrl } = vi.hoisted(() => ({ getMcpSafeUrl: vi.fn() }));
-vi.mock('../../../src/services/notifications', () => ({ getMcpSafeUrl }));
+vi.mock('../../../src/app-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/app-config')>();
+  return { ...actual, getMcpSafeUrl };
+});
 
 import { OauthService } from '../../../src/nest/oauth/oauth.service';
 import { ADDON_IDS } from '../../../src/addons';
@@ -47,7 +50,7 @@ describe('OauthService', () => {
     expect(svc().mcpEnabled()).toBe(false);
   });
 
-  it('mcpSafeUrl forwards to the notifications helper', () => {
+  it('mcpSafeUrl forwards to the app-config helper', () => {
     getMcpSafeUrl.mockReturnValue('https://safe');
     expect(svc().mcpSafeUrl()).toBe('https://safe');
     expect(getMcpSafeUrl).toHaveBeenCalled();

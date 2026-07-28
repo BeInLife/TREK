@@ -9,6 +9,7 @@ the pre-init Express middleware.
 env.schema.ts    Zod catalog of the whole env surface; fail-fast at boot
 derive.ts        pure (raw env) → typed namespace functions, exact per-site coercions
 env.ts           readEnv() live accessor + validateEnvAtBoot()
+app-url.ts       getAppUrl()/getMcpSafeUrl() instance base-URL resolution
 boot-validate.ts side-effect import used by index.ts (validates before other modules load)
 parsers.ts       shared coercion helpers (boolTrueLoose, numberOr, csvList, …)
 ```
@@ -42,6 +43,17 @@ tokens, `RuntimeEnvService`) and consumes the SAME derive functions.
    captured env in module-top `const`s (mcp, backupService, ssrfGuard, plugin
    rate limits, …) keep freeze-at-import timing, merely sourcing the value from
    `readEnv()` at module top. Request-time reads stay request-time.
+
+## app-url.ts — instance base-URL resolution (moved 2026-07-28)
+
+`getAppUrl()` (APP_URL → first ALLOWED_ORIGINS entry → `http://localhost:PORT`,
+each candidate URL-validated, ALL trailing slashes stripped) and
+`getMcpSafeUrl()` (same, sanitized to HTTPS/localhost/127.0.0.1 for the MCP
+SDK's issuer check) moved here **verbatim** from `services/notifications.ts`
+(audit findings `auth-2`/`notifications-1`/`admin-3`/`mcp-1`). They follow
+invariant 1: `readEnv()` per call, live, never cached. The invalid-URL silent
+fallthrough and the strip-ALL-slashes quirk (see `parsers.ts`
+`stripTrailingSlashes`) are parity-pinned — do not "fix" them here.
 
 ## Classification: boot-stable vs runtime-toggled
 

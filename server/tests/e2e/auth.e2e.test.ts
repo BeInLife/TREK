@@ -32,7 +32,11 @@ vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: (
 // The audit domain is DI-native now: writeAudit runs for real against the temp
 // db's audit_log table; only the file logger is silenced.
 vi.mock('../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
-vi.mock('../../src/services/notifications', () => ({ getAppUrl: () => 'https://x', sendPasswordResetEmail: vi.fn().mockResolvedValue({ delivered: true }) }));
+vi.mock('../../src/services/notifications', () => ({ sendPasswordResetEmail: vi.fn().mockResolvedValue({ delivered: true }) }));
+vi.mock('../../src/app-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/app-config')>();
+  return { ...actual, getAppUrl: () => 'https://x' };
+});
 
 const { authSvc } = vi.hoisted(() => ({
   authSvc: {

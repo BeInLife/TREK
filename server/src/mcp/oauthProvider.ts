@@ -16,7 +16,7 @@ import {
     getUserByAccessToken,
 } from '../services/oauthService';
 import { ALL_SCOPES } from './scopes';
-import { getMcpSafeUrl } from '../services/notifications';
+import { getMcpSafeUrl } from '../app-config';
 import { writeAudit } from '../nest/audit/audit.bridge';
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,8 @@ import {
   ADMIN_SCOPED_EVENTS,
   type NotifEventType,
 } from './notificationPreferencesService';
-import { getEventText, getUserLanguage, getAppUrl } from './notifications';
+import { getEventText, getUserLanguage } from './notifications';
+import { getAppUrl } from '../app-config';
 import { listChannels, type ChannelMessage, type ExternalChannel } from './notifications/channelRegistry';
 import {
   resolveRecipients,

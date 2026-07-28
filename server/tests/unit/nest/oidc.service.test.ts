@@ -24,7 +24,10 @@ const { oidc } = vi.hoisted(() => ({
 vi.mock('../../../src/services/oidcService', () => oidc);
 
 const { getAppUrl } = vi.hoisted(() => ({ getAppUrl: vi.fn() }));
-vi.mock('../../../src/services/notifications', () => ({ getAppUrl }));
+vi.mock('../../../src/app-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/app-config')>();
+  return { ...actual, getAppUrl };
+});
 
 const { resolveAuthToggles } = vi.hoisted(() => ({ resolveAuthToggles: vi.fn() }));
 vi.mock('../../../src/services/authService', () => ({ resolveAuthToggles }));
@@ -54,7 +57,7 @@ describe('OidcService', () => {
     expect(s.getOidcConfig()).toBe(cfg);
   });
 
-  it('getAppUrl delegates to notifications.getAppUrl', () => {
+  it('getAppUrl delegates to app-config getAppUrl', () => {
     getAppUrl.mockReturnValue('https://app');
     expect(s.getAppUrl()).toBe('https://app');
   });

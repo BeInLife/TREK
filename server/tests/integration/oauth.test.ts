@@ -53,8 +53,8 @@ vi.mock('../../src/services/adminService', async (importOriginal) => {
     return { ...actual, isAddonEnabled: isAddonEnabledMock };
 });
 
-vi.mock('../../src/services/notifications', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../../src/services/notifications')>();
+vi.mock('../../src/app-config', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../src/app-config')>();
     return { ...actual, getMcpSafeUrl: () => 'https://trek.example.com' };
 });
 

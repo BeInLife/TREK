@@ -1,4 +1,5 @@
 export { readEnv, validateEnvAtBoot } from './env';
+export { getAppUrl, getMcpSafeUrl } from './app-url';
 export type { AppEnv, RawEnv } from './env';
 export {
   deriveAll,

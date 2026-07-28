@@ -21,7 +21,10 @@ vi.mock('../../../src/db/database', () => ({ db: { prepare: h.dbPrepare } }));
 vi.mock('../../../src/mcp', () => ({ mcpHandler: h.mcpHandler }));
 vi.mock('../../../src/mcp/oauthProvider', () => ({ trekOAuthProvider: {}, trekClientsStore: {} }));
 vi.mock('../../../src/services/adminService', () => ({ isAddonEnabled: h.isAddonEnabled }));
-vi.mock('../../../src/services/notifications', () => ({ getMcpSafeUrl: h.getMcpSafeUrl }));
+vi.mock('../../../src/app-config', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/app-config')>();
+  return { ...actual, getMcpSafeUrl: h.getMcpSafeUrl };
+});
 
 // SDK router/handler factories return distinct tagged middleware so we never hit
 // real new URL(...) wiring during registration.
