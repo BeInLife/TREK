@@ -28,8 +28,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
-  collab, vacay, reservations, day, permissions, audit, budget, trip, maps — see
-  the migration recipe below.
+  collab, vacay, reservations, day, permissions, audit, budget, trip, maps,
+  transit — see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -142,8 +142,9 @@ DI-native at the edge, so the 626-line legacy module folded into it — a 5-tool
 reservation import (`notifyBookingChange`) swapped for the injected service,
 `TripsService` and `BookingImportService` converted from function imports to
 injection, and a 9-export + 3-type `reservations.bridge.ts` for the legacy
-`tripService`, the airtrail import/sync pair and the still-legacy transit +
-transports registrars; the DTO ratchet for its 4 grandfathered body contracts
+`tripService`, the airtrail import/sync pair and the still-legacy transports
+registrar (the transit registrar has since migrated to `transit.mcp.ts`); the
+DTO ratchet for its 4 grandfathered body contracts
 landed as a sibling commit, which also loosened the shared positions schema to
 the real wire contract — `day_plan_position` optional, pinned by RESV-006);
 day followed (the 592-line legacy `dayService` folded into the existing
@@ -154,7 +155,8 @@ reorder/insert converted to `db.transaction()`; a 7-tool + 2-resource
 `days.mcp.ts`, the plugin host's 11-symbol import swapped for the injected
 service, `TripsService` + the assignments/reservations MCP controllers
 converted to injection, and a 6-export `days.bridge.ts` for the legacy
-`tripService` and the still-legacy transit + transports registrars; the DTO
+`tripService` and the still-legacy transports registrar (transit has since
+migrated); the DTO
 ratchet for its 4 day + 2 accommodation grandfathered body contracts landed
 as a sibling commit);
 permissions followed (the first Wave-2 **cross-cutting** migration and the
@@ -227,7 +229,7 @@ mapsService followed (the 1429-line geo core — Google Places, Nominatim,
 Overpass mirror racing, Wikimedia photos, Maps-URL resolution — folded into the
 wrapper `MapsService`; the pure parser/UA/POI-category helpers moved to
 `maps.helpers.ts` as plain exports (files.constants/client-ip precedent —
-transitService's User-Agent imports from there, not a bridge), the module-scoped
+the DI-native TransitService's User-Agent imports from there, not a bridge), the module-scoped
 POI cache / photo-fetch semaphore / frozen Overpass mirrors stayed module-scoped
 on purpose (permissions-cache precedent: the bridge instance and the DI
 singleton share them); the 3 geo tools left the mixed `mcp/tools/mapsWeather.ts`
@@ -236,8 +238,21 @@ its weather + airport tools await their own migrations); BookingImportService
 injects `MapsService` for its Nominatim geocoding, and a 3-export
 `maps.bridge.ts` serves the legacy placeEnrichment helper and the places
 registrar until the place domain migrates).
+transitService followed (the first fully SQL-free domain fold — the 333-line
+Transitous/MOTIS proxy became a dep-free `TransitService` (no
+`DatabaseService`; the ExchangeRatesService precedent), its response cache,
+frozen-at-import `TRANSIT_API_BASE` and lazy User-Agent memo staying
+module-scoped on purpose; the pure `deriveTransitStats` + mode whitelist +
+itinerary types moved to `transit.helpers.ts` (maps.helpers precedent) so the
+downstream legacy `transitItineraryService` needs no bridge; the whole 3-tool
+`mcp/tools/transit.ts` registrar moved to `transit.mcp.ts` — the two geo
+search tools on `access: { group: 'geo', mode: 'read' }` and
+`create_transit_journey` on `reservations:write`, with its days/reservations
+bridge imports becoming injected `DaysService`/`ReservationsService` (+
+`DatabaseService` for `canAccessTrip`) — leaving **zero bridge files** and the
+transports registrar as `days.bridge.ts`'s last consumer).
 Repeat these steps per
-service (next up: **transitService → placeService → transitItineraryService** —
+service (next up: **placeService → transitItineraryService** —
 or the notifications fan-in — per the dependency-honest order in
 `migration-graph.md`). This is a
 **pure relocation** — byte-identical

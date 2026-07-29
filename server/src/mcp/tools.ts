@@ -6,7 +6,6 @@ import { registerAtlasTools } from './tools/atlas';
 import { registerPlaceTools } from './tools/places';
 import { registerCollectionTools } from './tools/collections';
 import { registerTransportTools } from './tools/transports';
-import { registerTransitTools } from './tools/transit';
 import { registerMcpPrompts } from './tools/prompts';
 import { getMcpRegistry } from './registry-handoff';
 
@@ -46,7 +45,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
 
   registerTransportTools(server, userId, scopes);
 
-  registerTransitTools(server, userId, scopes);
+  // The transit tools moved to the DI-discovered src/nest/transit/transit.mcp.ts
+  // (@McpController, attached via the nest-mcp registry below).
 
   registerJourneyTools(server, userId, scopes);
 

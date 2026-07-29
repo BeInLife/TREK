@@ -29,6 +29,8 @@ import { ShareMcp } from '../../src/nest/share/share.mcp';
 import { ShareService } from '../../src/nest/share/share.service';
 import { TodoMcp } from '../../src/nest/todo/todo.mcp';
 import { TodoService } from '../../src/nest/todo/todo.service';
+import { TransitMcp } from '../../src/nest/transit/transit.mcp';
+import { TransitService } from '../../src/nest/transit/transit.service';
 import { FilesService } from '../../src/nest/files/files.service';
 import { TripsMcp } from '../../src/nest/trips/trips.mcp';
 import { TripsService } from '../../src/nest/trips/trips.service';
@@ -53,6 +55,7 @@ export function createMcpTestRegistry(): McpRegistry {
   const todoService = new TodoService(dbService, permissionsService, realtimeService);
   const packingService = new PackingService(dbService, permissionsService, realtimeService);
   const collabService = new CollabService(dbService, permissionsService, realtimeService);
+  const reservationsService = new ReservationsService(dbService, permissionsService, budgetService, realtimeService);
   const tripsService = new TripsService(
     dbService,
     todoService,
@@ -73,7 +76,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new TodoMcp(todoService),
       new PackingMcp(packingService),
       new BudgetMcp(budgetService, exchangeRatesService, dbService),
-      new ReservationsMcp(new ReservationsService(dbService, permissionsService, budgetService, realtimeService), daysService, budgetService),
+      new ReservationsMcp(reservationsService, daysService, budgetService),
       new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService)),
       new DaysMcp(daysService, dbService),
       new AssignmentsMcp(new AssignmentsService(dbService, permissionsService, realtimeService), daysService),
@@ -82,6 +85,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new TripsMcp(tripsService, todoService, collabService),
       new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService)),
       new MapsMcp(new MapsService(dbService)),
+      new TransitMcp(new TransitService(), daysService, reservationsService, dbService),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },
   );
