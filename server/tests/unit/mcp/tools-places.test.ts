@@ -39,7 +39,14 @@ const { broadcastMock } = vi.hoisted(() => ({ broadcastMock: vi.fn() }));
 vi.mock('../../../src/websocket', () => ({ broadcast: broadcastMock }));
 
 const { searchPlacesMock } = vi.hoisted(() => ({ searchPlacesMock: vi.fn() }));
-vi.mock('../../../src/services/mapsService', () => ({ searchPlaces: searchPlacesMock }));
+// The maps bridge is what the legacy places registrar (and placeEnrichment, in
+// the same import graph) consume since the maps DI fold — mock every export it
+// provides so the named imports resolve.
+vi.mock('../../../src/nest/maps/maps.bridge', () => ({
+  searchPlaces: searchPlacesMock,
+  getMapsKey: vi.fn(() => null),
+  getPlacePhoto: vi.fn(async () => ({ photoUrl: null, attribution: null })),
+}));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';

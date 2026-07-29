@@ -1,6 +1,6 @@
 import { db, getPlaceWithTags } from '../db/database';
 import { broadcast } from '../websocket';
-import { getMapsKey, searchPlaces, getPlacePhoto } from './mapsService';
+import { getMapsKey, searchPlaces, getPlacePhoto } from '../nest/maps/maps.bridge';
 
 /**
  * Background enrichment for list-imported places (#886).

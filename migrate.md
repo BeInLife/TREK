@@ -32,7 +32,7 @@ Wave 4 — the coupled cluster (order matters here)
 
 Wave 5 — the heavyweights, last
 
-10. adminService (14 Nest + 11 MCP consumers), journeyService/atlasService/vacayService (done 2026-07 — pulled forward as a zero-dependency frontier member, see migration-graph.md)/collectionsService/mapsService (big but self-contained), and finally the auth stack (authService at 1494 lines with 18 MCP consumers, plus
+10. adminService (14 Nest + 11 MCP consumers), journeyService/atlasService/vacayService (done 2026-07 — pulled forward as a zero-dependency frontier member, see migration-graph.md)/collectionsService/mapsService (done 2026-07 — pulled forward as step 4 of the dependency-honest order: the 1429-line geo core folded into the wrapper `MapsService`, pure helpers to `maps.helpers.ts`, the 3 geo MCP tools to the decorator-driven `maps.mcp.ts` (weather/airport tools stay in the legacy registrar), BookingImportService injects it, and a 3-export `maps.bridge.ts` serves placeEnrichment + the places registrar — transitService → placeService now unblocked), and finally the auth stack (authService at 1494 lines with 18 MCP consumers, plus
     oauthService/oidcService/passkeyService) — highest risk, most consumers, security-sensitive; do it when the pattern is thoroughly proven. backupService also stays late: it owns closeDb/reinitialize lifecycle, which is deliberately
     outside the DI wrapper.
 

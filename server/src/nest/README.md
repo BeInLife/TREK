@@ -28,8 +28,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **Phase 2 (trip sub-domains):** vacay (addon), packing, todo.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
-  collab, vacay, reservations, day, permissions, audit, budget, trip — see the
-  migration recipe below.
+  collab, vacay, reservations, day, permissions, audit, budget, trip, maps — see
+  the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -223,8 +223,21 @@ serves the legacy prompts registrar and budget.mcp.ts's owner/member seam
 were deleted with their last consumers and the unused days/budget bridge
 exports pruned; the controller adopted `trips.dto.ts` — all seven allow-list
 entries removed).
+mapsService followed (the 1429-line geo core — Google Places, Nominatim,
+Overpass mirror racing, Wikimedia photos, Maps-URL resolution — folded into the
+wrapper `MapsService`; the pure parser/UA/POI-category helpers moved to
+`maps.helpers.ts` as plain exports (files.constants/client-ip precedent —
+transitService's User-Agent imports from there, not a bridge), the module-scoped
+POI cache / photo-fetch semaphore / frozen Overpass mirrors stayed module-scoped
+on purpose (permissions-cache precedent: the bridge instance and the DI
+singleton share them); the 3 geo tools left the mixed `mcp/tools/mapsWeather.ts`
+registrar for the decorator-driven `maps.mcp.ts` (the registrar file survives —
+its weather + airport tools await their own migrations); BookingImportService
+injects `MapsService` for its Nominatim geocoding, and a 3-export
+`maps.bridge.ts` serves the legacy placeEnrichment helper and the places
+registrar until the place domain migrates).
 Repeat these steps per
-service (next up: the **mapsService → transitService → placeService** chain —
+service (next up: **transitService → placeService → transitItineraryService** —
 or the notifications fan-in — per the dependency-honest order in
 `migration-graph.md`). This is a
 **pure relocation** — byte-identical

@@ -7,7 +7,7 @@ import { createPlace } from '../../services/placeService';
 import { BudgetService } from '../budget/budget.service';
 import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
-import { searchNominatim } from '../../services/mapsService';
+import { MapsService } from '../maps/maps.service';
 import { DatabaseService } from '../database/database.service';
 import type { User } from '../../types';
 import { KitineraryExtractorService } from './kitinerary-extractor.service';
@@ -28,6 +28,7 @@ export class BookingImportService {
     private readonly budget: BudgetService,
     private readonly addons: AddonsService,
     private readonly realtime: RealtimeService,
+    private readonly maps: MapsService,
   ) {}
 
   private get db() {
@@ -160,7 +161,7 @@ export class BookingImportService {
               ].filter((q): q is string => !!q);
 
               for (const q of queries) {
-                const results = await searchNominatim(q);
+                const results = await this.maps.searchNominatim(q);
                 const hit = results[0];
                 if (hit?.lat != null && hit?.lng != null) {
                   lat = hit.lat;
@@ -192,7 +193,7 @@ export class BookingImportService {
           for (const ep of reservationData.endpoints) {
             if ((ep.lat == null || ep.lng == null) && ep.name) {
               try {
-                const hit = (await searchNominatim(ep.name))[0];
+                const hit = (await this.maps.searchNominatim(ep.name))[0];
                 if (hit?.lat != null && hit?.lng != null) {
                   ep.lat = hit.lat;
                   ep.lng = hit.lng;

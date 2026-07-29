@@ -11,7 +11,7 @@ vi.mock('../../../src/app-config', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/app-config')>();
   return { ...actual, getAppUrl: () => 'https://trek.example.com' };
 });
-vi.mock('../../../src/services/mapsService', () => ({ buildUserAgent: () => 'TREK-Test-UA' }));
+vi.mock('../../../src/nest/maps/maps.helpers', () => ({ buildUserAgent: () => 'TREK-Test-UA' }));
 
 const fetchMock = vi.fn();
 

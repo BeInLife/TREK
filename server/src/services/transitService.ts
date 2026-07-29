@@ -1,5 +1,5 @@
 import { readEnv } from '../app-config';
-import { buildUserAgent } from './mapsService';
+import { buildUserAgent } from '../nest/maps/maps.helpers';
 import { getAppUrl } from '../app-config';
 
 /**

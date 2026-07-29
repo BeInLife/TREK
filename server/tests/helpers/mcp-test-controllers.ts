@@ -15,6 +15,8 @@ import { DayNotesMcp } from '../../src/nest/days/day-notes.mcp';
 import { DayNotesService } from '../../src/nest/days/day-notes.service';
 import { DaysMcp } from '../../src/nest/days/days.mcp';
 import { DaysService } from '../../src/nest/days/days.service';
+import { MapsMcp } from '../../src/nest/maps/maps.mcp';
+import { MapsService } from '../../src/nest/maps/maps.service';
 import { PackingMcp } from '../../src/nest/packing/packing.mcp';
 import { PackingService } from '../../src/nest/packing/packing.service';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
@@ -79,6 +81,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new VacayMcp(new VacayService(dbService, realtimeService)),
       new TripsMcp(tripsService, todoService, collabService),
       new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService)),
+      new MapsMcp(new MapsService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },
   );

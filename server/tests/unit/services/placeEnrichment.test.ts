@@ -5,11 +5,11 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 
-// placeEnrichment pulls in the DB, websocket and maps service at import time;
+// placeEnrichment pulls in the DB, websocket and the maps bridge at import time;
 // stub them so the pure match selector can be tested in isolation.
 vi.mock('../../../src/db/database', () => ({ db: {}, getPlaceWithTags: () => null }));
 vi.mock('../../../src/websocket', () => ({ broadcast: () => {} }));
-vi.mock('../../../src/services/mapsService', () => ({
+vi.mock('../../../src/nest/maps/maps.bridge', () => ({
   getMapsKey: () => null,
   searchPlaces: async () => ({ places: [], source: 'none' }),
   getPlacePhoto: async () => ({ photoUrl: '', attribution: null }),
