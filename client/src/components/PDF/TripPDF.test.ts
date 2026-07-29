@@ -912,3 +912,122 @@ describe('downloadTripPDF defaults', () => {
     expect(srcdoc()).toContain('Day 1')
   })
 })
+
+// #1292 — every day started a new page, so a plan of short days printed one
+// sheet per handful of lines. The flowing layout is opt-in and remembered.
+describe('page breaks between days (#1292)', () => {
+  const twoDays = {
+    ...minimalArgs,
+    days: [
+      { id: 1, day_number: 1, title: 'First', date: '2025-06-01' },
+      { id: 2, day_number: 2, title: 'Second', date: '2025-06-02' },
+    ] as any[],
+  }
+
+  beforeEach(() => {
+    localStorage.removeItem('trek_pdf_page_break_per_day')
+  })
+
+  const toggle = () =>
+    document.querySelector<HTMLButtonElement>('#pdf-daybreak-toggle')
+  const isOn = () => toggle()!.getAttribute('aria-checked') === 'true'
+
+  it('FE-PDF-BREAK-001: days break onto their own page by default', async () => {
+    await downloadTripPDF(twoDays)
+    const html = getIframe()!.srcdoc
+
+    expect(html).toContain('day-section day-break')
+    expect(html).not.toContain('class="pdf-flow"')
+    expect(isOn()).toBe(true)
+  })
+
+  it('FE-PDF-BREAK-001b: the control is the switch from the rest of the app, not a checkbox', async () => {
+    await downloadTripPDF(twoDays)
+    const el = toggle()!
+
+    expect(el.tagName).toBe('BUTTON')
+    expect(el.getAttribute('role')).toBe('switch')
+    expect(el.style.background).toContain('--accent')
+    expect(document.querySelector('#pdf-daybreak-toggle input')).toBeNull()
+  })
+
+  it('FE-PDF-BREAK-002: the remembered flowing layout comes back on the next export', async () => {
+    localStorage.setItem('trek_pdf_page_break_per_day', '0')
+    await downloadTripPDF(twoDays)
+    const html = getIframe()!.srcdoc
+
+    // The class stays on the day; the body is what decides whether it breaks.
+    expect(html).toContain('day-section day-break')
+    expect(html).toContain('<body class="pdf-flow">')
+    expect(isOn()).toBe(false)
+    // Off uses the neutral track, so the two states are told apart by more than the knob.
+    expect(toggle()!.style.background).toContain('--border-primary')
+  })
+
+  it('FE-PDF-BREAK-003: the first day never carries a break of its own', async () => {
+    await downloadTripPDF(twoDays)
+    const html = getIframe()!.srcdoc
+
+    expect(html.indexOf('<table class="day-section">')).toBeGreaterThan(-1)
+    expect(html.match(/day-section day-break/g)).toHaveLength(1)
+  })
+
+  it('FE-PDF-BREAK-004: turning the breaks off is remembered and shown at once', async () => {
+    await downloadTripPDF(twoDays)
+    toggle()!.click()
+
+    expect(isOn()).toBe(false)
+    expect(localStorage.getItem('trek_pdf_page_break_per_day')).toBe('0')
+    const body = getIframe()!.contentDocument?.body
+    if (body) expect(body.classList.contains('pdf-flow')).toBe(true)
+  })
+
+  it('FE-PDF-BREAK-005: turning them back on is remembered too', async () => {
+    localStorage.setItem('trek_pdf_page_break_per_day', '0')
+    await downloadTripPDF(twoDays)
+    toggle()!.click()
+
+    expect(isOn()).toBe(true)
+    expect(localStorage.getItem('trek_pdf_page_break_per_day')).toBe('1')
+    const body = getIframe()!.contentDocument?.body
+    if (body) expect(body.classList.contains('pdf-flow')).toBe(false)
+  })
+
+  it('FE-PDF-BREAK-006: a storage the browser blocks costs the preference, not the export', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked') })
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('blocked') })
+
+    await downloadTripPDF(twoDays)
+    const html = getIframe()!.srcdoc
+    expect(html).toContain('day-section day-break')
+    expect(html).not.toContain('class="pdf-flow"')
+
+    expect(() => toggle()!.click()).not.toThrow()
+  })
+
+  // Verified against a real print engine: without this rule Chromium tore a stay
+  // across the page edge, the check-in time on one sheet and the hotel name on
+  // the next. Place and note cards already carried it.
+  it('FE-PDF-BREAK-007: a stay may not be split by a page edge', async () => {
+    await downloadTripPDF(twoDays)
+    const html = getIframe()!.srcdoc
+    const rule = html.slice(html.indexOf('.day-accommodation {'))
+    expect(rule.slice(0, rule.indexOf('}'))).toContain('break-inside: avoid')
+  })
+
+  // Measured against Chromium: with the days flowing, a header bar could be left
+  // at the foot of a sheet while its content moved on, and the repeat from #1471
+  // then read as the same day printed twice. break-after on the thead and
+  // break-before on the tbody are both ignored; holding the day together is what
+  // works, and a day too long for one page still breaks and still repeats.
+  it('FE-PDF-BREAK-008: a flowing day is held together so its header is never stranded', async () => {
+    localStorage.setItem('trek_pdf_page_break_per_day', '0')
+    await downloadTripPDF(twoDays)
+    const html = getIframe()!.srcdoc
+
+    expect(html).toContain('.pdf-flow .day-section { break-inside: avoid; page-break-inside: avoid; }')
+    // Scoped: a day that starts its own page cannot strand a header.
+    const at = html.indexOf('.day-section { break-inside: avoid')
+    expect(html.slice(at - 10, at)).toContain('.pdf-flow ')
+  })
+})
