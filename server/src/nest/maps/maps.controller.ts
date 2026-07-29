@@ -24,8 +24,7 @@ import type { User } from '../../types';
 import { MapsService } from './maps.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-
-type LocationBias = { low: { lat: number; lng: number }; high: { lat: number; lng: number } };
+import { MapsSearchDto, MapsAutocompleteDto, MapsResolveUrlDto } from './maps.dto';
 
 /** Maps a thrown service error to the same status + { error } body Express sent. */
 function toHttpException(err: unknown, fallbackMessage: string, defaultStatus: number): HttpException {
@@ -38,11 +37,20 @@ function toHttpException(err: unknown, fallbackMessage: string, defaultStatus: n
  * /api/maps — place search, autocomplete, details, photos, reverse geocoding and
  * Google-Maps-URL resolution.
  *
- * Behaviour is byte-identical to the legacy Express route (server/src/routes/
- * maps.ts): same auth, same bespoke 400 validation messages, the same
- * per-endpoint kill-switch short-circuits, the same error status/body mapping,
- * and the same diagnostic logging. The SSRF guard lives in the underlying
+ * Behaviour matches the legacy Express route (server/src/routes/maps.ts): same
+ * auth, same per-endpoint kill-switch short-circuits, same error status/body
+ * mapping, same diagnostic logging, and the same bespoke 400s for non-body
+ * validation (reverse's query params). The SSRF guard lives in the underlying
  * service and is reused unchanged.
+ *
+ * Bodies are validated against the @trek/shared maps schemas via maps.dto.ts
+ * (global ZodValidationPipe). This replaced the legacy bespoke 400s ('Search
+ * query is required', 'Input is required', 'Input too long (max 200 chars)',
+ * 'URL is required', the two 'Invalid locationBias: …' messages) with the
+ * pipe's uniform { error: 'field: message; …' } envelope — and the pipe runs
+ * before the handler, so an invalid autocomplete body now 400s even while the
+ * autocomplete kill-switch is on (the legacy route answered the disabled
+ * envelope first).
  */
 @Controller('api/maps')
 @UseGuards(JwtAuthGuard)
@@ -53,19 +61,11 @@ export class MapsController {
   @HttpCode(200) // Express answers with res.json (200); Nest would otherwise default POST to 201.
   async search(
     @CurrentUser() user: User,
-    @Body('query') query: unknown,
+    @Body() body: MapsSearchDto,
     @Query('lang') lang?: string,
-    @Body('locationBias') locationBias?: { lat: number; lng: number; radius?: number },
   ): Promise<MapsSearchResult> {
-    if (!query) {
-      throw new HttpException({ error: 'Search query is required' }, 400);
-    }
-    // Optional bias toward a coordinate (lat/lng[/radius]); improves foreign-region queries.
-    if (locationBias && !(Number.isFinite(locationBias.lat) && Number.isFinite(locationBias.lng))) {
-      throw new HttpException({ error: 'Invalid locationBias: lat and lng must be finite numbers' }, 400);
-    }
     try {
-      return await this.maps.search(user.id, query as string, lang, locationBias);
+      return await this.maps.search(user.id, body.query, lang, body.locationBias);
     } catch (err: unknown) {
       console.error('Maps search error:', err);
       throw toHttpException(err, 'Search error', 500);
@@ -98,29 +98,13 @@ export class MapsController {
   @HttpCode(200)
   async autocomplete(
     @CurrentUser() user: User,
-    @Body('input') input: unknown,
-    @Body('lang') lang?: string,
-    @Body('locationBias') locationBias?: LocationBias,
+    @Body() body: MapsAutocompleteDto,
   ): Promise<MapsAutocompleteResult | { suggestions: never[]; source: string }> {
     if (this.maps.autocompleteDisabled()) {
       return { suggestions: [], source: 'disabled' };
     }
-    if (!input || typeof input !== 'string') {
-      throw new HttpException({ error: 'Input is required' }, 400);
-    }
-    if (input.length > 200) {
-      throw new HttpException({ error: 'Input too long (max 200 chars)' }, 400);
-    }
-    if (locationBias) {
-      const { low, high } = locationBias;
-      if (!low || !high
-        || !Number.isFinite(low.lat) || !Number.isFinite(low.lng)
-        || !Number.isFinite(high.lat) || !Number.isFinite(high.lng)) {
-        throw new HttpException({ error: 'Invalid locationBias: low and high must have finite lat and lng' }, 400);
-      }
-    }
     try {
-      return await this.maps.autocomplete(user.id, input, lang, locationBias);
+      return await this.maps.autocomplete(user.id, body.input, body.lang, body.locationBias);
     } catch (err: unknown) {
       console.error('Maps autocomplete error:', err);
       throw toHttpException(err, 'Autocomplete error', 500);
@@ -226,12 +210,9 @@ export class MapsController {
 
   @Post('resolve-url')
   @HttpCode(200)
-  async resolveUrl(@Body('url') url: unknown): Promise<MapsResolveUrlResult> {
-    if (!url || typeof url !== 'string') {
-      throw new HttpException({ error: 'URL is required' }, 400);
-    }
+  async resolveUrl(@Body() body: MapsResolveUrlDto): Promise<MapsResolveUrlResult> {
     try {
-      return await this.maps.resolveUrl(url);
+      return await this.maps.resolveUrl(body.url);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to resolve URL';
       console.error('[Maps] URL resolve error:', message);

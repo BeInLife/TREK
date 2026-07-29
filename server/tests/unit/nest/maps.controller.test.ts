@@ -36,46 +36,36 @@ beforeEach(() => {
 });
 
 describe('MapsController (parity with the legacy /api/maps route)', () => {
+  // Body validation (required query/input/url, locationBias shapes, input
+  // length) moved to the @trek/shared maps schemas enforced by the global
+  // ZodValidationPipe — the pipe's uniform envelope replaced the legacy
+  // bespoke 400 strings, and the 400-status contract is pinned by the
+  // integration/e2e suites. These unit cases cover the handler bodies only.
   describe('POST /search', () => {
-    it('400 when query is missing', async () => {
-      expect(await thrown(() => makeController({}).search(user, undefined))).toEqual({
-        status: 400, body: { error: 'Search query is required' },
-      });
-    });
-
     it('returns the service result', async () => {
       const search = vi.fn().mockResolvedValue({ places: [], source: 'osm' });
-      const res = await makeController({ search }).search(user, 'berlin', 'de');
+      const res = await makeController({ search }).search(user, { query: 'berlin' }, 'de');
       expect(res).toEqual({ places: [], source: 'osm' });
       expect(search).toHaveBeenCalledWith(3, 'berlin', 'de', undefined);
-    });
-
-    it('400 on a malformed locationBias (non-finite lat/lng)', async () => {
-      const search = vi.fn();
-      const bad = { lat: NaN, lng: 2 };
-      expect(await thrown(() => makeController({ search }).search(user, 'x', 'de', bad))).toEqual({
-        status: 400, body: { error: 'Invalid locationBias: lat and lng must be finite numbers' },
-      });
-      expect(search).not.toHaveBeenCalled();
     });
 
     it('forwards a valid locationBias to the service', async () => {
       const search = vi.fn().mockResolvedValue({ places: [], source: 'osm' });
       const bias = { lat: 1, lng: 2, radius: 5000 };
-      await makeController({ search }).search(user, 'x', 'de', bias);
+      await makeController({ search }).search(user, { query: 'x', locationBias: bias }, 'de');
       expect(search).toHaveBeenCalledWith(3, 'x', 'de', bias);
     });
 
     it('maps a service error to its status + message', async () => {
       const search = vi.fn().mockRejectedValue(withError(429, 'Rate limited'));
-      expect(await thrown(() => makeController({ search }).search(user, 'x'))).toEqual({
+      expect(await thrown(() => makeController({ search }).search(user, { query: 'x' }))).toEqual({
         status: 429, body: { error: 'Rate limited' },
       });
     });
 
     it('defaults a non-Error rejection to 500 + the fallback message', async () => {
       const search = vi.fn().mockRejectedValue('boom');
-      expect(await thrown(() => makeController({ search }).search(user, 'x'))).toEqual({
+      expect(await thrown(() => makeController({ search }).search(user, { query: 'x' }))).toEqual({
         status: 500, body: { error: 'Search error' },
       });
     });
@@ -116,51 +106,22 @@ describe('MapsController (parity with the legacy /api/maps route)', () => {
   describe('POST /autocomplete', () => {
     it('returns the disabled envelope when the kill-switch is off', async () => {
       const autocomplete = vi.fn();
-      const res = await makeController({ autocompleteDisabled: () => true, autocomplete }).autocomplete(user, 'be');
+      const res = await makeController({ autocompleteDisabled: () => true, autocomplete }).autocomplete(user, { input: 'be' });
       expect(res).toEqual({ suggestions: [], source: 'disabled' });
       expect(autocomplete).not.toHaveBeenCalled();
-    });
-
-    it('400 when input is missing or not a string', async () => {
-      const c = makeController({ autocompleteDisabled: () => false });
-      expect(await thrown(() => c.autocomplete(user, undefined))).toEqual({ status: 400, body: { error: 'Input is required' } });
-      expect(await thrown(() => c.autocomplete(user, 123 as unknown as string))).toEqual({ status: 400, body: { error: 'Input is required' } });
-    });
-
-    it('400 when input is too long', async () => {
-      const c = makeController({ autocompleteDisabled: () => false });
-      expect(await thrown(() => c.autocomplete(user, 'x'.repeat(201)))).toEqual({
-        status: 400, body: { error: 'Input too long (max 200 chars)' },
-      });
-    });
-
-    it('400 on a malformed locationBias', async () => {
-      const c = makeController({ autocompleteDisabled: () => false });
-      const bad = { low: { lat: 1, lng: NaN }, high: { lat: 2, lng: 3 } };
-      expect(await thrown(() => c.autocomplete(user, 'be', undefined, bad))).toEqual({
-        status: 400, body: { error: 'Invalid locationBias: low and high must have finite lat and lng' },
-      });
-    });
-
-    it('400 when locationBias is missing the high corner', async () => {
-      const c = makeController({ autocompleteDisabled: () => false });
-      const bad = { low: { lat: 1, lng: 2 } } as never;
-      expect(await thrown(() => c.autocomplete(user, 'be', undefined, bad))).toEqual({
-        status: 400, body: { error: 'Invalid locationBias: low and high must have finite lat and lng' },
-      });
     });
 
     it('delegates a valid request', async () => {
       const autocomplete = vi.fn().mockResolvedValue({ suggestions: [], source: 'osm' });
       const bias = { low: { lat: 1, lng: 2 }, high: { lat: 3, lng: 4 } };
-      await makeController({ autocompleteDisabled: () => false, autocomplete }).autocomplete(user, 'be', 'en', bias);
+      await makeController({ autocompleteDisabled: () => false, autocomplete }).autocomplete(user, { input: 'be', lang: 'en', locationBias: bias });
       expect(autocomplete).toHaveBeenCalledWith(3, 'be', 'en', bias);
     });
 
     it('maps a service error', async () => {
       const autocomplete = vi.fn().mockRejectedValue(withError(503, 'Upstream down'));
       const c = makeController({ autocompleteDisabled: () => false, autocomplete });
-      expect(await thrown(() => c.autocomplete(user, 'be'))).toEqual({
+      expect(await thrown(() => c.autocomplete(user, { input: 'be' }))).toEqual({
         status: 503, body: { error: 'Upstream down' },
       });
     });
@@ -329,38 +290,28 @@ describe('MapsController (parity with the legacy /api/maps route)', () => {
   });
 
   describe('POST /resolve-url', () => {
-    it('400 when url missing or not a string', async () => {
-      expect(await thrown(() => makeController({}).resolveUrl(undefined))).toEqual({ status: 400, body: { error: 'URL is required' } });
-    });
-
     it('returns the resolved coordinates', async () => {
       const resolveUrl = vi.fn().mockResolvedValue({ lat: 1, lng: 2, name: null, address: null });
-      expect(await makeController({ resolveUrl }).resolveUrl('https://maps.app.goo.gl/x')).toEqual({ lat: 1, lng: 2, name: null, address: null });
-    });
-
-    it('400 when url is not a string', async () => {
-      expect(await thrown(() => makeController({}).resolveUrl(42 as unknown as string))).toEqual({
-        status: 400, body: { error: 'URL is required' },
-      });
+      expect(await makeController({ resolveUrl }).resolveUrl({ url: 'https://maps.app.goo.gl/x' })).toEqual({ lat: 1, lng: 2, name: null, address: null });
     });
 
     it('maps a service error, defaulting to 400', async () => {
       const resolveUrl = vi.fn().mockRejectedValue(new Error('Failed to resolve URL'));
-      expect(await thrown(() => makeController({ resolveUrl }).resolveUrl('bad'))).toEqual({
+      expect(await thrown(() => makeController({ resolveUrl }).resolveUrl({ url: 'bad' }))).toEqual({
         status: 400, body: { error: 'Failed to resolve URL' },
       });
     });
 
     it('honours an explicit status on the thrown error', async () => {
       const resolveUrl = vi.fn().mockRejectedValue(withError(422, 'Unsupported link'));
-      expect(await thrown(() => makeController({ resolveUrl }).resolveUrl('bad'))).toEqual({
+      expect(await thrown(() => makeController({ resolveUrl }).resolveUrl({ url: 'bad' }))).toEqual({
         status: 422, body: { error: 'Unsupported link' },
       });
     });
 
     it('falls back to the default message when a non-Error is thrown', async () => {
       const resolveUrl = vi.fn().mockRejectedValue('nope');
-      expect(await thrown(() => makeController({ resolveUrl }).resolveUrl('bad'))).toEqual({
+      expect(await thrown(() => makeController({ resolveUrl }).resolveUrl({ url: 'bad' }))).toEqual({
         status: 400, body: { error: 'Failed to resolve URL' },
       });
     });
