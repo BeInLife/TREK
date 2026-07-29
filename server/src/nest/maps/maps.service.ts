@@ -334,19 +334,25 @@ export class MapsService {
       );
     }
     const data = (await response.json()) as NominatimResult[];
-    return data.map((item) => ({
-      google_place_id: null,
-      google_ftid: null,
-      osm_id: `${item.osm_type}:${item.osm_id}`,
-      name: item.name || item.display_name?.split(',')[0] || '',
-      address: item.display_name || '',
-      lat: parseFloat(item.lat) || null,
-      lng: parseFloat(item.lon) || null,
-      rating: null,
-      website: null,
-      phone: null,
-      source: 'openstreetmap',
-    }));
+    return data.map((item) => {
+      // Number.isFinite, not `|| null`: a place on the equator or prime
+      // meridian has a legitimate 0 coordinate.
+      const lat = parseFloat(item.lat);
+      const lng = parseFloat(item.lon);
+      return {
+        google_place_id: null,
+        google_ftid: null,
+        osm_id: `${item.osm_type}:${item.osm_id}`,
+        name: item.name || item.display_name?.split(',')[0] || '',
+        address: item.display_name || '',
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
+        rating: null,
+        website: null,
+        phone: null,
+        source: 'openstreetmap',
+      };
+    });
   }
 
   // ── Nominatim lookup (by OSM ID) ───────────────────────────────────────────
@@ -375,11 +381,13 @@ export class MapsService {
       const data = (await res.json()) as NominatimResult[];
       const item = data[0];
       if (!item) return null;
+      const lat = parseFloat(item.lat);
+      const lng = parseFloat(item.lon);
       return {
         name: item.name || item.display_name?.split(',')[0] || '',
         address: item.display_name || '',
-        lat: parseFloat(item.lat) || null,
-        lng: parseFloat(item.lon) || null,
+        lat: Number.isFinite(lat) ? lat : null,
+        lng: Number.isFinite(lng) ? lng : null,
       };
     } catch {
       return null;
@@ -631,8 +639,9 @@ export class MapsService {
       google_ftid: googleFtidFromMapsUrl(p.googleMapsUri),
       name: p.displayName?.text || '',
       address: p.formattedAddress || '',
-      lat: p.location?.latitude || null,
-      lng: p.location?.longitude || null,
+      // `?? null`, not `|| null`: 0 is a real coordinate (equator / prime meridian).
+      lat: p.location?.latitude ?? null,
+      lng: p.location?.longitude ?? null,
       rating: p.rating || null,
       website: p.websiteUri || null,
       phone: p.nationalPhoneNumber || null,
@@ -739,25 +748,27 @@ export class MapsService {
       const element = await this.fetchOverpassDetails(osmType, osmId);
       const details = buildOsmDetails(element?.tags || {}, osmType, osmId);
 
-      // Fetch Nominatim only when Overpass lacks coordinates or address
-      const d = details as Record<string, unknown>;
-      const needsNominatim = !d.lat || !d.lng || !d.address;
-      const nominatim = needsNominatim ? await this.lookupNominatim(osmType, osmId, lang) : null;
+      // buildOsmDetails never yields name/address/coordinates — Nominatim is
+      // always the source for those (Overpass contributes the tag-derived rest).
+      const nominatim = await this.lookupNominatim(osmType, osmId, lang);
 
       return {
         place: {
           ...details,
-          name: (d.name as string) || nominatim?.name || element?.tags?.name || '',
-          address: (d.address as string) || nominatim?.address || '',
-          lat: d.lat ?? nominatim?.lat ?? null,
-          lng: d.lng ?? nominatim?.lng ?? null,
+          name: nominatim?.name || element?.tags?.name || '',
+          address: nominatim?.address || '',
+          lat: nominatim?.lat ?? null,
+          lng: nominatim?.lng ?? null,
           osm_id: placeId,
         },
       };
     }
 
     // Google details
-    const langKey = toApiLang(lang, 'de');
+    // 'en' default, aligned with search/autocomplete and the MCP tools' ?? 'en'
+    // (the 'de' the legacy service defaulted to was a development leftover;
+    // cache rows keyed 'de' for lang-less callers go cold once — 7-day TTL).
+    const langKey = toApiLang(lang);
     const apiKey = this.getMapsKey(userId);
     if (!apiKey) {
       throw Object.assign(new Error('Google Maps API key not configured'), { status: 400 });
@@ -798,8 +809,9 @@ export class MapsService {
       google_ftid: googleFtidFromMapsUrl(data.googleMapsUri),
       name: data.displayName?.text || '',
       address: data.formattedAddress || '',
-      lat: data.location?.latitude || null,
-      lng: data.location?.longitude || null,
+      // `?? null`, not `|| null`: 0 is a real coordinate (equator / prime meridian).
+      lat: data.location?.latitude ?? null,
+      lng: data.location?.longitude ?? null,
       rating: data.rating || null,
       rating_count: data.userRatingCount || null,
       website: data.websiteUri || null,
@@ -848,7 +860,7 @@ export class MapsService {
       return OSM_PLACE_ID.test(placeId) ? this.getPlaceDetails(userId, placeId, lang) : { place: null };
     }
 
-    const langKey = toApiLang(lang, 'de');
+    const langKey = toApiLang(lang); // 'en' default — see getPlaceDetails
     const apiKey = this.getMapsKey(userId);
     if (!apiKey) throw Object.assign(new Error('Google Maps API key not configured'), { status: 400 });
 
@@ -888,8 +900,9 @@ export class MapsService {
       google_ftid: googleFtidFromMapsUrl(data.googleMapsUri),
       name: data.displayName?.text || '',
       address: data.formattedAddress || '',
-      lat: data.location?.latitude || null,
-      lng: data.location?.longitude || null,
+      // `?? null`, not `|| null`: 0 is a real coordinate (equator / prime meridian).
+      lat: data.location?.latitude ?? null,
+      lng: data.location?.longitude ?? null,
       rating: data.rating || null,
       rating_count: data.userRatingCount || null,
       website: data.websiteUri || null,
@@ -1167,7 +1180,7 @@ export class MapsService {
     if (!coords) {
       try {
         const pageRes = await followRedirects(resolvedUrl, {
-          headers: { 'User-Agent': 'TREK-Travel-Planner/1.0' },
+          headers: { 'User-Agent': UA },
         });
         coords = extractCoords(await pageRes.text());
       } catch (err) {
@@ -1188,16 +1201,16 @@ export class MapsService {
     }
     const { lat, lng } = coords;
 
-    // Reverse geocode to get address
+    // Reverse geocode to get address. A non-ok answer (Nominatim 5xx/429) must
+    // not fail the whole resolution — the coordinates are already extracted, so
+    // fall back to the URL-derived name and a null address.
     const nominatimRes = await fetch(
       `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json&addressdetails=1`,
-      { headers: { 'User-Agent': 'TREK-Travel-Planner/1.0' }, signal: AbortSignal.timeout(8000) },
+      { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) },
     );
-    const nominatim = (await nominatimRes.json()) as {
-      display_name?: string;
-      name?: string;
-      address?: Record<string, string>;
-    };
+    const nominatim: { display_name?: string; name?: string; address?: Record<string, string> } = nominatimRes.ok
+      ? await nominatimRes.json()
+      : {};
 
     const name = placeName || nominatim.name || nominatim.address?.tourism || nominatim.address?.building || null;
     const address = nominatim.display_name || null;

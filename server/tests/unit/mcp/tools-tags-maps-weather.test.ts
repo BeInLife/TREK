@@ -51,9 +51,10 @@ import { MapsService } from '../../../src/nest/maps/maps.service';
 // test registry builds a real MapsService over the mocked db proxy, so stub the
 // provider methods on the prototype (no auto-restore in the vitest config —
 // these survive across tests, exactly like the old module mock did).
-const getPlaceDetailsSpy = vi
-  .spyOn(MapsService.prototype, 'getPlaceDetails')
-  .mockResolvedValue({ name: 'Eiffel Tower', address: 'Paris' } as never);
+vi.spyOn(MapsService.prototype, 'getPlaceDetails').mockResolvedValue({
+  name: 'Eiffel Tower',
+  address: 'Paris',
+} as never);
 vi.spyOn(MapsService.prototype, 'reverseGeocode').mockResolvedValue({ name: 'Paris', address: 'France' });
 vi.spyOn(MapsService.prototype, 'resolveGoogleMapsUrl').mockResolvedValue({
   lat: 48.8566,
@@ -311,17 +312,9 @@ describe('Tool: get_place_details', () => {
     });
   });
 
-  it('returns isError when service returns null', async () => {
-    getPlaceDetailsSpy.mockResolvedValueOnce(null as never);
-    const { user } = createUser(testDb);
-    await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({
-        name: 'get_place_details',
-        arguments: { placeId: 'nonexistent-place-id' },
-      });
-      expect(result.isError).toBe(true);
-    });
-  });
+  // The former "isError when service returns null" case pinned a dead branch —
+  // MapsService.getPlaceDetails throws or returns an object, never null — and
+  // died with the guard in the fix(maps) quirk pass.
 });
 
 // ---------------------------------------------------------------------------

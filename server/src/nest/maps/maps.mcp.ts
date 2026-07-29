@@ -1,4 +1,4 @@
-import { McpController, Tool, TOOL_ANNOTATIONS_READONLY, errorResult, ok, type McpContext } from '@trek/nest-mcp';
+import { McpController, Tool, TOOL_ANNOTATIONS_READONLY, ok, type McpContext } from '@trek/nest-mcp';
 import { z } from 'zod';
 import { MapsService } from './maps.service';
 
@@ -26,7 +26,6 @@ export class MapsMcp {
   })
   async getPlaceDetails({ placeId, lang }: { placeId: string; lang?: string }, ctx: McpContext) {
     const details = await this.maps.getPlaceDetails(ctx.userId, placeId, lang ?? 'en');
-    if (!details) return errorResult('Place not found or maps service not configured.');
     return ok({ details });
   }
 
@@ -43,7 +42,6 @@ export class MapsMcp {
   })
   async reverseGeocode({ lat, lng, lang }: { lat: number; lng: number; lang?: string }, _ctx: McpContext) {
     const result = await this.maps.reverseGeocode(String(lat), String(lng), lang ?? 'en');
-    if (!result) return errorResult('Reverse geocode failed or maps service not configured.');
     return ok(result);
   }
 
@@ -58,7 +56,6 @@ export class MapsMcp {
   })
   async resolveMapsUrl({ url }: { url: string }, _ctx: McpContext) {
     const result = await this.maps.resolveGoogleMapsUrl(url);
-    if (!result) return errorResult('Could not resolve URL or maps service not configured.');
     return ok(result);
   }
 }

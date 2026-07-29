@@ -1,5 +1,5 @@
 /**
- * Unit tests for the DI-native MapsService — MAPS-001 through MAPS-106.
+ * Unit tests for the DI-native MapsService — MAPS-001 through MAPS-110.
  * Moved 1:1 from the legacy tests/unit/services/mapsService.test.ts when the
  * maps domain folded into src/nest/maps/ (case IDs preserved; the wrapper
  * suite's delegation cases died with the delegation itself — the kill-switch,
@@ -572,6 +572,19 @@ describe('resolveGoogleMapsUrl coordinate extraction (ReDoS guards)', () => {
     const result = await svc.resolveGoogleMapsUrl('https://www.google.com/maps/@48.8606,2.3376,15z');
     expect(result.name).toBe('Louvre Museum');
   });
+
+  it('MAPS-110: a non-ok reverse-geocode answer degrades to URL-derived values instead of failing', async () => {
+    // The coordinates are already extracted from the URL — a Nominatim 5xx must
+    // not turn the resolution into a 400.
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }));
+    const result = await svc.resolveGoogleMapsUrl(
+      'https://www.google.com/maps/place/Eiffel+Tower/@48.8584,2.2945,15z',
+    );
+    expect(result.lat).toBeCloseTo(48.8584, 3);
+    expect(result.lng).toBeCloseTo(2.2945, 3);
+    expect(result.name).toBe('Eiffel Tower');
+    expect(result.address).toBeNull();
+  });
 });
 
 // ── searchNominatim (fetch-dependent) ────────────────────────────────────────
@@ -621,6 +634,24 @@ describe('searchNominatim (fetch stubbed)', () => {
     );
     const results = await svc.searchNominatim('London');
     expect((results[0] as any).name).toBe('London');
+  });
+
+  it('MAPS-108: keeps "0" coordinates and nulls only unparseable ones', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [
+          { osm_type: 'node', osm_id: '3', lat: '0', lon: '0', name: 'Null Island' },
+          { osm_type: 'node', osm_id: '4', lat: 'not-a-number', lon: '', name: 'Broken' },
+        ],
+      }),
+    );
+    const results = await svc.searchNominatim('null island');
+    expect((results[0] as any).lat).toBe(0);
+    expect((results[0] as any).lng).toBe(0);
+    expect((results[1] as any).lat).toBeNull();
+    expect((results[1] as any).lng).toBeNull();
   });
 });
 
@@ -1068,6 +1099,23 @@ describe('searchPlaces (fetch stubbed)', () => {
     expect(place.website).toBeNull();
     expect(place.phone).toBeNull();
   });
+
+  it('MAPS-107: keeps 0 coordinates (equator / prime meridian) instead of nulling them', async () => {
+    mockDbGet.mockReturnValueOnce({ maps_api_key: 'some-key' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          places: [{ id: 'gid-null-island', displayName: { text: 'Null Island' }, location: { latitude: 0, longitude: 0 } }],
+        }),
+      }),
+    );
+    const result = await svc.searchPlaces(1, 'null island');
+    const place = result.places[0] as any;
+    expect(place.lat).toBe(0);
+    expect(place.lng).toBe(0);
+  });
 });
 
 // ── autocompletePlaces (fetch stubbed) ──────────────────────────────────────
@@ -1408,6 +1456,23 @@ describe('getPlaceDetails (fetch stubbed)', () => {
     // A code that is already valid passes through unchanged.
     await svc.getPlaceDetails(1, 'ChIJ-de', 'de');
     expect(String(fetchMock.mock.calls[2][0])).toContain('languageCode=de');
+  });
+
+  it('MAPS-109: defaults to English when no language is given (the legacy de default was a leftover)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ id: 'ChIJ1', displayName: { text: 'X' } }),
+    });
+    mockDbGet.mockReturnValue({ maps_api_key: 'gkey' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await svc.getPlaceDetails(1, 'ChIJ-nolang');
+    expect(String(fetchMock.mock.calls[0][0])).toContain('languageCode=en');
+
+    // refresh=true skips the expanded-cache read (the blanket mockDbGet return
+    // would otherwise be mistaken for a cached row).
+    await svc.getPlaceDetailsExpanded(1, 'ChIJ-nolang-exp', undefined, true);
+    expect(String(fetchMock.mock.calls[1][0])).toContain('languageCode=en');
   });
 
   it('MAPS-041c: throws with status when Google API returns non-ok response', async () => {
