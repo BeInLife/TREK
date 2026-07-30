@@ -914,8 +914,22 @@ export class PlacesService {
         return { error: 'Failed to fetch list from Naver Maps', status: 502 } as const;
       }
 
+      // Same cap as the Google import: the URL is attacker-influenced via the
+      // folder id, and this pager buffers a fresh body on every iteration, so an
+      // uncapped read is worse here than there. The declared length is checked
+      // before the read; the post-read check covers a chunked response that
+      // carries no content-length at all.
+      const declared = Number(apiRes.headers?.get('content-length') ?? 0);
+      if (declared > MAX_LIST_RESPONSE_BYTES) {
+        return { error: 'Failed to fetch list from Naver Maps', status: 502 } as const;
+      }
+
       try {
-        const data = await apiRes.json() as {
+        const rawText = await apiRes.text();
+        if (rawText.length > MAX_LIST_RESPONSE_BYTES) {
+          return { error: 'Failed to fetch list from Naver Maps', status: 502 } as const;
+        }
+        const data = JSON.parse(rawText) as {
           folder?: { bookmarkCount?: number; name?: string };
           bookmarkList?: Record<string, unknown>[];
         };

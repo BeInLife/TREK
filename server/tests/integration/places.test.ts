@@ -549,7 +549,7 @@ describe('Naver list import', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
+        text: async () => JSON.stringify({
           folder: { name: 'Seoul Food', bookmarkCount: 22 },
           bookmarkList: [
             { name: 'SINSAJEON', px: 127.0226195, py: 37.5186363, memo: null, address: 'Sinsa-dong Seoul' },
@@ -559,7 +559,7 @@ describe('Naver list import', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({
+        text: async () => JSON.stringify({
           folder: { name: 'Seoul Food', bookmarkCount: 22 },
           bookmarkList: [
             { name: 'WAIKIKI MARKET', px: 126.8886523, py: 37.5589079, memo: null, address: 'Mapo-gu Seoul' },
@@ -633,7 +633,7 @@ describe('Naver list import', () => {
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ folder: { name: 'Empty List', bookmarkCount: 0 }, bookmarkList: [] }),
+      text: async () => JSON.stringify({ folder: { name: 'Empty List', bookmarkCount: 0 }, bookmarkList: [] }),
     });
 
     vi.stubGlobal('fetch', fetchMock);
@@ -656,7 +656,7 @@ describe('Naver list import', () => {
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => ({
+      text: async () => JSON.stringify({
         folder: { name: 'No Coords', bookmarkCount: 2 },
         bookmarkList: [
           { name: 'Place A', px: undefined, py: undefined },
@@ -685,7 +685,7 @@ describe('Naver list import', () => {
 
     const fetchMock = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: async () => ({
+      text: async () => JSON.stringify({
         folder: { name: 'Seoul', bookmarkCount: 1 },
         bookmarkList: [{ name: 'Gyeongbokgung', px: 126.9770, py: 37.5796, memo: null, address: 'Sejongno Seoul' }],
       }),

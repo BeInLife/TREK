@@ -1226,6 +1226,18 @@ describe('importGoogleList provider payload', () => {
     expect(result).toEqual({ error: 'Invalid list data received from Google Maps', status: 400 });
   });
 
+  it('PLACE-SVC-073b — an over-large chunked response (no content-length) is refused after the read', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => null }, // chunked: the declared check cannot help
+      text: async () => 'x'.repeat(9 * 1024 * 1024),
+    }));
+    const result = await svc.importGoogleList(String(trip.id), 'https://www.google.com/maps/placelists/list/ABC123DEF456') as any;
+    expect(result).toEqual({ error: 'Failed to fetch list from Google Maps', status: 502 });
+  });
+
   it('PLACE-SVC-073 — an over-large declared response is refused before it is read', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
@@ -1238,5 +1250,65 @@ describe('importGoogleList provider payload', () => {
     const result = await svc.importGoogleList(String(trip.id), 'https://www.google.com/maps/placelists/list/ABC123DEF456') as any;
     expect(result).toEqual({ error: 'Failed to fetch list from Google Maps', status: 502 });
     expect(text).not.toHaveBeenCalled();
+  });
+});
+
+// ── Provider-payload hardening for the Naver list import (#1745) ──────────────
+
+describe('importNaverList provider payload', () => {
+  const FOLDER_URL = 'https://map.naver.com/v5/favorite/myPlace/folder/abc123';
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('PLACE-SVC-074 — an over-large declared page is refused before it is read', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const text = vi.fn();
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: (h: string) => (h.toLowerCase() === 'content-length' ? String(20 * 1024 * 1024) : null) },
+      text,
+    }));
+    const result = await svc.importNaverList(String(trip.id), FOLDER_URL) as any;
+    expect(result).toEqual({ error: 'Failed to fetch list from Naver Maps', status: 502 });
+    expect(text).not.toHaveBeenCalled();
+  });
+
+  it('PLACE-SVC-075 — an over-large chunked page (no content-length) is refused after the read', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      headers: { get: () => null }, // chunked: the declared check cannot help
+      text: async () => 'x'.repeat(9 * 1024 * 1024),
+    }));
+    const result = await svc.importNaverList(String(trip.id), FOLDER_URL) as any;
+    expect(result).toEqual({ error: 'Failed to fetch list from Naver Maps', status: 502 });
+  });
+
+  it('PLACE-SVC-076 — a malformed page body is still the documented 400', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, text: async () => 'not-json-at-all' }));
+    const result = await svc.importNaverList(String(trip.id), FOLDER_URL) as any;
+    expect(result).toEqual({ error: 'Invalid list data received from Naver Maps', status: 400 });
+  });
+
+  it('PLACE-SVC-077 — an ordinary page still imports', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({
+        folder: { name: 'Seoul', bookmarkCount: 1 },
+        bookmarkList: [{ name: 'Gyeongbokgung', px: 126.977, py: 37.5796, memo: null, address: 'Sejongno' }],
+      }),
+    }));
+    const result = await svc.importNaverList(String(trip.id), FOLDER_URL) as any;
+    expect(result.listName).toBe('Seoul');
+    expect(result.places).toHaveLength(1);
+    expect(result.places[0].name).toBe('Gyeongbokgung');
   });
 });
