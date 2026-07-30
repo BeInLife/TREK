@@ -5,7 +5,7 @@
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
  * DI-native domains (budget/exchange-rates/reservations/tags/categories/todo/
  * packing/day-notes/days/assignments/oauth/llm-config/files/collab/vacay/
- * permissions)
+ * permissions/trips/places)
  * are constructor-injected stubs; legacy services/* domains stay path-mocked
  * until their own DI migration lands.
  */
@@ -75,17 +75,22 @@ const permissionsStub = { checkPermission } as unknown as PermissionsService;
 const exchangeRatesStub = {
   getRates: vi.fn(async (base: string) => ({ [base]: 1, USD: 1.08, GBP: 0.85 })),
 } as unknown as ExchangeRatesService;
-vi.mock('../../../src/services/placeService', () => ({
-  createPlace: vi.fn((tid: string, body: Record<string, unknown>) => ({ id: 10, trip_id: Number(tid), ...body })),
-  updatePlace: vi.fn((_tid: string, pid: string) => (pid === '99' ? null : { id: Number(pid) })),
-  deletePlace: vi.fn((_tid: string, pid: string) => pid !== '99'),
+// Places are a constructor-injected stub since the place fold (same behaviors
+// as the old services/placeService path mock, mapped onto the PlacesService
+// method names). `remove` is asserted by invocation order against the journey
+// hook, so it stays a vi.fn.
+const removePlaceStub = vi.fn((_tid: string, pid: string) => pid !== '99');
+const placesStub = {
+  create: vi.fn((tid: string, body: Record<string, unknown>) => ({ id: 10, trip_id: Number(tid), ...body })),
+  update: vi.fn((_tid: string, pid: string) => (pid === '99' ? null : { id: Number(pid) })),
+  remove: removePlaceStub,
   // Trip-scoped read the delete path uses to reject a foreign id before the
   // journey hook runs — place 99 belongs to another trip.
-  getPlace: vi.fn((_tid: string, pid: string) => (pid === '99' ? null : { id: Number(pid) })),
-  // trips.service (loaded for real since the trip fold) imports listPlaces for
-  // its offline bundle — the mock must carry every named export it pulls.
-  listPlaces: vi.fn(() => []),
-}));
+  get: vi.fn((_tid: string, pid: string) => (pid === '99' ? null : { id: Number(pid) })),
+  // trips.service (loaded for real since the trip fold) injects this for its
+  // offline bundle — the stub must carry every method it calls.
+  list: vi.fn(() => []),
+} as unknown as PlacesService;
 // Days are a constructor-injected stub (same behaviors as the old path mock,
 // mapped onto the DaysService method names).
 const daysStub = {
@@ -297,7 +302,6 @@ import { PluginHostDepsFactory, type PluginCallRouter } from '../../../src/nest/
 import { getPluginDataDb, closePluginDataDb } from '../../../src/nest/plugins/host/plugin-host-state';
 import { db as mockDb } from '../../../src/db/database';
 import { onPlaceCreated, onPlaceUpdated, onPlaceDeleted } from '../../../src/services/journeyService';
-import { deletePlace as deletePlaceSvc } from '../../../src/services/placeService';
 import type { BudgetService } from '../../../src/nest/budget/budget.service';
 import type { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import type { ReservationsService } from '../../../src/nest/reservations/reservations.service';
@@ -314,6 +318,7 @@ import type { FilesService } from '../../../src/nest/files/files.service';
 import type { CollabService } from '../../../src/nest/collab/collab.service';
 import type { VacayService } from '../../../src/nest/vacay/vacay.service';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
+import type { PlacesService } from '../../../src/nest/places/places.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { NotFoundError, ValidationError } from '../../../src/nest/trips/trips.service';
@@ -336,7 +341,7 @@ const tripsStub = {
   list: () => [{ id: 1 }],
   removeMember: vi.fn(),
 } as unknown as import('../../../src/nest/trips/trips.service').TripsService;
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub, addonsStub, new RealtimeService(), tripsStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub, addonsStub, new RealtimeService(), tripsStub, placesStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 
@@ -443,7 +448,7 @@ describe('host-deps factory — planner write + metadata deps', () => {
     const created = vi.mocked(onPlaceCreated);
     const updated = vi.mocked(onPlaceUpdated);
     const deleted = vi.mocked(onPlaceDeleted);
-    const removePlace = vi.mocked(deletePlaceSvc);
+    const removePlace = removePlaceStub;
     [created, updated, deleted, removePlace].forEach((m) => m.mockClear());
 
     expect((await call(h, 'places.create', { tripId: 1, input: { name: 'P' } })).ok).toBe(true);

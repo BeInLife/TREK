@@ -19,6 +19,8 @@ import { FilesService } from '../../src/nest/files/files.service';
 import { CollabService } from '../../src/nest/collab/collab.service';
 import { VacayService } from '../../src/nest/vacay/vacay.service';
 import { TripsService } from '../../src/nest/trips/trips.service';
+import { PlacesService } from '../../src/nest/places/places.service';
+import { MapsService } from '../../src/nest/maps/maps.service';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { AuditService } from '../../src/nest/audit/audit.service';
 import { AddonsService } from '../../src/nest/addons/addons.service';
@@ -43,6 +45,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
   const collab = new CollabService(dbs, permissions, realtime);
   const vacay = new VacayService(dbs, realtime);
   const days = new DaysService(dbs, permissions, realtime);
+  const places = new PlacesService(dbs, permissions, realtime, new MapsService(dbs));
   return new PluginHostDepsFactory(
     budget,
     reservations,
@@ -63,7 +66,8 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     exchangeRates,
     addons,
     realtime,
-    new TripsService(dbs, todos, packing, files, reservations, days, permissions, budget, collab, vacay, realtime),
+    new TripsService(dbs, todos, packing, files, reservations, days, permissions, budget, collab, vacay, realtime, places),
+    places,
   );
 }
 

@@ -20,6 +20,8 @@ import { MapsService } from '../../src/nest/maps/maps.service';
 import { PackingMcp } from '../../src/nest/packing/packing.mcp';
 import { PackingService } from '../../src/nest/packing/packing.service';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
+import { PlacesMcp } from '../../src/nest/places/places.mcp';
+import { PlacesService } from '../../src/nest/places/places.service';
 import { ReservationsMcp } from '../../src/nest/reservations/reservations.mcp';
 import { ReservationsService } from '../../src/nest/reservations/reservations.service';
 import { TagsMcp } from '../../src/nest/tags/tags.mcp';
@@ -55,6 +57,8 @@ export function createMcpTestRegistry(): McpRegistry {
   const todoService = new TodoService(dbService, permissionsService, realtimeService);
   const packingService = new PackingService(dbService, permissionsService, realtimeService);
   const collabService = new CollabService(dbService, permissionsService, realtimeService);
+  const mapsService = new MapsService(dbService);
+  const placesService = new PlacesService(dbService, permissionsService, realtimeService, mapsService);
   const reservationsService = new ReservationsService(dbService, permissionsService, budgetService, realtimeService);
   const tripsService = new TripsService(
     dbService,
@@ -68,6 +72,7 @@ export function createMcpTestRegistry(): McpRegistry {
     collabService,
     new VacayService(dbService, realtimeService),
     realtimeService,
+    placesService,
   );
   return createTestRegistry(
     [
@@ -78,13 +83,14 @@ export function createMcpTestRegistry(): McpRegistry {
       new BudgetMcp(budgetService, exchangeRatesService, dbService),
       new ReservationsMcp(reservationsService, daysService, budgetService),
       new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService)),
-      new DaysMcp(daysService, dbService),
+      new DaysMcp(daysService, dbService, placesService),
       new AssignmentsMcp(new AssignmentsService(dbService, permissionsService, realtimeService), daysService),
       new CollabMcp(collabService),
       new VacayMcp(new VacayService(dbService, realtimeService)),
       new TripsMcp(tripsService, todoService, collabService),
       new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService)),
-      new MapsMcp(new MapsService(dbService)),
+      new MapsMcp(mapsService),
+      new PlacesMcp(placesService, mapsService, dbService),
       new TransitMcp(new TransitService(), daysService, reservationsService, dbService),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },

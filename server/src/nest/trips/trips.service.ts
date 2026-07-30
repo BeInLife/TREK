@@ -11,7 +11,7 @@ import { avatarUrl } from '../../services/avatarUrl';
 import { erasePluginUserData } from '../../services/userCleanupService';
 import { emitUserDeleted } from '../../plugin-user-lifecycle';
 import { resolveTimeZone } from '../../services/timezoneService';
-import { listPlaces } from '../../services/placeService';
+import { PlacesService } from '../places/places.service';
 import { DaysService, addDays } from '../days/days.service';
 import { PackingService } from '../packing/packing.service';
 import { TodoService } from '../todo/todo.service';
@@ -226,6 +226,7 @@ export class TripsService {
     private readonly collab: CollabService,
     private readonly vacay: VacayService,
     private readonly realtime: RealtimeService,
+    private readonly places: PlacesService,
   ) {}
 
   private get db() {
@@ -1209,7 +1210,7 @@ export class TripsService {
     return {
       trip,
       days,
-      places: listPlaces(String(tripId), {}),
+      places: this.places.list(String(tripId), {}),
       // Scope to the requesting member so other members' private packing items
       // (#858) never land in this viewer's offline cache.
       packingItems: this.packing.listItems(tripId, viewerId),

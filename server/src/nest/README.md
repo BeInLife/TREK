@@ -29,7 +29,7 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
   collab, vacay, reservations, day, permissions, audit, budget, trip, maps,
-  transit — see the migration recipe below.
+  transit, place — see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -231,13 +231,13 @@ wrapper `MapsService`; the pure parser/UA/POI-category helpers moved to
 `maps.helpers.ts` as plain exports (files.constants/client-ip precedent —
 the DI-native TransitService's User-Agent imports from there, not a bridge), the module-scoped
 POI cache / photo-fetch semaphore / frozen Overpass mirrors stayed module-scoped
-on purpose (permissions-cache precedent: the bridge instance and the DI
-singleton share them); the 3 geo tools left the mixed `mcp/tools/mapsWeather.ts`
+on purpose (permissions-cache precedent: any out-of-container instance and the
+DI singleton share them); the 3 geo tools left the mixed `mcp/tools/mapsWeather.ts`
 registrar for the decorator-driven `maps.mcp.ts` (the registrar file survives —
 its weather + airport tools await their own migrations); BookingImportService
 injects `MapsService` for its Nominatim geocoding, and a 3-export
-`maps.bridge.ts` serves the legacy placeEnrichment helper and the places
-registrar until the place domain migrates).
+`maps.bridge.ts` served the legacy placeEnrichment helper and the places
+registrar — both absorbed by the 2026-07 place fold, which deleted the bridge).
 transitService followed (the first fully SQL-free domain fold — the 333-line
 Transitous/MOTIS proxy became a dep-free `TransitService` (no
 `DatabaseService`; the ExchangeRatesService precedent), its response cache,
@@ -251,8 +251,35 @@ search tools on `access: { group: 'geo', mode: 'read' }` and
 bridge imports becoming injected `DaysService`/`ReservationsService` (+
 `DatabaseService` for `canAccessTrip`) — leaving **zero bridge files** and the
 transports registrar as `days.bridge.ts`'s last consumer).
+placeService followed (the step-4 tail: the 1029-line place core — the
+CRUD + ratings SQL, the GPX/KML/KMZ importers and the Google/Naver list
+importers — folded into the wrapper `PlacesService`, with the pure pieces
+(frozen XML parsers, the KMZ unpacker, the dedup predicates, the Google
+hex-id parsers, `reclaimPhotoCache`) moving to `places.helpers.ts` on the
+maps.helpers precedent; the 10-tool `mcp/tools/places.ts` registrar + the
+`trek://trips/{tripId}/places` resource moved to `places.mcp.ts` —
+`search_place` came along because its gate is `places:read`, not the geo
+group, and now injects `MapsService`; TripsService, DaysMcp,
+BookingImportService and the plugin host (its 21st constructor dep) inject
+`PlacesService`, leaving **zero bridge files** for the domain; the two
+`assignments.bridge` imports stay in `places.mcp.ts` on purpose —
+AssignmentsModule imports DaysModule and DaysModule now imports
+PlacesModule, so injecting would close a
+DaysModule → PlacesModule → AssignmentsModule → DaysModule cycle
+(reservations.mcp.ts uses the same seam for the same reason). The sibling
+`placeEnrichment` fold went further than the recipe's minimum: the 168-line
+helper's DB/websocket/Maps half became `PlacesService` methods over the
+injected `DatabaseService`/`RealtimeService`/`MapsService` and its pure
+match selector joined `places.helpers.ts`, which retired **`maps.bridge.ts`**
+with its last consumer. The DTO ratchet for its 7 grandfathered body
+contracts landed as a third commit, which also loosened
+`placeBulkUpdateRequestSchema.ids` (`.min(1)` dropped) so the endpoint's
+empty-list short-circuit stays reachable, and retired three bespoke 400
+strings — 'Place name is required', 'ids must be an array of numbers' and
+'URL is required' — in favour of the pipe envelope, accepting that a
+malformed body now 400s ahead of the trip-access 404 (the todo/trips trade).
 Repeat these steps per
-service (next up: **placeService → transitItineraryService** —
+service (next up: **transitItineraryService** —
 or the notifications fan-in — per the dependency-honest order in
 `migration-graph.md`). This is a
 **pure relocation** — byte-identical

@@ -7,7 +7,7 @@
  * - PLACE-014: reordering within a day is tested in assignments.test.ts
  * - PLACE-019: GPX bulk import tested here using the test fixture
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll, type MockInstance } from 'vitest';
 import request from 'supertest';
 import type { Application } from 'express';
 import type { INestApplication } from '@nestjs/common';
@@ -48,14 +48,6 @@ vi.mock('../../src/config', () => ({
   DEFAULT_LANGUAGE: 'en',
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
-vi.mock('../../src/services/placeService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/services/placeService')>();
-  return {
-    ...actual,
-    importGoogleList: vi.fn(),
-    searchPlaceImage: vi.fn(),
-  };
-});
 
 import { buildApp } from '../../src/bootstrap';
 import { createTables } from '../../src/db/schema';
@@ -63,11 +55,17 @@ import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createAdmin, createTrip, createPlace, addTripMember } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
-import * as placeService from '../../src/services/placeService';
+import { PlacesService } from '../../src/nest/places/places.service';
 import { invalidatePermissionsCache } from '../../src/nest/permissions/permissions.bridge';
 
 let nestApp: INestApplication;
 let app: Application;
+// Since the place DI fold the two outbound-I/O paths are stubbed as spies on the
+// container's PlacesService singleton (permissions precedent) instead of a path
+// mock of the deleted services/placeService. Bare spies keep the real
+// implementation, so only the *Once overrides below change behaviour.
+let importGoogleList: MockInstance;
+let searchPlaceImage: MockInstance;
 const GPX_FIXTURE = path.join(__dirname, '../fixtures/test.gpx');
 const KML_FIXTURE = path.join(__dirname, '../fixtures/test.kml');
 const KML_NESTED_FIXTURE = path.join(__dirname, '../fixtures/test-nested.kml');
@@ -85,6 +83,10 @@ beforeEach(() => {
   resetTestDb(testDb);
   resetRateLimits(nestApp);
   invalidatePermissionsCache();
+  // Re-attached per test: one describe below calls vi.restoreAllMocks() in its
+  // afterEach, which would otherwise strip these for every later test.
+  importGoogleList = vi.spyOn(nestApp.get(PlacesService), 'importGoogleList');
+  searchPlaceImage = vi.spyOn(nestApp.get(PlacesService), 'searchImage');
 });
 
 afterAll(async () => {
@@ -894,7 +896,7 @@ describe('Google Maps list import', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    vi.mocked(placeService.importGoogleList).mockResolvedValueOnce({
+    importGoogleList.mockResolvedValueOnce({
       places: [{ id: 1, name: 'Mocked Place' } as any],
       listName: 'My List',
     } as any);
@@ -912,7 +914,7 @@ describe('Google Maps list import', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    vi.mocked(placeService.importGoogleList).mockResolvedValueOnce({
+    importGoogleList.mockResolvedValueOnce({
       error: 'Invalid list URL',
       status: 422,
     } as any);
@@ -929,7 +931,7 @@ describe('Google Maps list import', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    vi.mocked(placeService.importGoogleList).mockRejectedValueOnce(new Error('Network failure'));
+    importGoogleList.mockRejectedValueOnce(new Error('Network failure'));
 
     const res = await request(app)
       .post(`/api/trips/${trip.id}/places/import/google-list`)
@@ -949,7 +951,7 @@ describe('Place image search', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Louvre' });
 
-    vi.mocked(placeService.searchPlaceImage).mockResolvedValueOnce({
+    searchPlaceImage.mockResolvedValueOnce({
       photos: [{ url: 'https://example.com/photo.jpg' }],
     } as any);
 
@@ -965,7 +967,7 @@ describe('Place image search', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Tower' });
 
-    vi.mocked(placeService.searchPlaceImage).mockResolvedValueOnce({
+    searchPlaceImage.mockResolvedValueOnce({
       error: 'No images found',
       status: 404,
     } as any);
@@ -982,7 +984,7 @@ describe('Place image search', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Bridge' });
 
-    vi.mocked(placeService.searchPlaceImage).mockRejectedValueOnce(new Error('Unsplash down'));
+    searchPlaceImage.mockRejectedValueOnce(new Error('Unsplash down'));
 
     const res = await request(app)
       .get(`/api/trips/${trip.id}/places/${place.id}/image`)

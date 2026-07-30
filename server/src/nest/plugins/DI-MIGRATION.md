@@ -123,8 +123,11 @@ budget migration — its `listBudgetItems` import became the already-injected
 2026-07 with the trip fold — its six imported symbols (`listTrips`,
 `updateTrip`, `createTrip`, `removeMember`, `NotFoundError`, `ValidationError`)
 became the injected `TripsService`, with the error classes now imported from
-`nest/trips/trips.service`; the remaining factory
-imports are all Wave-4+/5 domains: places, journeys, atlas, collections).
+`nest/trips/trips.service`; placeService swapped in 2026-07 with the place
+fold — its four imported symbols (`createPlace`, `updatePlace`, `deletePlace`,
+`getPlace`) became the injected `PlacesService`, the factory's 21st constructor
+dep; the remaining factory
+imports are all Wave-5 domains: journeys, atlas, collections).
 
 ### Test impact (as landed)
 

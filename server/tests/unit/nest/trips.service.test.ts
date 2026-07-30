@@ -63,6 +63,8 @@ import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.se
 import { CollabService } from '../../../src/nest/collab/collab.service';
 import { VacayService } from '../../../src/nest/vacay/vacay.service';
 import { TripsService } from '../../../src/nest/trips/trips.service';
+import { PlacesService } from '../../../src/nest/places/places.service';
+import { MapsService } from '../../../src/nest/maps/maps.service';
 import { getTripOwner, listMembers as bridgeListMembers } from '../../../src/nest/trips/trips.bridge';
 import fs from 'fs';
 
@@ -71,6 +73,7 @@ import fs from 'fs';
 const dbs = () => new DatabaseService(testDb);
 const budgetSvc = new BudgetService(dbs(), new PermissionsService(dbs()), new ExchangeRatesService(), new RealtimeService());
 const daysSvc = new DaysService(dbs(), new PermissionsService(dbs()), new RealtimeService());
+const placesSvc = new PlacesService(dbs(), new PermissionsService(dbs()), new RealtimeService(), new MapsService(dbs()));
 const createAccommodation = daysSvc.createAccommodation.bind(daysSvc);
 
 const svc = new TripsService(
@@ -85,6 +88,7 @@ const svc = new TripsService(
   new CollabService(dbs(), new PermissionsService(dbs()), new RealtimeService()),
   new VacayService(dbs(), new RealtimeService()),
   new RealtimeService(),
+  placesSvc,
 );
 
 beforeAll(() => {
@@ -1200,6 +1204,7 @@ describe('quirk fixes', () => {
       new CollabService(dbs(), new PermissionsService(dbs()), new RealtimeService()),
       new VacayService(dbs(), new RealtimeService()),
       new RealtimeService(),
+      placesSvc,
     );
   }
 

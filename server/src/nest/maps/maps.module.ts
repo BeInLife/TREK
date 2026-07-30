@@ -6,7 +6,8 @@ import { MapsMcp } from './maps.mcp';
 /**
  * Maps / geo domain (L3 leaf module). Registered in AppModule. Exports
  * MapsService for the in-container consumers (BookingImportModule's Nominatim
- * geocoding); out-of-container code goes through maps.bridge.ts.
+ * geocoding, PlacesModule's search_place tool and list-import enrichment).
+ * Nothing outside the container consumes this domain, so there is no bridge.
  */
 @Module({
   controllers: [MapsController],

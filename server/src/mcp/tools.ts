@@ -3,7 +3,6 @@ import { registerJourneyTools } from './tools/journey';
 import { registerMapsWeatherTools } from './tools/mapsWeather';
 import { registerNotificationTools } from './tools/notifications';
 import { registerAtlasTools } from './tools/atlas';
-import { registerPlaceTools } from './tools/places';
 import { registerCollectionTools } from './tools/collections';
 import { registerTransportTools } from './tools/transports';
 import { registerMcpPrompts } from './tools/prompts';
@@ -15,7 +14,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   // attached via the nest-mcp registry below — getDeprecationNotice rides the
   // attach ctx).
 
-  registerPlaceTools(server, userId, scopes);
+  // The place tools moved to the DI-discovered src/nest/places/places.mcp.ts
+  // (@McpController, attached via the nest-mcp registry below).
 
   registerCollectionTools(server, userId, scopes);
 

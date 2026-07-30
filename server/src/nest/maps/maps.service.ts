@@ -229,8 +229,8 @@ type LocationBias = { low: { lat: number; lng: number }; high: { lat: number; ln
  * (Nominatim/Overpass/Google), the place-details/photo caches and the SSRF
  * guard on every outbound URL. DI-native since the maps fold: the legacy
  * services/mapsService.ts functions live here as methods over the injected
- * DatabaseService (byte-identical SQL and behaviour). Out-of-container
- * consumers go through maps.bridge.ts; pure helpers live in maps.helpers.ts.
+ * DatabaseService (byte-identical SQL and behaviour). Every consumer injects
+ * this class; pure helpers live in maps.helpers.ts.
  *
  * The per-endpoint kill-switches are settings reads the legacy route does
  * inline; they're encapsulated here as `*Disabled()` helpers over the same

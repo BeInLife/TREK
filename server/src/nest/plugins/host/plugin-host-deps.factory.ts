@@ -15,7 +15,7 @@ import pathMod from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { PermissionsService } from '../../permissions/permissions.service';
 import { TripsService, NotFoundError, ValidationError } from '../../trips/trips.service';
-import { createPlace, updatePlace, deletePlace, getPlace } from '../../../services/placeService';
+import { PlacesService, type PlaceCreateInput, type PlaceUpdateInput } from '../../places/places.service';
 import { AddonsService } from '../../addons/addons.service';
 import { isDemoEmail } from '../../../services/demo';
 import { ADDON_IDS } from '../../../addons';
@@ -161,6 +161,7 @@ export class PluginHostDepsFactory {
     private readonly addons: AddonsService,
     private readonly realtime: RealtimeService,
     private readonly trips: TripsService,
+    private readonly places: PlacesService,
   ) {}
 
   /**
@@ -467,7 +468,7 @@ export class PluginHostDepsFactory {
         this.realtime.broadcast(tripId, 'budget:deleted', { itemId });
         return { deleted: true };
       },
-      // --- Places (place_edit). Delegate to the same placeService the REST/MCP paths
+      // --- Places (place_edit). Delegate to the same PlacesService the REST/MCP paths
       // use, then broadcast the same events so open web sessions update live, and run
       // the journey hooks places.controller runs on the same three writes: a journey
       // linked to the trip carries a skeleton entry per day-assigned place, and
@@ -475,13 +476,13 @@ export class PluginHostDepsFactory {
       // somebody reloads it. ---
       canEditPlaces: (tripId, userId) => this.canEditTripAs('place_edit', tripId, userId),
       createPlace: (tripId, input) => {
-        const place = createPlace(String(tripId), input as Parameters<typeof createPlace>[1]);
+        const place = this.places.create(String(tripId), input as unknown as PlaceCreateInput);
         this.realtime.broadcast(tripId, 'place:created', { place });
         mirrorJourneys(() => onPlaceCreated(Number(tripId), place.id));
         return place;
       },
       updatePlace: (tripId, placeId, input) => {
-        const place = updatePlace(String(tripId), String(placeId), input as Parameters<typeof updatePlace>[2]);
+        const place = this.places.update(String(tripId), String(placeId), input as PlaceUpdateInput);
         if (place === null) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
         this.realtime.broadcast(tripId, 'place:updated', { place });
         mirrorJourneys(() => onPlaceUpdated(Number(placeId)));
@@ -491,12 +492,12 @@ export class PluginHostDepsFactory {
         // Scope the id to the trip before anything else: onPlaceDeleted keys on the
         // place alone, so an id belonging to a foreign trip would detach that trip's
         // journey entries even though the delete below refuses it.
-        if (!getPlace(String(tripId), String(placeId))) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
+        if (!this.places.get(String(tripId), String(placeId))) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
         // Ahead of the DELETE, like the REST route and the MCP tool: journey_entries
         // .source_place_id is ON DELETE SET NULL, so afterwards the hook finds nothing
         // left to detach and the entries linger as orphans.
         mirrorJourneys(() => onPlaceDeleted(Number(placeId)));
-        const deleted = deletePlace(String(tripId), String(placeId));
+        const deleted = this.places.remove(String(tripId), String(placeId));
         if (!deleted) throw new ForbiddenResource(`no place ${placeId} on trip ${tripId}`);
         this.realtime.broadcast(tripId, 'place:deleted', { placeId });
         return { deleted: true };

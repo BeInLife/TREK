@@ -12,6 +12,8 @@ import { BudgetService } from '../budget/budget.service';
 import { ExchangeRatesService } from '../budget/exchange-rates.service';
 import { CollabService } from '../collab/collab.service';
 import { VacayService } from '../vacay/vacay.service';
+import { PlacesService } from '../places/places.service';
+import { MapsService } from '../maps/maps.service';
 
 /**
  * Non-Nest entry point for the trip domain — for the two consumers that cannot
@@ -42,6 +44,7 @@ const trips = new TripsService(
   new CollabService(dbs(), new PermissionsService(dbs()), new RealtimeService()),
   new VacayService(dbs(), new RealtimeService()),
   new RealtimeService(),
+  new PlacesService(dbs(), new PermissionsService(dbs()), new RealtimeService(), new MapsService(dbs())),
 );
 
 export function getTripOwner(tripId: string | number) {

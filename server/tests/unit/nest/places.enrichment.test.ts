@@ -2,20 +2,14 @@
  * Unit tests for the import-enrichment match selector (#886).
  * Covers PENRICH-001 to PENRICH-004 — the coordinate-validation guard that
  * prevents a name search from overwriting an imported place with the wrong POI.
+ *
+ * Moved from tests/unit/services/placeEnrichment.test.ts when the helper folded
+ * into the places domain: the selector is pure, so it now lives in
+ * places.helpers.ts and needs no DB/websocket/Maps stubbing at all.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-// placeEnrichment pulls in the DB, websocket and the maps bridge at import time;
-// stub them so the pure match selector can be tested in isolation.
-vi.mock('../../../src/db/database', () => ({ db: {}, getPlaceWithTags: () => null }));
-vi.mock('../../../src/websocket', () => ({ broadcast: () => {} }));
-vi.mock('../../../src/nest/maps/maps.bridge', () => ({
-  getMapsKey: () => null,
-  searchPlaces: async () => ({ places: [], source: 'none' }),
-  getPlacePhoto: async () => ({ photoUrl: '', attribution: null }),
-}));
-
-import { pickEnrichmentMatch } from '../../../src/services/placeEnrichment';
+import { pickEnrichmentMatch } from '../../../src/nest/places/places.helpers';
 
 const target = { lat: 48.85, lng: 2.35 };
 

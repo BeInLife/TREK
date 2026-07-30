@@ -3,7 +3,7 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { verifyTripAccess } from '../../services/tripAccess';
 import { ReservationsService } from '../reservations/reservations.service';
-import { createPlace } from '../../services/placeService';
+import { PlacesService } from '../places/places.service';
 import { BudgetService } from '../budget/budget.service';
 import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
@@ -29,6 +29,7 @@ export class BookingImportService {
     private readonly addons: AddonsService,
     private readonly realtime: RealtimeService,
     private readonly maps: MapsService,
+    private readonly places: PlacesService,
   ) {}
 
   private get db() {
@@ -174,7 +175,7 @@ export class BookingImportService {
             }
           }
 
-          const place = createPlace(tripId, {
+          const place = this.places.create(tripId, {
             name: _venue.name,
             lat,
             lng,

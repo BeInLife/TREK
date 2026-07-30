@@ -1,6 +1,4 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp';
-import { canAccessTrip } from '../db/database';
-import { listPlaces } from '../services/placeService';
 import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
 import { isAddonEnabled } from '../nest/addons/addons.bridge';
@@ -51,19 +49,8 @@ export function registerResources(server: McpServer, userId: number, scopes: str
   // The trip-days resource moved to the DI-discovered
   // src/nest/days/days.mcp.ts (@ResourceTemplate).
 
-  // Places in a trip
-  if (canRead(scopes, 'places')) server.registerResource(
-    'trip-places',
-    new ResourceTemplate('trek://trips/{tripId}/places', { list: undefined }),
-    { description: 'All places/POIs in a trip, optionally filtered by assignment status (e.g. ?assignment=unassigned)', mimeType: 'application/json' },
-    async (uri, { tripId }) => {
-      const id = parseId(tripId);
-      if (id === null || !canAccessTrip(id, userId)) return accessDenied(uri.href);
-      const assignment = uri.searchParams.get('assignment') as 'all' | 'unassigned' | 'assigned' | null;
-      const places = listPlaces(String(id), { assignment: assignment ?? undefined });
-      return jsonContent(uri.href, places);
-    }
-  );
+  // The trip-places resource moved to the DI-discovered
+  // src/nest/places/places.mcp.ts (@ResourceTemplate).
 
   // The trip-budget resource moved to the DI-discovered
   // src/nest/budget/budget.mcp.ts (@ResourceTemplate).

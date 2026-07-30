@@ -86,35 +86,9 @@ async function withHarness(userId: number, fn: (harness: McpHarness) => Promise<
 // The trek://trips/{tripId}/days resource moved to the DI-discovered
 // DaysMcp — see tools-days.test.ts.
 
-describe('Resource: trek://trips/{tripId}/places', () => {
-  it('returns all places for a trip', async () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    createPlace(testDb, trip.id, { name: 'Eiffel Tower' });
-    createPlace(testDb, trip.id, { name: 'Louvre' });
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/places` });
-      const places = parseResourceResult(result) as any[];
-      expect(places).toHaveLength(2);
-      const names = places.map((p) => p.name);
-      expect(names).toContain('Eiffel Tower');
-      expect(names).toContain('Louvre');
-    });
-  });
-
-  it('returns access denied for unauthorized trip', async () => {
-    const { user } = createUser(testDb);
-    const { user: other } = createUser(testDb);
-    const trip = createTrip(testDb, other.id);
-
-    await withHarness(user.id, async (harness) => {
-      const result = await harness.client.readResource({ uri: `trek://trips/${trip.id}/places` });
-      const data = parseResourceResult(result) as any;
-      expect(data.error).toBeTruthy();
-    });
-  });
-});
+// The trek://trips/{tripId}/places resource moved to the DI-discovered
+// PlacesMcp — its cases live in tools-places.test.ts (the registry attaches
+// via registerTools, which this withTools:false harness skips).
 
 // The trek://trips/{tripId}/budget resource moved to the DI-discovered
 // src/nest/budget/budget.mcp.ts — its cases live in tools-budget.test.ts (the

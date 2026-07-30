@@ -74,7 +74,13 @@ const { db } = vi.hoisted(() => {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
   tmp.exec('CREATE TABLE days (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, day_number INTEGER, date TEXT);');
   tmp.exec(`CREATE TABLE places (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL, name TEXT,
-    image_url TEXT, address TEXT, lat REAL, lng REAL);`);
+    image_url TEXT, address TEXT, lat REAL, lng REAL, category_id INTEGER, description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+  // PlacesService.list joins categories and batch-loads tags/ratings.
+  tmp.exec('CREATE TABLE categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT, icon TEXT);');
+  tmp.exec('CREATE TABLE tags (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, color TEXT, created_at DATETIME);');
+  tmp.exec('CREATE TABLE place_tags (place_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY (place_id, tag_id));');
+  tmp.exec('CREATE TABLE place_ratings (place_id INTEGER NOT NULL, user_id INTEGER NOT NULL, rating INTEGER, created_at DATETIME, UNIQUE(place_id, user_id));');
   tmp.exec(`CREATE TABLE day_accommodations (id INTEGER PRIMARY KEY AUTOINCREMENT, trip_id INTEGER NOT NULL,
     place_id INTEGER, start_day_id INTEGER, end_day_id INTEGER, check_in TEXT, check_in_end TEXT,
     check_out TEXT, confirmation TEXT, notes TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
@@ -114,7 +120,8 @@ let checkPermission: MockInstance;
 // trips/trip_members/days DDL above serves its SQL.
 // bundle()'s days + accommodations now run DaysService's real SQL (DI-injected,
 // no mock) — the days/places/day_accommodations/reservations DDL above serves them.
-vi.mock('../../src/services/placeService', () => ({ listPlaces: () => [] }));
+// bundle()'s places now run PlacesService's real SQL (DI-injected since the
+// place fold, no mock) — the places/categories/tags DDL above serves them.
 // bundle()'s budget items come from the DI-injected BudgetService since the
 // budget fold — stubbed via a container spy in beforeAll (no budget DDL here).
 

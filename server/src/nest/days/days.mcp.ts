@@ -5,7 +5,7 @@ import {
 } from '@trek/nest-mcp';
 import { z } from 'zod';
 import { isDemoUser } from '../../services/authService';
-import { createPlace } from '../../services/placeService';
+import { PlacesService } from '../places/places.service';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
 import { DatabaseService } from '../database/database.service';
 import { DaysService } from './days.service';
@@ -33,6 +33,7 @@ export class DaysMcp {
   constructor(
     private readonly days: DaysService,
     private readonly db: DatabaseService,
+    private readonly places: PlacesService,
   ) {}
 
   @Tool({
@@ -186,7 +187,7 @@ export class DaysMcp {
     if (dayErrors.length > 0) return { content: [{ type: 'text' as const, text: dayErrors.map(e => e.message).join(', ') }], isError: true };
     try {
       const result = this.db.transaction(() => {
-        const place = createPlace(String(tripId), { name, description, lat, lng, address, category_id, google_place_id, google_ftid, osm_id, notes: place_notes, website, phone, price, currency });
+        const place = this.places.create(String(tripId), { name, description, lat, lng, address, category_id, google_place_id, google_ftid, osm_id, notes: place_notes, website, phone, price, currency });
         const accommodation = this.days.createAccommodation(tripId, { place_id: place.id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes: accommodation_notes });
         return { place, accommodation };
       });

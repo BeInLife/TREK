@@ -2247,42 +2247,7 @@ describe('controller-facing wrappers delegate to the folded methods', () => {
   });
 });
 
-// ── maps.bridge delegation ────────────────────────────────────────────────────
-
-describe('maps.bridge delegation', () => {
-  it('MAPS-104: getMapsKey delegates to the shared MapsService instance', async () => {
-    const bridge = await import('../../../src/nest/maps/maps.bridge');
-    const spy = vi.spyOn(MapsService.prototype, 'getMapsKey').mockReturnValueOnce('bridged-key');
-    try {
-      expect(bridge.getMapsKey(7)).toBe('bridged-key');
-      expect(spy).toHaveBeenCalledWith(7);
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
-  it('MAPS-105: searchPlaces delegates with all args', async () => {
-    const bridge = await import('../../../src/nest/maps/maps.bridge');
-    const spy = vi.spyOn(MapsService.prototype, 'searchPlaces').mockResolvedValueOnce({ places: [], source: 'osm' });
-    try {
-      await expect(bridge.searchPlaces(7, 'berlin', 'de', { lat: 1, lng: 2, radius: 3 })).resolves.toEqual({
-        places: [],
-        source: 'osm',
-      });
-      expect(spy).toHaveBeenCalledWith(7, 'berlin', 'de', { lat: 1, lng: 2, radius: 3 });
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
-  it('MAPS-106: getPlacePhoto delegates with coords and name', async () => {
-    const bridge = await import('../../../src/nest/maps/maps.bridge');
-    const spy = vi.spyOn(MapsService.prototype, 'getPlacePhoto').mockResolvedValueOnce({ photoUrl: null, attribution: null });
-    try {
-      await expect(bridge.getPlacePhoto(7, 'p1', 1.5, 2.5, 'Spot')).resolves.toEqual({ photoUrl: null, attribution: null });
-      expect(spy).toHaveBeenCalledWith(7, 'p1', 1.5, 2.5, 'Spot');
-    } finally {
-      spy.mockRestore();
-    }
-  });
-});
+// The maps.bridge delegation cases (MAPS-104..106) died with the bridge itself:
+// its last two consumers — the legacy placeEnrichment helper and the places MCP
+// registrar — both folded into the DI-native places domain, which injects
+// MapsService directly.
