@@ -1,7 +1,41 @@
 # Legacy `src/services/` dependency graph
 
 Generated from the actual imports in `server/src` on **2026-08-01** (after the
-collectionsService fold — the biggest single fold yet, taken off the ready
+atlasService fold — the second frontier pull-forward of the day, opening the
+Wave-5 auth chain while the notifications fan-in stays the order's official
+next step: the 1612-line atlas core split two ways, places precedent. The DB
+half — the stats aggregation with its two divergent return shapes, visited
+countries/regions with the #1490 tombstone/cascade logic, bucket-list CRUD —
+folded into the DI-native `AtlasService` over `DatabaseService` alone (no
+broadcasts anywhere: atlas rows are uid-scoped). The ~750-line pure-geo half —
+the bundled admin0/admin1 boundary stores with their #1576 OOM-shaped
+streaming builders, the point-in-polygon country/region indexes, Nominatim
+geocoding with its shared ≥1.1s throttle, the 50k geocode cache with its
+import-time unref'd cleanup interval, and the `geocodingInFlight` dedup set —
+moved verbatim to the **plain module** `nest/atlas/atlas-geo.ts` (maps.helpers
+class), so those caches stay process-global across the container instance, the
+bridge instance and test helpers; `assetPath` re-anchored one directory
+deeper, the only non-verbatim line. The 10-tool `mcp/tools/atlas.ts` registrar
+**plus all four atlas resources in `mcp/resources.ts`** (`trek://bucket-list`,
+`trek://visited-countries`, `trek://atlas/stats`, `trek://atlas/regions`)
+moved onto the decorator registry as `atlas.mcp.ts` — here the `when:`
+atlas-addon gate IS parity (unlike collections, the legacy registrar and
+resources both gated on the addon while the REST controller deliberately does
+not), and that emptied `mcp/resources.ts`'s test suite: `resources.test.ts`
+retired with its last two cases. The plugin RPC host swapped its 9 atlas
+imports for the injected `AtlasService` (its 23rd constructor dep) — journeys
+is now the factory's last legacy domain import. And the zero-bridge streak
+ends at five: `authService.getTravelStats` (legacy, Wave-5) consumes
+`getCountryFromCoords` + `getHiddenCountries`, so a minimal 2-export
+`atlas.bridge.ts` exists for that one edge — `getCountryFromCoords`
+re-exported straight from atlas-geo, `getHiddenCountries` over the bridge
+instance — and dies when authService migrates. A sibling DTO ratchet cleared
+all three `AtlasController` body-contract allow-list entries
+(mark-region + bucket create/update), trading the hand-rolled
+`'name and country_code are required'` 400 for the pipe envelope while the
+whitespace-only bucket name keeps its legacy `'Name is required'` trim guard.
+Earlier the same day, the collectionsService fold —
+the biggest single fold yet, taken off the ready
 frontier while the notifications fan-in stays the order's official next step:
 the 1024-line saved-places core (visibility/roles, the collection-scoped
 dedup, saved-places CRUD, copy-to-trip with the ratings filters, labels, the
@@ -160,8 +194,18 @@ How to read it:
   plugin host injects the service as its 22nd constructor dep; the `sendInvite`
   lazy notificationService `import()` stays call-time (collab precedent); the
   dead `buildDedupSet` module helper was dropped in the move — the only
-  non-verbatim line. **Zero bridge files**: every consumer is in-container).
-- **Domain migration targets** (the wave material): adminService, airportService, atlasService,
+  non-verbatim line. **Zero bridge files**: every consumer is in-container),
+  atlas (the 1612-line core split places-style: the DB half into `AtlasService`
+  over `DatabaseService` alone, the pure-geo half — boundary stores, poly/box
+  indexes, Nominatim geocoding, all the module-scoped caches including the
+  import-time unref'd cleanup interval — verbatim into the plain module
+  `nest/atlas/atlas-geo.ts` so the multi-MB caches stay process-global across
+  every instance (#1576); the 10-tool registrar + all four resources onto
+  `atlas.mcp.ts` with the `when:` atlas-addon gate that IS parity here; the
+  plugin host injects the service as its 23rd constructor dep; **one bridge**,
+  the 2-export `atlas.bridge.ts` for legacy `authService.getTravelStats` —
+  it dies when authService migrates).
+- **Domain migration targets** (the wave material): adminService, airportService,
   authService, backupService,
   journeyService, journeyShareService, notificationService, oauthService,
   oidcService, passkeyService, weatherService, wikiService.
@@ -189,16 +233,15 @@ flowchart TD
   classDef infra fill:#455a64,color:#fff
 
   subgraph frontier["READY FRONTIER (no unmigrated domain deps)"]
-    atlas[atlasService]:::ready
     weather[weatherService]:::ready
     airport["airportService (boot special case)"]:::ready
     wiki[wikiService]:::ready
     oauth[oauthService]:::ready
+    auth["authService (frontier since the 2026-08 atlas fold)"]:::ready
   end
 
   notifSvc[notificationService]:::blocked
   admin[adminService]:::blocked
-  auth[authService]:::blocked
   oidc[oidcService]:::blocked
   passkey[passkeyService]:::blocked
   journey[journeyService]:::blocked
@@ -210,7 +253,6 @@ flowchart TD
 
   notifSvc --> notifCluster
   admin --> auth & notifSvc & cleanup
-  auth --> atlas
   oidc --> auth
   passkey --> auth
   journey --> memories
@@ -218,7 +260,13 @@ flowchart TD
   memories --> notifSvc & admin
 ```
 
-(The `collectionsService` node is gone since the 2026-08-01 fold — its dotted
+(The `atlasService` node is gone since the 2026-08-01 fold — it left the
+frontier as the first fold whose legacy dependent outlives it: the former
+`auth --> atlas` edge is now legacy `authService` importing the 2-export
+`nest/atlas/atlas.bridge` (an import-path-only repoint, todo-bridge precedent),
+so authService's own migration is UNBLOCKED — the Wave-5 auth chain
+`auth → admin → oauth` can start any time the notifications step allows.
+The `collectionsService` node is gone since the 2026-08-01 fold — its dotted
 call-time `import()` edge to notificationService survives inside the DI-native
 `CollectionsService`, exactly like the identical lazy sends in the
 already-migrated collab/packing/trips/reservations/vacay services, so it never
@@ -254,8 +302,7 @@ never block).)
 | `adminService` | apiKeyCrypto, authService, avatarUrl, llmConfig, memories/helpersService, notificationService, passwordPolicy, userCleanupService (+ `permissions.bridge`, `addons.bridge`) | (none) | nest/admin/admin.service.ts, nest/packing/packing.mcp.ts (`deletePackingTemplate`, the `admin-2` residual) | scheduler.ts (lazy) |
 | `airportService` | (none) | (none) | nest/airports/airports.service.ts, nest/booking-import/kitinerary-mapper.ts | db/database.ts (lazy boot backfill), mcp/tools/mapsWeather.ts, mcp/tools/transports.ts |
 | `apiKeyCrypto` | (none) | adminService, airtrail/airtrailService, authService, llmConfig, memories/helpersService, memories/immichService, memories/photoResolverService, memories/synologyService, memories/unifiedService, notifications, oidcService, unsplashService | nest/maps/maps.service.ts, nest/plugins/plugin-oauth.service.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/settings/settings.service.ts | db/migrations.ts |
-| `atlasService` | (none) | authService | nest/atlas/atlas.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | mcp/resources.ts, mcp/tools/atlas.ts |
-| `authService` | apiKeyCrypto, atlasService, avatarUrl, demo, distanceService, ephemeralTokens, mfaCrypto, passwordPolicy, tripMembership, userCleanupService, webauthnConfig (+ `permissions.bridge`) | adminService, oidcService, passkeyService | nest/assignments/assignments.mcp.ts, nest/auth/auth.service.ts, nest/auth/passkey-enabled.guard.ts, nest/budget/budget.mcp.ts, nest/collab/collab.mcp.ts, nest/collections/collections.mcp.ts, nest/days/day-notes.mcp.ts, nest/days/days.mcp.ts, nest/oidc/oidc.service.ts, nest/packing/packing.mcp.ts, nest/places/places.mcp.ts, nest/reservations/reservations.mcp.ts, nest/share/share.mcp.ts, nest/tags/tags.mcp.ts, nest/todo/todo.mcp.ts, nest/transit/transit.mcp.ts, nest/trips/trips.mcp.ts, nest/vacay/vacay.mcp.ts | mcp/index.ts, mcp/tools/atlas.ts, mcp/tools/journey.ts, mcp/tools/notifications.ts, mcp/tools/transports.ts |
+| `authService` | apiKeyCrypto, avatarUrl, demo, distanceService, ephemeralTokens, mfaCrypto, passwordPolicy, tripMembership, userCleanupService, webauthnConfig (+ `permissions.bridge`, `atlas.bridge`) | adminService, oidcService, passkeyService | nest/assignments/assignments.mcp.ts, nest/atlas/atlas.mcp.ts, nest/auth/auth.service.ts, nest/auth/passkey-enabled.guard.ts, nest/budget/budget.mcp.ts, nest/collab/collab.mcp.ts, nest/collections/collections.mcp.ts, nest/days/day-notes.mcp.ts, nest/days/days.mcp.ts, nest/oidc/oidc.service.ts, nest/packing/packing.mcp.ts, nest/places/places.mcp.ts, nest/reservations/reservations.mcp.ts, nest/share/share.mcp.ts, nest/tags/tags.mcp.ts, nest/todo/todo.mcp.ts, nest/transit/transit.mcp.ts, nest/trips/trips.mcp.ts, nest/vacay/vacay.mcp.ts | mcp/index.ts, mcp/tools/journey.ts, mcp/tools/notifications.ts, mcp/tools/transports.ts |
 | `avatarUrl` | (none) | adminService, authService, inAppNotifications, journeyService | nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/files/files.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | (none) |
 | `backupService` | (none — `permissions.bridge`, plugin backup/paths infra only) | (none) | nest/backup/backup.controller.ts, nest/backup/backup.service.ts | scheduler.ts (lazy) |
 | `conflictResult` | (none) | (none) | nest/packing/packing.controller.ts, nest/packing/packing.service.ts, nest/places/places.controller.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | (none) |
@@ -321,7 +368,7 @@ frontier candidates below can still go any time:
 
 | Candidate | Why now / why not | Bridge tax (legacy dependents + out-of-container) |
 |---|---|---|
-| **atlasService** | Zero deps, but its legacy dependent is `authService` (Wave-5) → bridge lives long | `authService`; `mcp/tools/atlas.ts`, `mcp/resources.ts` |
+| **authService** | Unblocked by the 2026-08 atlas fold (its atlasService edge became the `atlas.bridge` repoint; permissions already bridged) — the biggest remaining fold (1494 lines, 18 in-container `.mcp.ts` consumers) and the head of the coherence chain auth → admin → oauth | `adminService`, `oidcService`, `passkeyService`; `mcp/index.ts`, `mcp/tools/journey.ts`, `mcp/tools/notifications.ts`, `mcp/tools/transports.ts` |
 | **oauthService** | Dependency-free since the Phase 0 addons extraction (adminService edge was only `isAddonEnabled` → `addons.bridge`) — but the coherence order keeps it after admin so the `mcp/oauthProvider.ts` merge (`mcp-2`) lands with it | `mcp/index.ts`, `mcp/oauthProvider.ts` |
 | **weatherService / wikiService / airportService** | Independent leaves; airport has the `db/database.ts` boot lazy-require special case | little / none |
 
@@ -329,13 +376,14 @@ frontier candidates below can still go any time:
 
 - `notificationService` ← notifications cluster (its auditLog edge is now the plain
   `audit-log.logger` import — gone as a blocker since the 2026-07 Wave-2 pair).
-- `adminService`/`authService` corner: `authService` ← `atlasService`
-  (its permissions edge is now the `permissions.bridge` repoint); `adminService` ←
+- `adminService`/`authService` corner: `authService` is UNBLOCKED since the 2026-08
+  atlas fold (its atlasService edge became the `atlas.bridge` repoint, its permissions
+  edge the `permissions.bridge` repoint); `adminService` ←
   `authService` + `notificationService`. `oauthService` is dependency-free since the
   Phase 0 addons extraction (its adminService edge was only `isAddonEnabled`, now
-  `addons.bridge`), but the coherence order stays atlas → auth → admin → oauth so the
+  `addons.bridge`), but the coherence order stays auth → admin → oauth so the
   `mcp/oauthProvider.ts` merge (`mcp-2`) lands after admin (oidc/passkey ride auth;
-  permissions done 2026-07).
+  permissions done 2026-07, atlas done 2026-08).
 - `journeyService` ← `memories/` cluster (which itself touches admin + notificationService) →
   `journeyShareService` after. Note the place fold added two more in-container
   journeyService consumers (`places.service.ts`'s hooks and `places.mcp.ts`'s
@@ -373,7 +421,12 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
    module relocated byte-identical to `nest/transit/transit-itinerary.helpers.ts`
    as plain exports, `transit.mcp.ts` repointed, no service/bridge/DTO work, a
    new 21-case `TRANSIT-ITIN-*` characterization suite — **step 4 complete**)
-5. `atlasService` → `authService` (+ oidc/passkey) → `adminService` → `oauthService`
+5. `atlasService` (done 2026-08 — the frontier pull-forward that opened this
+   chain: the DB half into `AtlasService`, the pure-geo half into the plain
+   `atlas-geo.ts`, the 10-tool registrar + 4 resources onto `atlas.mcp.ts`,
+   the plugin host's 23rd constructor dep, the 2-export `atlas.bridge.ts` for
+   authService, and the DTO ratchet clearing all three allow-list entries)
+   → `authService` (+ oidc/passkey) → `adminService` → `oauthService`
 6. `memories/` cluster → `journeyService` → `journeyShareService`; `collectionsService`
    (done 2026-08-01 — taken off the frontier ahead of step 3: the 1024-line fold
    into `CollectionsService`, the 25-tool registrar onto `collections.mcp.ts`,
@@ -485,6 +538,66 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   collections addon — a real behavioral asymmetry that a naive "add `when:` like todo"
   port would have silently fixed; parity kept it and the new suite pins it (fixed in the
   trailing quirk commit below).
+
+- (2026-08-01 regeneration, post atlas fold) The frontier row's "bridge lives long"
+  warning held — the zero-bridge streak ends at five, exactly where the row predicted,
+  because `authService` is a *legacy dependent*, not a registrar: a registrar is a port,
+  but a legacy importer really is a repoint, and `atlas.bridge.ts` (2 exports:
+  `getCountryFromCoords` re-exported from the pure helper, `getHiddenCountries` over a
+  bridge-local `AtlasService`) now waits for the authService fold to die. The "bridge
+  tax: `mcp/tools/atlas.ts`, `mcp/resources.ts`" half over-predicted as usual — both
+  were ports, and the resources port had a knock-on the graph had not tracked:
+  `resources.test.ts`'s harness runs `withTools: false`, which never attaches the
+  decorator registry, so the moved resource cases had to migrate into
+  `tools-atlas-expanded.test.ts` (vacay-harness shape) and the suite retired with its
+  last two cases. Two more shapes the graph should keep tracking: (a) this was the
+  second places-style **split fold** — the pure half went to a plain module
+  (`atlas-geo.ts`) rather than the injectable, forced here by cache lifetime (two
+  `AtlasService` instances exist in prod — container + bridge — and instance state
+  would duplicate the multi-MB #1576 indexes and split the shared Nominatim
+  throttle); and (b) unlike collections, the legacy MCP surface DID gate on the
+  addon, so the `when:` gate is parity, not a trailing fix — the gate-asymmetry
+  check is now a per-domain question, not a default.
+
+## Quirks fixed after the atlas fold (the trailing `fix(server)` commit)
+
+The relocation itself was byte-identical; these were then fixed on top, each with a
+regression test (`ATLAS-SVC-031…036` + two MCP casing cases), so the parity diff and the
+behaviour change stayed in separate commits:
+
+1. **No transactions anywhere.** `markCountry` (2 statements), `unmarkCountry` (3),
+   `markRegion` (4) and `unmarkRegion` (delete + tombstone + the country cascade, which
+   nests `unmarkCountry` as a savepoint) all ran statement-by-statement. All now run in
+   `db.transaction()` ("Transactions are not optional", server/CLAUDE.md) —
+   ATLAS-SVC-035/036 pin the rollback.
+2. **A trip-less user's manually marked country read as unmarked.** `countryPlaces`'
+   zero-trip early return hardcoded `manually_marked: false`, skipping the
+   `visited_countries` lookup entirely. The early return now performs the lookup
+   (shape unchanged — ATLAS-SVC-031).
+3. **`updateBucketItem` dropped explicit falsy values.** The `x || null` bindings wrote
+   NULL for `lat: 0` / `lng: 0` (a bucket item on the equator or prime meridian lost its
+   pin) and collapsed `notes: ''` to NULL. Now `?? null` (ATLAS-SVC-032/033).
+4. **The mutating bucket SQL wasn't user-scoped.** The UPDATE/DELETE (and the update's
+   re-select) ran on `id` alone, guarded only by the preceding ownership SELECT. All
+   three now carry `AND user_id = ?` — defense-in-depth, the ownership SELECT stays the
+   primary gate (ATLAS-SVC-034).
+5. **The MCP region/country-places tools didn't uppercase.** `mark_region_visited`
+   stored `jp-13`/`jp` verbatim — creating rows REST's uppercased unmark could never
+   hit — and `get_country_atlas_places` passed `fr` through to a lookup that matched
+   nothing. Both now uppercase like the REST controller (and `unmark_region_visited`
+   with them).
+
+**Quirks deliberately preserved** (parity, not oversights): the detached GET-path
+`INSERT OR REPLACE INTO place_regions` backfill writes in `stats`/`visitedRegions`
+(lazy geocode cache-fill by design, deduped through the shared `geocodingInFlight`
+set); `getStats`' two divergent return shapes (the zero-trip branch has `trips: []`
+and only the four base stats — a client-visible contract); the import-time unref'd
+cache-cleanup `setInterval` in `atlas-geo.ts` (documented parity exception,
+audit-log.logger class); `getCountryFromAddress` returning bare 2-letter uppercase
+address segments unvalidated (the heuristic the resolution order is built around);
+and `updateBucketItem`'s whitespace-only-name silent no-op (`?.trim() || null` +
+COALESCE — shared with the MCP path, and the REST controller's trim guard 400s the
+whitespace case before it ever reaches the service).
 
 ## Quirks fixed after the collections fold (the trailing `fix(server)` commit)
 
