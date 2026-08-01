@@ -8,7 +8,7 @@ import {
 } from '@simplewebauthn/server';
 import { db } from '../db/database';
 import { resolveWebauthnConfig } from './webauthnConfig';
-import { generateToken, stripUserForClient, avatarUrl } from './authService';
+import { generateToken, stripUserForClient, avatarUrl } from '../nest/auth/auth.bridge';
 import type { User } from '../types';
 
 // ---------------------------------------------------------------------------

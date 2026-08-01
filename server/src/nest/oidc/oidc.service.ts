@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as oidc from '../../services/oidcService';
 import { getAppUrl } from '../../app-config';
-import { resolveAuthToggles } from '../../services/authService';
+import { AuthService } from '../auth/auth.service';
 import { setAuthCookie } from '../../services/cookie';
 
 /**
@@ -12,7 +12,9 @@ import { setAuthCookie } from '../../services/cookie';
  */
 @Injectable()
 export class OidcService {
-  oidcLoginEnabled(): boolean { return resolveAuthToggles().oidc_login; }
+  constructor(private readonly auth: AuthService) {}
+
+  oidcLoginEnabled(): boolean { return this.auth.resolveAuthToggles().oidc_login; }
   getOidcConfig() { return oidc.getOidcConfig(); }
   getAppUrl() { return getAppUrl(); }
   discover(issuer: string, discoveryUrl?: string | null) { return oidc.discover(issuer, discoveryUrl); }

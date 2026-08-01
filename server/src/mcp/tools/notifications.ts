@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { z } from 'zod';
-import { isDemoUser } from '../../services/authService';
+import { isDemoUser } from '../../nest/auth/auth.bridge';
 import {
   getNotifications, getUnreadCount,
   markRead as markNotificationRead, markUnread as markNotificationUnread,

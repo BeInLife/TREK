@@ -5,7 +5,7 @@ import {
   demoDenied, ok,
 } from '@trek/nest-mcp';
 import { z } from 'zod';
-import { isDemoUser } from '../../services/authService';
+import { AuthService } from '../auth/auth.service';
 import { isAddonEnabled } from '../addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import { DatabaseService } from '../database/database.service';
@@ -56,10 +56,11 @@ export class CollectionsMcp {
   constructor(
     private readonly collections: CollectionsService,
     private readonly db: DatabaseService,
+    private readonly auth: AuthService,
   ) {}
 
   private denyDemo(userId: number) {
-    return isDemoUser(userId) ? demoDenied() : null;
+    return this.auth.isDemoUser(userId) ? demoDenied() : null;
   }
 
   // ── Read ──────────────────────────────────────────────────────────────

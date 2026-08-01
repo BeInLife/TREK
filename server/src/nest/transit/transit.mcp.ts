@@ -4,7 +4,7 @@ import {
   demoDenied, ok,
 } from '@trek/nest-mcp';
 import { z } from 'zod';
-import { isDemoUser } from '../../services/authService';
+import { AuthService } from '../auth/auth.service';
 import {
   buildTransitReservationParts,
   cleanTransitItineraryNames,
@@ -63,6 +63,7 @@ export class TransitMcp {
     private readonly days: DaysService,
     private readonly reservations: ReservationsService,
     private readonly db: DatabaseService,
+    private readonly auth: AuthService,
   ) {}
 
   @Tool({
@@ -180,7 +181,7 @@ export class TransitMcp {
     },
     ctx: McpContext,
   ) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
     const day = this.days.getDay(dayId, tripId);

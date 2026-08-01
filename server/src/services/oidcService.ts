@@ -5,7 +5,7 @@ import { db } from '../db/database';
 import { JWT_SECRET, SESSION_DURATION_SECONDS } from '../config';
 import { User } from '../types';
 import { decrypt_api_key } from './apiKeyCrypto';
-import { resolveAuthToggles } from './authService';
+import { resolveAuthToggles } from '../nest/auth/auth.bridge';
 import { joinTripAsMember } from './tripMembership';
 
 // ---------------------------------------------------------------------------

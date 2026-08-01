@@ -29,8 +29,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
   collab, vacay, reservations, day, permissions, audit, budget, trip, maps,
-  transit, place, transit-itinerary, collections — see the migration recipe
-  below.
+  transit, place, transit-itinerary, collections, atlas, auth — see the
+  migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -331,10 +331,10 @@ controller deliberately does not; the mark_region_visited /
 get_country_atlas_places no-uppercase divergence from REST relocated
 untouched. The plugin host swapped its 9 atlas imports for the injected
 service — its 23rd constructor dep — and a minimal 2-export `atlas.bridge.ts`
-exists solely for the legacy `authService.getTravelStats` edge
+existed solely for the legacy `authService.getTravelStats` edge
 (`getCountryFromCoords` re-exported straight from atlas-geo,
-`getHiddenCountries` over the bridge instance); it dies when authService
-migrates. resources.test.ts retired with its last two cases — every resource
+`getHiddenCountries` over the bridge instance); it died with the auth fold, as
+predicted. resources.test.ts retired with its last two cases — every resource
 it covered now lives in the domain suites. The trailing `fix(server)` quirk
 commit then wrapped the four multi-statement mark/unmark writes in
 `db.transaction()` (the region cascade nests as a savepoint), made the
@@ -344,6 +344,35 @@ update, user-scoped the mutating bucket SQL, and uppercased the MCP
 region/country-places codes to match REST — each pinned by
 `ATLAS-SVC-031…036` plus two MCP casing cases; see migration-graph.md's
 "Quirks fixed after the atlas fold".)
+authService followed (1497 lines, the biggest fold and the head of the
+auth → admin → oauth chain: the pure crypto half — backup-code
+hash/match/generate, `stripUserForClient`, key masking, the import-time
+`DUMMY_PASSWORD_HASH` timing equaliser and the `avatarDir` mkdir (both
+documented parity exceptions) — moved to the plain module `auth.helpers.ts`,
+while the DB half — toggles/app-config, register/login with the CWE-208
+dummy-hash path, MFA setup/enable/disable/verify, the password-reset
+throttle+token flows with their two `db.transaction()` revocation blocks,
+API keys/settings, travel stats, MCP/ws/resource tokens, `isDemoUser` and
+the two token verifiers — folded into `AuthService` over DatabaseService +
+injected PermissionsService (ex `permissions.bridge`) and AtlasService (ex
+`atlas.bridge`, which died on schedule). The `mfaSetupPending` and
+per-email reset-throttle maps stay module-scoped (with the unref'd cleanup
+interval) so the bridge instance and the container singleton share them; the
+otplib `window: 1` mutation runs at module top; `require('../../../package.json')`
+and `avatarDir` re-anchored one directory deeper — the only non-verbatim
+lines besides the two injection swaps. No MCP registrar existed and the
+plugin host never imported authService, so neither surface changed; the 15
+in-container `*.mcp.ts` demo guards now inject AuthService (their modules
+import AuthModule) — except `atlas.mcp.ts`, which keeps a bridge import
+because AuthService injects AtlasService and the reverse module edge would
+close a cycle (places.mcp precedent). The 8-export `auth.bridge.ts` serves
+`mcp/index.ts` token verification, the three legacy tool registrars'
+`isDemoUser`, and the un-migrated adminService/oidcService/passkeyService.
+Tests moved with IDs preserved: authService.test.ts → auth.helpers.test.ts,
+authServiceDb.test.ts → auth.service.test.ts (+ AUTH-BR-001…007 bridge
+delegation); auth.e2e converted DI-native — the 30-method whole-module mock
+died, login now runs real bcrypt and real audit rows; oidc.e2e switched its
+dead path-mock for a `vi.spyOn(app.get(AuthService), …)` instance stub.)
 Repeat these steps per
 service (next up: **the notifications fan-in** —
 per the dependency-honest order in

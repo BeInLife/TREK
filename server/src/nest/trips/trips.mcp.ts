@@ -5,7 +5,7 @@ import {
   demoDenied, ok,
 } from '@trek/nest-mcp';
 import { z } from 'zod';
-import { isDemoUser } from '../../services/authService';
+import { AuthService } from '../auth/auth.service';
 import { isAddonEnabled, getCollabFeatures } from '../addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import { safeBroadcast, MAX_MCP_TRIP_DAYS, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
@@ -62,6 +62,7 @@ export class TripsMcp {
     private readonly trips: TripsService,
     private readonly todos: TodoService,
     private readonly collab: CollabService,
+    private readonly auth: AuthService,
   ) {}
 
   // --- TRIPS ---
@@ -85,7 +86,7 @@ export class TripsMcp {
     },
     ctx: McpContext,
   ) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (start_date) {
       const d = new Date(start_date + 'T00:00:00Z');
       if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== start_date)
@@ -128,7 +129,7 @@ export class TripsMcp {
     },
     ctx: McpContext,
   ) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.trips.canAccessTrip(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('trip_edit', tripId, ctx.userId)) return permissionDenied();
     if (start_date) {
@@ -158,7 +159,7 @@ export class TripsMcp {
     access: (ctx) => canDeleteTrips(ctx.scopes),
   })
   async deleteTrip({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.trips.isOwner(tripId, ctx.userId)) return noAccess();
     this.trips.remove(tripId, ctx.userId, 'user');
     return ok({ success: true, tripId });
@@ -285,7 +286,7 @@ export class TripsMcp {
     access: { group: 'trips', mode: 'write' },
   })
   async addTripMember({ tripId, identifier }: { tripId: number; identifier: string }, ctx: McpContext) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.trips.canAccessTrip(tripId, ctx.userId)) return noAccess();
     const ownerRow = this.trips.getOwner(tripId);
     if (!ownerRow || ownerRow.user_id !== ctx.userId)
@@ -311,7 +312,7 @@ export class TripsMcp {
     access: { group: 'trips', mode: 'write' },
   })
   async removeTripMember({ tripId, memberId }: { tripId: number; memberId: number }, ctx: McpContext) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.trips.canAccessTrip(tripId, ctx.userId)) return noAccess();
     const ownerRow = this.trips.getOwner(tripId);
     if (!ownerRow || ownerRow.user_id !== ctx.userId)
@@ -332,7 +333,7 @@ export class TripsMcp {
     access: { group: 'trips', mode: 'write' },
   })
   async copyTrip({ tripId, title }: { tripId: number; title?: string }, ctx: McpContext) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.trips.canAccessTrip(tripId, ctx.userId)) return noAccess();
     try {
       const newTripId = this.trips.copy(tripId, ctx.userId, title);

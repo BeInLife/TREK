@@ -5,7 +5,10 @@ import {
   demoDenied, ok,
 } from '@trek/nest-mcp';
 import { z } from 'zod';
-import { isDemoUser } from '../../services/authService';
+// auth.bridge, not an injected AuthService: AuthService injects AtlasService
+// (getTravelStats), so AtlasModule importing AuthModule would close a module
+// cycle — same documented trade-off as places.mcp.ts keeping assignments.bridge.
+import { isDemoUser } from '../auth/auth.bridge';
 import { isAddonEnabled } from '../addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
 import { AtlasService } from './atlas.service';

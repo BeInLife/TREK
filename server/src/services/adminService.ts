@@ -9,7 +9,7 @@ import { revokeUserSessions, revokeUserSessionsForClient } from '../mcp/sessionM
 import { emitUserDeleted } from '../plugin-user-lifecycle';
 import { User, Addon } from '../types';
 import { maybe_encrypt_api_key, decrypt_api_key } from './apiKeyCrypto';
-import { resolveAuthToggles } from './authService';
+import { resolveAuthToggles } from '../nest/auth/auth.bridge';
 import { avatarUrl } from './avatarUrl';
 import { prepareLlmAddonConfigForWrite, maskLlmAddonConfig } from './llmConfig';
 import { getPhotoProviderConfig } from './memories/helpersService';

@@ -5,6 +5,7 @@ import { AssignmentsMcp } from '../../src/nest/assignments/assignments.mcp';
 import { AssignmentsService } from '../../src/nest/assignments/assignments.service';
 import { AtlasMcp } from '../../src/nest/atlas/atlas.mcp';
 import { AtlasService } from '../../src/nest/atlas/atlas.service';
+import { AuthService } from '../../src/nest/auth/auth.service';
 import { BudgetMcp } from '../../src/nest/budget/budget.mcp';
 import { BudgetService } from '../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.service';
@@ -54,6 +55,7 @@ import { RealtimeService } from '../../src/nest/realtime/realtime.service';
 export function createMcpTestRegistry(): McpRegistry {
   const dbService = new DatabaseService(db);
   const permissionsService = new PermissionsService(dbService);
+  const authService = new AuthService(dbService, permissionsService, new AtlasService(dbService));
   const realtimeService = new RealtimeService();
   const daysService = new DaysService(dbService, permissionsService, realtimeService);
   const exchangeRatesService = new ExchangeRatesService();
@@ -80,23 +82,23 @@ export function createMcpTestRegistry(): McpRegistry {
   );
   return createTestRegistry(
     [
-      new TagsMcp(new TagsService(dbService)),
+      new TagsMcp(new TagsService(dbService), authService),
       new CategoriesMcp(new CategoriesService(dbService)),
-      new TodoMcp(todoService),
-      new PackingMcp(packingService),
-      new BudgetMcp(budgetService, exchangeRatesService, dbService),
-      new ReservationsMcp(reservationsService, daysService, budgetService),
-      new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService)),
-      new DaysMcp(daysService, dbService, placesService),
-      new AssignmentsMcp(new AssignmentsService(dbService, permissionsService, realtimeService), daysService),
-      new CollabMcp(collabService),
-      new VacayMcp(new VacayService(dbService, realtimeService)),
-      new TripsMcp(tripsService, todoService, collabService),
-      new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService)),
+      new TodoMcp(todoService, authService),
+      new PackingMcp(packingService, authService),
+      new BudgetMcp(budgetService, exchangeRatesService, dbService, authService),
+      new ReservationsMcp(reservationsService, daysService, budgetService, authService),
+      new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService), authService),
+      new DaysMcp(daysService, dbService, placesService, authService),
+      new AssignmentsMcp(new AssignmentsService(dbService, permissionsService, realtimeService), daysService, authService),
+      new CollabMcp(collabService, authService),
+      new VacayMcp(new VacayService(dbService, realtimeService), authService),
+      new TripsMcp(tripsService, todoService, collabService, authService),
+      new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService), authService),
       new MapsMcp(mapsService),
-      new PlacesMcp(placesService, mapsService, dbService),
-      new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService), dbService),
-      new TransitMcp(new TransitService(), daysService, reservationsService, dbService),
+      new PlacesMcp(placesService, mapsService, dbService, authService),
+      new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService), dbService, authService),
+      new TransitMcp(new TransitService(), daysService, reservationsService, dbService, authService),
       new AtlasMcp(new AtlasService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },

@@ -5,7 +5,7 @@ import {
   demoDenied, errorResult, ok,
 } from '@trek/nest-mcp';
 import { z } from 'zod';
-import { isDemoUser } from '../../services/authService';
+import { AuthService } from '../auth/auth.service';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
 import { AssignmentsService } from './assignments.service';
 import { DaysService } from '../days/days.service';
@@ -24,6 +24,7 @@ export class AssignmentsMcp {
   constructor(
     private readonly assignments: AssignmentsService,
     private readonly days: DaysService,
+    private readonly auth: AuthService,
   ) {}
 
   @Tool({
@@ -42,7 +43,7 @@ export class AssignmentsMcp {
     { tripId, dayId, placeId, notes }: { tripId: number; dayId: number; placeId: number; notes?: string },
     ctx: McpContext,
   ) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.assignments.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.assignments.dayExists(dayId, tripId)) return errorResult('Day not found.');
@@ -68,7 +69,7 @@ export class AssignmentsMcp {
     { tripId, dayId, assignmentId }: { tripId: number; dayId: number; assignmentId: number },
     ctx: McpContext,
   ) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.assignments.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.assignments.assignmentExistsInDay(assignmentId, dayId, tripId))
@@ -97,7 +98,7 @@ export class AssignmentsMcp {
     },
     ctx: McpContext,
   ) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.assignments.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     const existing = this.assignments.getAssignmentForTrip(assignmentId, tripId);
@@ -131,7 +132,7 @@ export class AssignmentsMcp {
     },
     ctx: McpContext,
   ) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.assignments.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.assignments.getAssignmentForTrip(assignmentId, tripId)) return errorResult('Assignment not found.');
@@ -180,7 +181,7 @@ export class AssignmentsMcp {
     { tripId, assignmentId, userIds }: { tripId: number; assignmentId: number; userIds: number[] },
     ctx: McpContext,
   ) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.assignments.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.assignments.getAssignmentForTrip(assignmentId, tripId)) return errorResult('Assignment not found.');
@@ -204,7 +205,7 @@ export class AssignmentsMcp {
     { tripId, dayId, assignmentIds }: { tripId: number; dayId: number; assignmentIds: number[] },
     ctx: McpContext,
   ) {
-    if (isDemoUser(ctx.userId)) return demoDenied();
+    if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.assignments.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.days.getDay(dayId, tripId)) return errorResult('Day not found.');

@@ -11,7 +11,7 @@ import zlib from 'zlib';
 // per-country store, geocode/region caches, country poly/box indexes, the
 // shared Nominatim throttle and the geocodingInFlight dedup set) are
 // file-scoped so their lifetime stays process-global no matter how many
-// AtlasService instances exist (container singleton + atlas.bridge.ts +
+// AtlasService instances exist (container singleton + auth.bridge.ts +
 // test helpers) — instance state would duplicate the multi-MB indexes the
 // #1576 OOM fix exists to avoid and split the ≥1.1s Nominatim throttle.
 // Relocated verbatim from the legacy services/atlasService.ts fold.

@@ -5,6 +5,7 @@ import { TransitMcp } from './transit.mcp';
 import { RateLimitService } from '../auth/rate-limit.service';
 import { DaysModule } from '../days/days.module';
 import { ReservationsModule } from '../reservations/reservations.module';
+import { AuthModule } from '../auth/auth.module';
 
 /**
  * Transit domain (#1065) — the Transitous/MOTIS proxy. TransitMcp carries the
@@ -13,7 +14,7 @@ import { ReservationsModule } from '../reservations/reservations.module';
  */
 @Module({
   // DaysModule + ReservationsModule: TransitMcp's create_transit_journey injects both.
-  imports: [DaysModule, ReservationsModule],
+  imports: [DaysModule, ReservationsModule, AuthModule],
   controllers: [TransitController],
   providers: [TransitService, TransitMcp, RateLimitService],
   exports: [TransitService],

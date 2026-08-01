@@ -2,8 +2,7 @@
  * Unit tests for the DI-native AtlasService and the atlas-geo helper module —
  * ATLAS-UNIT-001..028 and ATLAS-SVC-001..028 moved 1:1 from the legacy
  * tests/unit/services/atlasService.test.ts (case IDs preserved), plus
- * ATLAS-SVC-029/030 pinning the atlas.bridge.ts delegation for the remaining
- * legacy consumer (authService). Uses a real in-memory SQLite DB so the SQL
+ * Uses a real in-memory SQLite DB so the SQL
  * logic is exercised faithfully; the pure-geo functions are imported straight
  * from atlas-geo (their caches are module-scoped there on purpose).
  */
@@ -43,7 +42,6 @@ import { createUser, createTrip, createReservation } from '../../helpers/factori
 import { getCached, setCache, getCountryFromCoords, getCountryFromAddress, isPointInCountryBox, reverseGeocodeCountry, getRegionGeo, getCountryGeo } from '../../../src/nest/atlas/atlas-geo';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { AtlasService } from '../../../src/nest/atlas/atlas.service';
-import { getCountryFromCoords as bridgeGetCountryFromCoords, getHiddenCountries as bridgeGetHiddenCountries } from '../../../src/nest/atlas/atlas.bridge';
 
 // Direct construction over the shared test connection — no TestingModule (repo
 // convention for DI-native service unit tests).
@@ -1055,23 +1053,14 @@ describe('unmarkRegionVisited — tombstones + country cascade', () => {
   });
 });
 
-// ── atlas.bridge.ts delegation (the authService consumer path) ──────────────
+// ── atlas.bridge.ts delegation ───────────────────────────────────────────────
+// ATLAS-SVC-029/030 retired with atlas.bridge.ts itself: the sole consumer
+// (legacy authService) went DI-native and injects AtlasService now. 030's
+// coordinate pin lives on in ATLAS-SVC-030b below.
 
-describe('atlas.bridge delegation', () => {
-  it('ATLAS-SVC-029: bridge getHiddenCountries reflects tombstones written through the service', () => {
-    const { user } = createUser(testDb);
-    atlas.unmarkCountry(user.id, 'JP');
-
-    // The bridge's own AtlasService instance runs over the db Proxy (mocked to
-    // this suite's testDb), so it must see the same hidden_countries row.
-    const hidden = bridgeGetHiddenCountries(user.id);
-    expect(hidden.has('JP')).toBe(true);
-    expect(hidden.has('FR')).toBe(false);
-  });
-
-  it('ATLAS-SVC-030: bridge getCountryFromCoords is the atlas-geo function (shared indexes)', () => {
-    expect(bridgeGetCountryFromCoords).toBe(getCountryFromCoords);
-    expect(bridgeGetCountryFromCoords(48.85, 2.35)).toBe('FR');
+describe('getCountryFromCoords coordinate pin', () => {
+  it('ATLAS-SVC-030b: resolves Paris coordinates to FR (shared atlas-geo indexes)', () => {
+    expect(getCountryFromCoords(48.85, 2.35)).toBe('FR');
   });
 });
 

@@ -4,6 +4,7 @@ import { PlacesService } from './places.service';
 import { PlacesMcp } from './places.mcp';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { MapsModule } from '../maps/maps.module';
+import { AuthModule } from '../auth/auth.module';
 
 /**
  * Places domain (S8 — Phase 2 trip sub-domain). Depends on L4 Categories + L5
@@ -14,7 +15,7 @@ import { MapsModule } from '../maps/maps.module';
  * is no places.bridge.ts: nothing outside the container consumes this domain.
  */
 @Module({
-  imports: [PermissionsModule, MapsModule],
+  imports: [PermissionsModule, MapsModule, AuthModule],
   controllers: [PlacesController],
   providers: [PlacesService, PlacesMcp],
   exports: [PlacesService],

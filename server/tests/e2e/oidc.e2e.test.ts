@@ -1,8 +1,10 @@
 /**
  * OIDC e2e — exercises the migrated /api/auth/oidc flow with the real cookie
- * service. The OIDC service + auth toggles are mocked; this proves the flow is
- * unauthenticated, the sso-disabled 403, the login redirect, and that /exchange
- * sets the httpOnly trek_session cookie from a valid auth code.
+ * service. The OIDC service is mocked and the auth toggles are stubbed on the
+ * container's real AuthService instance (OidcService injects it since the auth
+ * DI fold — the old services/authService path mock would silently miss); this
+ * proves the flow is unauthenticated, the sso-disabled 403, the login redirect,
+ * and that /exchange sets the httpOnly trek_session cookie from a valid auth code.
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from 'vitest';
 import request from 'supertest';
@@ -15,8 +17,26 @@ vi.mock('../../src/app-config', async (importOriginal) => {
   return { ...actual, getAppUrl: () => 'https://app' };
 });
 
-const { toggles } = vi.hoisted(() => ({ toggles: { oidc_login: true } }));
-vi.mock('../../src/services/authService', () => ({ resolveAuthToggles: () => toggles }));
+const { db } = vi.hoisted(() => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const Database = require('better-sqlite3');
+  // Bare :memory: db — nothing in these flows queries it (the toggles are
+  // stubbed on the AuthService instance below), the container just needs a
+  // connection to construct the auth/permissions/atlas providers.
+  return { db: new Database(':memory:') };
+});
+vi.mock('../../src/db/database', () => ({
+  db,
+  closeDb: () => {},
+  reinitialize: () => {},
+  getPlaceWithTags: () => null,
+  canAccessTrip: () => undefined,
+  isOwner: () => false,
+}));
+vi.mock('../../src/websocket', () => ({ broadcastToUser: vi.fn(), broadcast: vi.fn() }));
+vi.mock('../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
+
+const toggles = { oidc_login: true };
 
 const { oidcSvc } = vi.hoisted(() => ({
   oidcSvc: {
@@ -28,6 +48,8 @@ const { oidcSvc } = vi.hoisted(() => ({
 vi.mock('../../src/services/oidcService', () => oidcSvc);
 
 import { OidcModule } from '../../src/nest/oidc/oidc.module';
+import { DatabaseModule } from '../../src/nest/database/database.module';
+import { AuthService } from '../../src/nest/auth/auth.service';
 import { TrekExceptionFilter } from '../../src/nest/common/trek-exception.filter';
 
 describe('OIDC e2e (real cookie service)', () => {
@@ -35,7 +57,7 @@ describe('OIDC e2e (real cookie service)', () => {
   let app: Awaited<ReturnType<typeof build>>;
 
   async function build() {
-    const moduleRef = await Test.createTestingModule({ imports: [OidcModule] }).compile();
+    const moduleRef = await Test.createTestingModule({ imports: [DatabaseModule, OidcModule] }).compile();
     const nest = moduleRef.createNestApplication();
     nest.use(cookieParser());
     nest.useGlobalFilters(new TrekExceptionFilter());
@@ -47,6 +69,7 @@ describe('OIDC e2e (real cookie service)', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     app = await build();
     server = app.getHttpServer();
+    vi.spyOn(app.get(AuthService), 'resolveAuthToggles').mockImplementation(() => toggles as never);
     oidcSvc.getOidcConfig.mockReturnValue({ issuer: 'https://idp', clientId: 'c', clientSecret: 's', discoveryUrl: null });
     oidcSvc.discover.mockResolvedValue({ authorization_endpoint: 'https://idp/auth', userinfo_endpoint: 'https://idp/ui', issuer: 'https://idp' });
     oidcSvc.createState.mockReturnValue({ state: 'st', codeChallenge: 'cc' });

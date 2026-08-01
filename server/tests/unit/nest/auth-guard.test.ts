@@ -3,7 +3,6 @@ import { HttpException } from '@nestjs/common';
 import type { Request } from 'express';
 
 vi.mock('../../../src/middleware/auth', () => ({ extractToken: vi.fn(), verifyJwtAndLoadUser: vi.fn() }));
-vi.mock('../../../src/services/authService', () => ({ resolveAuthToggles: vi.fn() }));
 vi.mock('../../../src/services/cookie', () => ({ setAuthCookie: vi.fn() }));
 vi.mock('../../../src/nest/audit/client-ip', () => ({ getClientIp: vi.fn(() => '1.2.3.4') }));
 vi.mock('../../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
@@ -32,7 +31,7 @@ const audit = { writeAudit } as unknown as AuditService;
 const pc = (limiter: RateLimitService) => new PasskeyController(limiter, audit);
 import { CurrentUser } from '../../../src/nest/auth/current-user.decorator';
 import { extractToken, verifyJwtAndLoadUser } from '../../../src/middleware/auth';
-import { resolveAuthToggles } from '../../../src/services/authService';
+import type { AuthService } from '../../../src/nest/auth/auth.service';
 import { setAuthCookie } from '../../../src/services/cookie';
 import type { AuditService } from '../../../src/nest/audit/audit.service';
 import * as passkey from '../../../src/services/passkeyService';
@@ -164,15 +163,18 @@ describe('AdminGuard', () => {
 });
 
 describe('PasskeyEnabledGuard', () => {
-  const guard = new PasskeyEnabledGuard();
+  // The guard injects AuthService since the auth DI fold; a resolveAuthToggles
+  // stub replaces the old services/authService path mock.
+  const resolveAuthToggles = vi.fn();
+  const guard = new PasskeyEnabledGuard({ resolveAuthToggles } as unknown as AuthService);
 
   it('404s when passkey_login is off', () => {
-    vi.mocked(resolveAuthToggles).mockReturnValue({ passkey_login: false } as ReturnType<typeof resolveAuthToggles>);
+    resolveAuthToggles.mockReturnValue({ passkey_login: false });
     expect(thrown(() => guard.canActivate())).toEqual({ status: 404, body: { error: 'Passkey login is not enabled' } });
   });
 
   it('allows when passkey_login is on', () => {
-    vi.mocked(resolveAuthToggles).mockReturnValue({ passkey_login: true } as ReturnType<typeof resolveAuthToggles>);
+    resolveAuthToggles.mockReturnValue({ passkey_login: true });
     expect(guard.canActivate()).toBe(true);
   });
 });

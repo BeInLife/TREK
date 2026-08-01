@@ -5,16 +5,25 @@ import { PasskeyController } from './passkey.controller';
 import { AuthService } from './auth.service';
 import { RateLimitService } from './rate-limit.service';
 import { AuditModule } from '../audit/audit.module';
+import { PermissionsModule } from '../permissions/permissions.module';
+import { AtlasModule } from '../atlas/atlas.module';
 
 /**
  * Auth module — public flows (login/register/reset/mfa-verify/logout) and the
  * authenticated account/MFA/token endpoints. The OIDC sub-mount (/api/auth/oidc)
  * is a separate, not-yet-migrated route, so the strangler lists the auth
  * sub-paths explicitly rather than claiming all of /api/auth.
+ *
+ * PermissionsModule feeds getAppConfig's permissions block; AtlasModule feeds
+ * getTravelStats' hidden-countries subtraction. AuthService is exported for
+ * the in-container consumers (the domain *.mcp.ts demo guards, OidcService,
+ * PasskeyEnabledGuard); everything outside the container goes through
+ * auth.bridge.ts.
  */
 @Module({
-  imports: [AuditModule],
+  imports: [AuditModule, PermissionsModule, AtlasModule],
   controllers: [AuthPublicController, AuthController, PasskeyController],
   providers: [AuthService, RateLimitService],
+  exports: [AuthService],
 })
 export class AuthModule {}

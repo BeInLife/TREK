@@ -1,31 +1,31 @@
+/**
+ * Pure-function half of the auth unit suite, moved 1:1 from the legacy
+ * tests/unit/services/authService.test.ts when the auth backend went
+ * DI-native (case IDs preserved — SEC-008 secret-omission block). The DB
+ * half lives in tests/unit/nest/auth.service.test.ts. Only the apiKeyCrypto
+ * mock survives (auth.helpers imports it for mask_stored_api_key); the
+ * legacy db/permissions/mcp/scheduler mocks guarded imports the pure module
+ * no longer has.
+ */
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('../../../src/db/database', () => ({
-  db: { prepare: () => ({ get: vi.fn(), all: vi.fn(), run: vi.fn() }) },
-  canAccessTrip: vi.fn(),
-}));
 vi.mock('../../../src/config', () => ({ JWT_SECRET: 'test-secret', ENCRYPTION_KEY: '0'.repeat(64) }));
-vi.mock('../../../src/services/mfaCrypto', () => ({ encryptMfaSecret: vi.fn(), decryptMfaSecret: vi.fn() }));
 vi.mock('../../../src/services/apiKeyCrypto', () => ({
   decrypt_api_key: vi.fn((v) => v),
   maybe_encrypt_api_key: vi.fn((v) => v),
   encrypt_api_key: vi.fn((v) => v),
 }));
-vi.mock('../../../src/nest/permissions/permissions.bridge', () => ({ getAllPermissions: vi.fn(() => ({})), checkPermission: vi.fn() }));
-vi.mock('../../../src/services/ephemeralTokens', () => ({ createEphemeralToken: vi.fn() }));
-vi.mock('../../../src/mcp', () => ({ revokeUserSessions: vi.fn() }));
-vi.mock('../../../src/scheduler', () => ({ startTripReminders: vi.fn(), buildCronExpression: vi.fn() }));
 
 import {
   utcSuffix,
   stripUserForClient,
   maskKey,
-  avatarUrl,
   normalizeBackupCode,
   hashBackupCode,
   generateBackupCodes,
   parseBackupCodeHashes,
-} from '../../../src/services/authService';
+} from '../../../src/nest/auth/auth.helpers';
+import { avatarUrl } from '../../../src/services/avatarUrl';
 import type { User } from '../../../src/types';
 
 // ── utcSuffix ────────────────────────────────────────────────────────────────

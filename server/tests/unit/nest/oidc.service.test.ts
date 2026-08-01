@@ -29,18 +29,20 @@ vi.mock('../../../src/app-config', async (importOriginal) => {
   return { ...actual, getAppUrl };
 });
 
-const { resolveAuthToggles } = vi.hoisted(() => ({ resolveAuthToggles: vi.fn() }));
-vi.mock('../../../src/services/authService', () => ({ resolveAuthToggles }));
+// OidcService injects AuthService since the auth DI fold; a stub instance
+// replaces the old services/authService path mock.
+const resolveAuthToggles = vi.fn();
 
 const { setAuthCookie } = vi.hoisted(() => ({ setAuthCookie: vi.fn() }));
 vi.mock('../../../src/services/cookie', () => ({ setAuthCookie }));
 
 import { OidcService } from '../../../src/nest/oidc/oidc.service';
+import type { AuthService } from '../../../src/nest/auth/auth.service';
 
 let s: OidcService;
 beforeEach(() => {
   vi.clearAllMocks();
-  s = new OidcService();
+  s = new OidcService({ resolveAuthToggles } as unknown as AuthService);
 });
 
 describe('OidcService', () => {
