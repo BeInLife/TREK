@@ -424,6 +424,11 @@ export default function TransitSearchPanel({ day, days, places, accommodations =
       // An after-midnight arrival lands on the next trip day when it exists.
       const endDay = arrDate !== depDate ? days.find(d2 => d2.date === arrDate) : null
 
+      // Realtime time with scheduled fallback — the same `time ?? scheduledTime`
+      // the server's buildTransitReservationParts applies, so a scheduled-only
+      // feed still yields stop times instead of nulls.
+      const stopTime = (s: TransitLegStop) => s.time ?? s.scheduledTime
+
       // Endpoints: origin, each transfer stop, destination — the same shape
       // flights persist, so the map + connectors work unchanged.
       const transitLegs = it.legs.filter(l => l.mode !== 'WALK')
@@ -431,7 +436,8 @@ export default function TransitSearchPanel({ day, days, places, accommodations =
       endpoints.push({ role: 'from', sequence: 0, name: from.name, code: null, lat: from.lat, lng: from.lng, timezone: tzFrom, local_date: depDate, local_time: depTime })
       transitLegs.slice(0, -1).forEach((leg, i) => {
         const s = leg.to
-        endpoints.push({ role: 'stop', sequence: i + 1, name: s.name, code: null, lat: s.lat, lng: s.lng, timezone: tzAt(s.lat, s.lng), local_date: s.time ? dateYMDInTz(s.time, tzAt(s.lat, s.lng)) : null, local_time: s.time ? timeHHmmInTz(s.time, tzAt(s.lat, s.lng)) : null })
+        const t2 = stopTime(s)
+        endpoints.push({ role: 'stop', sequence: i + 1, name: s.name, code: null, lat: s.lat, lng: s.lng, timezone: tzAt(s.lat, s.lng), local_date: t2 ? dateYMDInTz(t2, tzAt(s.lat, s.lng)) : null, local_time: t2 ? timeHHmmInTz(t2, tzAt(s.lat, s.lng)) : null })
       })
       endpoints.push({ role: 'to', sequence: endpoints.length, name: to.name, code: null, lat: to.lat, lng: to.lng, timezone: tzTo, local_date: arrDate, local_time: arrTime })
 
@@ -464,8 +470,8 @@ export default function TransitSearchPanel({ day, days, places, accommodations =
               agency: l.agency,
               duration: l.duration,
               stops: l.intermediateStops,
-              from: { name: l.from.name, time: l.from.time ? timeHHmmInTz(l.from.time, tzAt(l.from.lat, l.from.lng)) : null, track: l.from.track },
-              to: { name: l.to.name, time: l.to.time ? timeHHmmInTz(l.to.time, tzAt(l.to.lat, l.to.lng)) : null, track: l.to.track },
+              from: { name: l.from.name, time: stopTime(l.from) ? timeHHmmInTz(stopTime(l.from)!, tzAt(l.from.lat, l.from.lng)) : null, track: l.from.track },
+              to: { name: l.to.name, time: stopTime(l.to) ? timeHHmmInTz(stopTime(l.to)!, tzAt(l.to.lat, l.to.lng)) : null, track: l.to.track },
               geometry: l.geometry || null,
               geometry_precision: l.geometryPrecision ?? 6,
             })),
