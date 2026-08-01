@@ -9,7 +9,7 @@ import { User } from '../../types';
  * Non-Nest entry point for the auth domain — for code running OUTSIDE the
  * Nest container: the legacy MCP transport (mcp/index.ts token verification),
  * the legacy tool registrars (mcp/tools/journey|notifications|transports), the
- * not-yet-migrated services/adminService, services/oidcService and
+ * not-yet-migrated services/adminService and
  * services/passkeyService, and — as the one in-container exception —
  * atlas.mcp.ts, which cannot inject AuthService without closing an
  * AuthModule↔AtlasModule cycle (AuthService injects AtlasService for

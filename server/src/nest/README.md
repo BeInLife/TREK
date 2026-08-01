@@ -29,7 +29,7 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
   collab, vacay, reservations, day, permissions, audit, budget, trip, maps,
-  transit, place, transit-itinerary, collections, atlas, auth — see the
+  transit, place, transit-itinerary, collections, atlas, auth, oidc — see the
   migration recipe below.
 
 ## Cross-cutting Foundation pieces
@@ -367,12 +367,33 @@ import AuthModule) — except `atlas.mcp.ts`, which keeps a bridge import
 because AuthService injects AtlasService and the reverse module edge would
 close a cycle (places.mcp precedent). The 8-export `auth.bridge.ts` serves
 `mcp/index.ts` token verification, the three legacy tool registrars'
-`isDemoUser`, and the un-migrated adminService/oidcService/passkeyService.
+`isDemoUser`, and the un-migrated adminService/passkeyService.
 Tests moved with IDs preserved: authService.test.ts → auth.helpers.test.ts,
 authServiceDb.test.ts → auth.service.test.ts (+ AUTH-BR-001…007 bridge
 delegation); auth.e2e converted DI-native — the 30-method whole-module mock
 died, login now runs real bcrypt and real audit rows; oidc.e2e switched its
 dead path-mock for a `vi.spyOn(app.get(AuthService), …)` instance stub.)
+oidcService followed (the frontier cash-in the auth fold predicted: a pure
+fold of the 508-line module into the existing wrapper `OidcService` over
+DatabaseService + injected AuthService — the `resolveAuthToggles`
+`auth.bridge` import became the injection, the first repoint-consumer of that
+bridge to migrate. No MCP registrar, no plugin-host import, and **no bridge
+at all**: nothing outside the container consumes the domain (day-notes/
+trip-invite class), so the `pendingStates`/`authCodes` maps, their two sweep
+`setInterval`s, the single-slot discovery cache and the JWKS cache became
+**instance state** — the module-scope precedent (permissions/atlas-geo/auth
+maps) applies only where a bridge instance must share state, and none exists
+here; the sweepers start in the constructor and are cleared in
+`onModuleDestroy`, the one wire-invisible deviation. The `uuid`/`bcryptjs`
+lazy requires, the `invite_exhausted` reference-sentinel transaction (reshaped
+one line for `DatabaseService.transaction`) and every SQL string relocated
+verbatim; controller and its unit suite needed zero edits. Tests moved with
+IDs preserved: oidcService.test.ts → oidc.service.test.ts (OIDC-SVC-001…045,
+superseding the 18-case delegation-shim suite; 046–048 carry its wrapper
+cases); oidc.e2e swapped its whole-module path mock for
+`vi.spyOn(app.get(OidcService), …)` instance spies; the integration suite
+spies the four HTTP methods on the container instance while driving the real
+state maps on that same instance.)
 Repeat these steps per
 service (next up: **the notifications fan-in** —
 per the dependency-honest order in
