@@ -3,6 +3,8 @@ import { db } from '../../src/db/database';
 import { trekMcpAccessPolicy, trekMcpValidateAccess } from '../../src/mcp/nest-mcp-policy';
 import { AssignmentsMcp } from '../../src/nest/assignments/assignments.mcp';
 import { AssignmentsService } from '../../src/nest/assignments/assignments.service';
+import { AtlasMcp } from '../../src/nest/atlas/atlas.mcp';
+import { AtlasService } from '../../src/nest/atlas/atlas.service';
 import { BudgetMcp } from '../../src/nest/budget/budget.mcp';
 import { BudgetService } from '../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.service';
@@ -95,6 +97,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new PlacesMcp(placesService, mapsService, dbService),
       new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService), dbService),
       new TransitMcp(new TransitService(), daysService, reservationsService, dbService),
+      new AtlasMcp(new AtlasService(dbService)),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },
   );

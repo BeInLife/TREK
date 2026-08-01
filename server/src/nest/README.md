@@ -312,6 +312,38 @@ the plugin host swapped its 7 collections imports for the injected service —
 its 22nd constructor dep — and NO bridge was needed anywhere; the dead
 `buildDedupSet` module helper was dropped in the move, the only line that
 didn't relocate verbatim).
+atlasService followed (1612 lines split two ways, places precedent: the DB
+half — stats aggregation, visited countries/regions with the #1490
+tombstone/cascade logic, bucket-list CRUD — folded into `AtlasService` over
+DatabaseService alone, while the ~750-line pure-geo half — the bundled
+admin0/admin1 stores and their #1576 OOM-shaped streaming builders, the
+point-in-polygon indexes, Nominatim geocoding with its shared ≥1.1s throttle,
+the 50k geocode cache with its import-time unref'd cleanup interval, and the
+`geocodingInFlight` dedup set — moved to the plain module `atlas-geo.ts` so
+those caches stay process-global across the container instance, the bridge
+instance and test helpers; `assetPath` re-anchored one directory deeper, the
+only non-verbatim line. The 10-tool legacy registrar `mcp/tools/atlas.ts`
+plus all four atlas resources in `mcp/resources.ts` (`trek://bucket-list`,
+`trek://visited-countries`, `trek://atlas/stats`, `trek://atlas/regions`)
+moved to `atlas.mcp.ts` — here the `when:` atlas-addon gate IS parity, since
+the legacy registrar and resources both gated on the addon while the REST
+controller deliberately does not; the mark_region_visited /
+get_country_atlas_places no-uppercase divergence from REST relocated
+untouched. The plugin host swapped its 9 atlas imports for the injected
+service — its 23rd constructor dep — and a minimal 2-export `atlas.bridge.ts`
+exists solely for the legacy `authService.getTravelStats` edge
+(`getCountryFromCoords` re-exported straight from atlas-geo,
+`getHiddenCountries` over the bridge instance); it dies when authService
+migrates. resources.test.ts retired with its last two cases — every resource
+it covered now lives in the domain suites. The trailing `fix(server)` quirk
+commit then wrapped the four multi-statement mark/unmark writes in
+`db.transaction()` (the region cascade nests as a savepoint), made the
+trip-less `countryPlaces` early return honour `manually_marked`, fixed the
+`|| null` bindings that dropped `lat: 0`/`lng: 0`/`notes: ''` on bucket
+update, user-scoped the mutating bucket SQL, and uppercased the MCP
+region/country-places codes to match REST — each pinned by
+`ATLAS-SVC-031…036` plus two MCP casing cases; see migration-graph.md's
+"Quirks fixed after the atlas fold".)
 Repeat these steps per
 service (next up: **the notifications fan-in** —
 per the dependency-honest order in

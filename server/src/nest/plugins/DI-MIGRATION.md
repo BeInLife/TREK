@@ -130,8 +130,13 @@ dep; collectionsService swapped in 2026-08 with the collections fold — its
 seven imported symbols (`listCollections`, `getCollection`, `createCollection`,
 `updateCollection`, `savePlace`, `copyToTrip`, `deletePlace`) became the
 injected `CollectionsService`, the factory's 22nd constructor dep, with
-`mapCollectionError` unchanged on top; the remaining factory
-imports are all Wave-5 domains: journeys, atlas).
+`mapCollectionError` unchanged on top; atlasService swapped in 2026-08 with
+the atlas fold — its nine imported symbols (`listVisitedCountries`,
+`listManuallyVisitedRegions`, `listBucketList`, `markCountryVisited`,
+`unmarkCountryVisited`, `markRegionVisited`, `unmarkRegionVisited`,
+`createBucketItem`, `deleteBucketItem`) became the injected `AtlasService`,
+the factory's 23rd constructor dep; the remaining factory import is the
+Wave-5 journeys domain).
 
 ### Test impact (as landed)
 
@@ -148,7 +153,9 @@ imports are all Wave-5 domains: journeys, atlas).
   `budgetStub` gained `listBudgetItems` for the two swapped closures); the
   collectionsService path mock became `collectionsStub` with the 2026-08
   collections fold (same sentinel behaviors — the status-tagged throws the
-  factory's `mapCollectionError` maps); a
+  factory's `mapCollectionError` maps); the atlasService path mock became
+  `atlasStub` with the 2026-08 atlas fold (same sentinel behaviors, keyed by
+  the service method names — `bucketList`, `markCountry`, …); a
   file-local shim keeps the
   historical `createRealRpcHost(id, granted)` call sites and supplies a default
   no-op router.

@@ -5,7 +5,7 @@
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
  * DI-native domains (budget/exchange-rates/reservations/tags/categories/todo/
  * packing/day-notes/days/assignments/oauth/llm-config/files/collab/vacay/
- * permissions/trips/places/collections)
+ * permissions/trips/places/collections/atlas)
  * are constructor-injected stubs; legacy services/* domains stay path-mocked
  * until their own DI migration lands.
  */
@@ -256,17 +256,19 @@ vi.mock('../../../src/services/journeyService', () => ({
   updateEntry: vi.fn((entryId: number, _uid: number, data: unknown) => (entryId === 99 ? null : { id: entryId, ...(data as object) })),
   deleteEntry: vi.fn((entryId: number) => entryId !== 99),
 }));
-vi.mock('../../../src/services/atlasService', () => ({
+// Atlas is a constructor-injected stub since the atlas fold (same behaviors as
+// the old services/atlasService path mock, keyed by the service method names).
+const atlasStub = {
   listVisitedCountries: vi.fn(() => [{ country_code: 'JP' }]),
   listManuallyVisitedRegions: vi.fn(() => [{ region_code: 'JP-13' }]),
-  listBucketList: vi.fn((uid: number) => [{ id: 5, user_id: uid, name: 'Kyoto' }]),
-  markCountryVisited: vi.fn(),
-  unmarkCountryVisited: vi.fn(),
-  markRegionVisited: vi.fn(),
-  unmarkRegionVisited: vi.fn(),
+  bucketList: vi.fn((uid: number) => [{ id: 5, user_id: uid, name: 'Kyoto' }]),
+  markCountry: vi.fn(),
+  unmarkCountry: vi.fn(),
+  markRegion: vi.fn(),
+  unmarkRegion: vi.fn(),
   createBucketItem: vi.fn((uid: number, data: { name: string }) => ({ id: 110, user_id: uid, name: data.name })),
   deleteBucketItem: vi.fn((_uid: number, itemId: number) => Number(itemId) !== 404),
-}));
+} as unknown as AtlasService;
 // Collections is a constructor-injected stub since the collections fold (same
 // behaviors as the old services/collectionsService path mock — the service
 // throws status-tagged errors the factory maps onto the RPC error classes).
@@ -321,6 +323,7 @@ import type { VacayService } from '../../../src/nest/vacay/vacay.service';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { PlacesService } from '../../../src/nest/places/places.service';
 import type { CollectionsService } from '../../../src/nest/collections/collections.service';
+import type { AtlasService } from '../../../src/nest/atlas/atlas.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { NotFoundError, ValidationError } from '../../../src/nest/trips/trips.service';
@@ -343,7 +346,7 @@ const tripsStub = {
   list: () => [{ id: 1 }],
   removeMember: vi.fn(),
 } as unknown as import('../../../src/nest/trips/trips.service').TripsService;
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub, addonsStub, new RealtimeService(), tripsStub, placesStub, collectionsStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub, addonsStub, new RealtimeService(), tripsStub, placesStub, collectionsStub, atlasStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 

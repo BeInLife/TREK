@@ -94,7 +94,8 @@ import {
   generateToken,
   getTravelStats,
 } from '../../../src/services/authService';
-import { unmarkCountryVisited } from '../../../src/services/atlasService';
+import { AtlasService } from '../../../src/nest/atlas/atlas.service';
+import { DatabaseService } from '../../../src/nest/database/database.service';
 import { verifyJwtAndLoadUser } from '../../../src/middleware/auth';
 
 // ---------------------------------------------------------------------------
@@ -794,7 +795,7 @@ describe('getTravelStats', () => {
 
     expect(getTravelStats(user.id).countries).toContain('JP');
 
-    unmarkCountryVisited(user.id, 'JP');
+    new AtlasService(new DatabaseService(testDb)).unmarkCountry(user.id, 'JP');
 
     const after = getTravelStats(user.id);
     expect(after.countries).not.toContain('JP');

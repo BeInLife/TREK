@@ -22,7 +22,7 @@ import { startTripReminders } from '../scheduler';
 import { deleteUserCompletely } from './userCleanupService';
 import { emitUserDeleted } from '../plugin-user-lifecycle';
 import { getFlightDistanceKm } from './distanceService';
-import { getCountryFromCoords, getHiddenCountries } from './atlasService';
+import { getCountryFromCoords, getHiddenCountries } from '../nest/atlas/atlas.bridge';
 import { verifyJwtAndLoadUser } from '../middleware/auth';
 import { User } from '../types';
 import { DEMO_EMAIL_PRIMARY, isDemoEmail } from './demo';

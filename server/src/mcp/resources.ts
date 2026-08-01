@@ -1,5 +1,4 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp';
-import { listBucketList, listVisitedCountries, getStats as getAtlasStats, listManuallyVisitedRegions } from '../services/atlasService';
 import { getNotifications } from '../services/inAppNotifications';
 import { isAddonEnabled } from '../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../addons';
@@ -82,27 +81,9 @@ export function registerResources(server: McpServer, userId: number, scopes: str
   // src/nest/categories/categories.mcp.ts (@Resource, attached via the
   // nest-mcp registry in registerTools).
 
-  // User's bucket list
-  if (isAddonEnabled(ADDON_IDS.ATLAS) && canRead(scopes, 'atlas')) server.registerResource(
-    'bucket-list',
-    'trek://bucket-list',
-    { description: 'Your personal travel bucket list', mimeType: 'application/json' },
-    async (uri) => {
-      const items = listBucketList(userId);
-      return jsonContent(uri.href, items);
-    }
-  );
-
-  // User's visited countries
-  if (isAddonEnabled(ADDON_IDS.ATLAS) && canRead(scopes, 'atlas')) server.registerResource(
-    'visited-countries',
-    'trek://visited-countries',
-    { description: 'Countries you have marked as visited in Atlas', mimeType: 'application/json' },
-    async (uri) => {
-      const countries = listVisitedCountries(userId);
-      return jsonContent(uri.href, countries);
-    }
-  );
+  // The bucket-list and visited-countries resources moved to the DI-discovered
+  // src/nest/atlas/atlas.mcp.ts (@Resource, attached via the nest-mcp registry
+  // in registerTools).
 
   // The trip-budget-per-person and trip-budget-settlement resources moved to
   // the DI-discovered src/nest/budget/budget.mcp.ts (@ResourceTemplate).
@@ -121,28 +102,9 @@ export function registerResources(server: McpServer, userId: number, scopes: str
     }
   );
 
-  // Atlas stats and regions (addon-gated)
-  if (isAddonEnabled(ADDON_IDS.ATLAS) && canRead(scopes, 'atlas')) {
-    server.registerResource(
-      'atlas-stats',
-      'trek://atlas/stats',
-      { description: "User's atlas statistics — visited country counts and breakdown", mimeType: 'application/json' },
-      async (uri) => {
-        const stats = await getAtlasStats(userId);
-        return jsonContent(uri.href, stats);
-      }
-    );
-
-    server.registerResource(
-      'atlas-regions',
-      'trek://atlas/regions',
-      { description: 'List of manually visited regions for the current user', mimeType: 'application/json' },
-      async (uri) => {
-        const regions = listManuallyVisitedRegions(userId);
-        return jsonContent(uri.href, regions);
-      }
-    );
-  }
+  // The atlas-stats and atlas-regions resources moved to the DI-discovered
+  // src/nest/atlas/atlas.mcp.ts (@Resource, attached via the nest-mcp registry
+  // in registerTools).
 
   // The vacay resources moved to the DI-discovered src/nest/vacay/vacay.mcp.ts
   // (@McpController, attached via the nest-mcp registry in tools.ts).

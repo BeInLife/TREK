@@ -20,7 +20,7 @@ import { AddonsService } from '../../addons/addons.service';
 import { isDemoEmail } from '../../../services/demo';
 import { ADDON_IDS } from '../../../addons';
 import { listJourneys, listEntries as listJournalEntriesSvc, createEntry as createJournalEntrySvc, updateEntry as updateJournalEntrySvc, deleteEntry as deleteJournalEntrySvc, createJourney as createJourneySvc, deleteJourney as deleteJourneySvc, onPlaceCreated, onPlaceUpdated, onPlaceDeleted } from '../../../services/journeyService';
-import { listVisitedCountries, listManuallyVisitedRegions, listBucketList, markCountryVisited, unmarkCountryVisited, markRegionVisited, unmarkRegionVisited, createBucketItem as createBucketItemSvc, deleteBucketItem as deleteBucketItemSvc } from '../../../services/atlasService';
+import { AtlasService } from '../../atlas/atlas.service';
 import { CollectionsService } from '../../collections/collections.service';
 import { BudgetService } from '../../budget/budget.service';
 import { ExchangeRatesService } from '../../budget/exchange-rates.service';
@@ -132,7 +132,7 @@ export interface PluginCallRouter {
  *
  * DI-native domain services (budget, exchange-rates, reservations, tags,
  * categories, todo, packing, day-notes, assignments, oauth, files, collab,
- * vacay, trips, places, collections, the LLM config resolver) and
+ * vacay, trips, places, collections, atlas, the LLM config resolver) and
  * the DatabaseService (all inline SQL + the trip-access helper) are
  * constructor-injected; legacy `services/*` domains stay plain function
  * imports until their own migration lands (DI-MIGRATION.md), at which point
@@ -163,6 +163,7 @@ export class PluginHostDepsFactory {
     private readonly trips: TripsService,
     private readonly places: PlacesService,
     private readonly collections: CollectionsService,
+    private readonly atlas: AtlasService,
   ) {}
 
   /**
@@ -660,9 +661,9 @@ export class PluginHostDepsFactory {
       },
       atlasVisitedForUser: (userId) => {
         requireAddon(ADDON_IDS.ATLAS, 'atlas');
-        return { countries: listVisitedCountries(userId), regions: listManuallyVisitedRegions(userId) };
+        return { countries: this.atlas.listVisitedCountries(userId), regions: this.atlas.listManuallyVisitedRegions(userId) };
       },
-      atlasBucketForUser: (userId) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); return listBucketList(userId) as unknown[]; },
+      atlasBucketForUser: (userId) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); return this.atlas.bucketList(userId) as unknown[]; },
       vacayForUser: (userId) => { requireAddon(ADDON_IDS.VACAY, 'vacay'); return this.vacay.getPlanData(userId); },
       listCollectionsForUser: (userId) => { requireAddon(ADDON_IDS.COLLECTIONS, 'collections'); return this.collections.listCollections(userId); },
       getCollectionForUser: (userId, id) => { requireAddon(ADDON_IDS.COLLECTIONS, 'collections'); return this.collections.getCollection(userId, id); },
@@ -690,18 +691,18 @@ export class PluginHostDepsFactory {
         return { deleted: true };
       },
       // --- Atlas write: plain uid-scoped rows, no broadcasts in the service. ---
-      markCountryVisited: (userId, code) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); markCountryVisited(userId, code); return { visited: true }; },
-      unmarkCountryVisited: (userId, code) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); unmarkCountryVisited(userId, code); return { visited: false }; },
+      markCountryVisited: (userId, code) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); this.atlas.markCountry(userId, code); return { visited: true }; },
+      unmarkCountryVisited: (userId, code) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); this.atlas.unmarkCountry(userId, code); return { visited: false }; },
       markRegionVisited: (userId, regionCode, regionName, countryCode) => {
         requireAddon(ADDON_IDS.ATLAS, 'atlas');
-        markRegionVisited(userId, regionCode, regionName, countryCode);
+        this.atlas.markRegion(userId, regionCode, regionName, countryCode);
         return { visited: true };
       },
-      unmarkRegionVisited: (userId, regionCode) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); unmarkRegionVisited(userId, regionCode); return { visited: false }; },
-      createBucketItem: (userId, input) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); return createBucketItemSvc(userId, input as never); },
+      unmarkRegionVisited: (userId, regionCode) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); this.atlas.unmarkRegion(userId, regionCode); return { visited: false }; },
+      createBucketItem: (userId, input) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); return this.atlas.createBucketItem(userId, input as never); },
       deleteBucketItem: (userId, itemId) => {
         requireAddon(ADDON_IDS.ATLAS, 'atlas');
-        if (!deleteBucketItemSvc(userId, itemId)) throw new ForbiddenResource(`no bucket item ${itemId} for this user`);
+        if (!this.atlas.deleteBucketItem(userId, itemId)) throw new ForbiddenResource(`no bucket item ${itemId} for this user`);
         return { deleted: true };
       },
       // --- Vacay write: the plan is the ACTING USER's active plan (resolved host-side);
