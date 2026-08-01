@@ -51,8 +51,6 @@ export const BODY_CONTRACT_ALLOW_LIST: string[] = [
   'BookingImportController.previewAsync',
   'CategoriesController.create',
   'CategoriesController.update',
-  'CollectionsController.deleteMany',
-  'CollectionsController.reorder',
   'ImmichMemoriesController.putSettings',
   'ImmichMemoriesController.search',
   'ImmichMemoriesController.test',

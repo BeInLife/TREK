@@ -33,6 +33,8 @@ import { isDemoEmail } from '../../services/demo';
 import {
   CollectionCreateDto,
   CollectionUpdateDto,
+  CollectionReorderDto,
+  CollectionDeleteManyDto,
   CollectionSavePlaceDto,
   CollectionSaveFromTripDto,
   CollectionSaveFromTripManyDto,
@@ -97,11 +99,8 @@ export class CollectionsController {
 
   @Post('reorder')
   @HttpCode(200)
-  reorder(@CurrentUser() user: User, @Body('orderedIds') orderedIds: unknown) {
-    if (!Array.isArray(orderedIds) || !orderedIds.every((v) => Number.isFinite(Number(v)))) {
-      throw new HttpException({ error: 'orderedIds must be an array of numbers' }, 400);
-    }
-    this.collections.reorderCollections(user.id, orderedIds.map(Number));
+  reorder(@CurrentUser() user: User, @Body() body: CollectionReorderDto) {
+    this.collections.reorderCollections(user.id, body.orderedIds);
     return { success: true };
   }
 
@@ -126,11 +125,8 @@ export class CollectionsController {
 
   @Post('places/delete-many')
   @HttpCode(200)
-  deleteMany(@CurrentUser() user: User, @Body('ids') ids: unknown, @Headers('x-socket-id') socketId?: string) {
-    if (!Array.isArray(ids) || !ids.every((v) => Number.isFinite(Number(v)))) {
-      throw new HttpException({ error: 'ids must be an array of numbers' }, 400);
-    }
-    return { deleted: this.collections.deletePlacesMany(user.id, ids.map(Number), socketId) };
+  deleteMany(@CurrentUser() user: User, @Body() body: CollectionDeleteManyDto, @Headers('x-socket-id') socketId?: string) {
+    return { deleted: this.collections.deletePlacesMany(user.id, body.ids, socketId) };
   }
 
   @Patch('places/:pid')
