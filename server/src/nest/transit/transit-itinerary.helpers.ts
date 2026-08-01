@@ -17,6 +17,9 @@ import { z } from 'zod';
 const MAX_ENDPOINT_DISTANCE_KM = 0.1;
 const MAX_LEG_GAP_KM = 1;
 const TIME_TOLERANCE_MS = 60_000;
+// One budget for both limits: a single leg's geometry and the combined
+// geometry of all legs share the same ceiling.
+const MAX_GEOMETRY_CHARS = 60_000;
 
 export const transitCoordinatesSchema = z.object({
   lat: z.number().min(-90).max(90),
@@ -64,7 +67,7 @@ const transitLegSchema = z.object({
   lineTextColor: colorSchema,
   agency: z.string().max(300).nullable(),
   intermediateStops: z.number().int().nonnegative(),
-  geometry: z.string().max(60_000).nullable(),
+  geometry: z.string().max(MAX_GEOMETRY_CHARS).nullable(),
   geometryPrecision: z.number().int().min(0).max(10),
 });
 
@@ -99,7 +102,7 @@ export const transitItinerarySchema = z
       });
     }
     const geometrySize = itinerary.legs.reduce((total, leg) => total + (leg.geometry?.length ?? 0), 0);
-    if (geometrySize > 60_000) {
+    if (geometrySize > MAX_GEOMETRY_CHARS) {
       context.addIssue({ code: 'custom', message: 'Combined transit geometry is too large', path: ['legs'] });
     }
     itinerary.legs.forEach((leg, index) => {
@@ -207,8 +210,20 @@ export function buildTransitReservationParts(
   to: TransitPlaceInput,
   itinerary: TransitItinerary,
 ) {
-  const fromTimezone = timezoneAt(from.lat, from.lng);
-  const toTimezone = timezoneAt(to.lat, to.lng);
+  // The same stop appears up to three times below (transfer endpoint + the
+  // adjacent legs' metadata) — memoise the tz lookup per coordinate pair.
+  const timezones = new Map<string, string>();
+  const timezoneFor = (lat: number, lng: number): string => {
+    const key = `${lat},${lng}`;
+    let timezone = timezones.get(key);
+    if (timezone === undefined) {
+      timezone = timezoneAt(lat, lng);
+      timezones.set(key, timezone);
+    }
+    return timezone;
+  };
+  const fromTimezone = timezoneFor(from.lat, from.lng);
+  const toTimezone = timezoneFor(to.lat, to.lng);
   const departure = transitLocalParts(itinerary.startTime, fromTimezone);
   const arrival = transitLocalParts(itinerary.endTime, toTimezone);
   const transitLegs = itinerary.legs.filter((leg) => leg.mode !== 'WALK');
@@ -228,7 +243,7 @@ export function buildTransitReservationParts(
 
   transitLegs.slice(0, -1).forEach((leg, index) => {
     const stop = leg.to;
-    const timezone = timezoneAt(stop.lat, stop.lng);
+    const timezone = timezoneFor(stop.lat, stop.lng);
     const stopTime = effectiveTransitStopTime(stop);
     const local = stopTime ? transitLocalParts(stopTime, timezone) : null;
     endpoints.push({
@@ -246,7 +261,9 @@ export function buildTransitReservationParts(
 
   endpoints.push({
     role: 'to',
-    sequence: endpoints.length,
+    // 1 origin + (transitLegs.length - 1) transfer stops precede this — the
+    // destination's sequence is the transit leg count by construction.
+    sequence: transitLegs.length,
     name: to.name,
     code: null,
     lat: to.lat,
@@ -277,12 +294,12 @@ export function buildTransitReservationParts(
           stops: leg.intermediateStops,
           from: {
             name: leg.from.name,
-            time: fromTime ? transitLocalParts(fromTime, timezoneAt(leg.from.lat, leg.from.lng)).time : null,
+            time: fromTime ? transitLocalParts(fromTime, timezoneFor(leg.from.lat, leg.from.lng)).time : null,
             track: leg.from.track,
           },
           to: {
             name: leg.to.name,
-            time: toTime ? transitLocalParts(toTime, timezoneAt(leg.to.lat, leg.to.lng)).time : null,
+            time: toTime ? transitLocalParts(toTime, timezoneFor(leg.to.lat, leg.to.lng)).time : null,
             track: leg.to.track,
           },
           geometry: leg.geometry,

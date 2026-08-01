@@ -225,7 +225,7 @@ export class TransitMcp {
         isError: true,
       };
     }
-    const endDay = this.days.list(tripId).days.find((day) => day.date === arrival.local_date);
+    const endDay = this.days.list(tripId).days.find((d) => d.date === arrival.local_date);
     if (!endDay) {
       return {
         content: [{ type: 'text' as const, text: `No trip day exists for the arrival date ${arrival.local_date}.` }],
