@@ -20,6 +20,7 @@ import { CollabService } from '../../src/nest/collab/collab.service';
 import { VacayService } from '../../src/nest/vacay/vacay.service';
 import { TripsService } from '../../src/nest/trips/trips.service';
 import { PlacesService } from '../../src/nest/places/places.service';
+import { CollectionsService } from '../../src/nest/collections/collections.service';
 import { MapsService } from '../../src/nest/maps/maps.service';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { AuditService } from '../../src/nest/audit/audit.service';
@@ -68,6 +69,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     realtime,
     new TripsService(dbs, todos, packing, files, reservations, days, permissions, budget, collab, vacay, realtime, places),
     places,
+    new CollectionsService(dbs, permissions, realtime),
   );
 }
 

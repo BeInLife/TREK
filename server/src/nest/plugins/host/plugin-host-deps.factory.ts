@@ -21,7 +21,7 @@ import { isDemoEmail } from '../../../services/demo';
 import { ADDON_IDS } from '../../../addons';
 import { listJourneys, listEntries as listJournalEntriesSvc, createEntry as createJournalEntrySvc, updateEntry as updateJournalEntrySvc, deleteEntry as deleteJournalEntrySvc, createJourney as createJourneySvc, deleteJourney as deleteJourneySvc, onPlaceCreated, onPlaceUpdated, onPlaceDeleted } from '../../../services/journeyService';
 import { listVisitedCountries, listManuallyVisitedRegions, listBucketList, markCountryVisited, unmarkCountryVisited, markRegionVisited, unmarkRegionVisited, createBucketItem as createBucketItemSvc, deleteBucketItem as deleteBucketItemSvc } from '../../../services/atlasService';
-import { listCollections, getCollection, createCollection, updateCollection, savePlace as saveCollectionPlaceSvc, copyToTrip as copyCollectionToTripSvc, deletePlace as deleteCollectionPlaceSvc } from '../../../services/collectionsService';
+import { CollectionsService } from '../../collections/collections.service';
 import { BudgetService } from '../../budget/budget.service';
 import { ExchangeRatesService } from '../../budget/exchange-rates.service';
 import { ReservationsService } from '../../reservations/reservations.service';
@@ -132,7 +132,7 @@ export interface PluginCallRouter {
  *
  * DI-native domain services (budget, exchange-rates, reservations, tags,
  * categories, todo, packing, day-notes, assignments, oauth, files, collab,
- * vacay, trips, the LLM config resolver) and
+ * vacay, trips, places, collections, the LLM config resolver) and
  * the DatabaseService (all inline SQL + the trip-access helper) are
  * constructor-injected; legacy `services/*` domains stay plain function
  * imports until their own migration lands (DI-MIGRATION.md), at which point
@@ -162,6 +162,7 @@ export class PluginHostDepsFactory {
     private readonly realtime: RealtimeService,
     private readonly trips: TripsService,
     private readonly places: PlacesService,
+    private readonly collections: CollectionsService,
   ) {}
 
   /**
@@ -663,29 +664,29 @@ export class PluginHostDepsFactory {
       },
       atlasBucketForUser: (userId) => { requireAddon(ADDON_IDS.ATLAS, 'atlas'); return listBucketList(userId) as unknown[]; },
       vacayForUser: (userId) => { requireAddon(ADDON_IDS.VACAY, 'vacay'); return this.vacay.getPlanData(userId); },
-      listCollectionsForUser: (userId) => { requireAddon(ADDON_IDS.COLLECTIONS, 'collections'); return listCollections(userId); },
-      getCollectionForUser: (userId, id) => { requireAddon(ADDON_IDS.COLLECTIONS, 'collections'); return getCollection(userId, id); },
+      listCollectionsForUser: (userId) => { requireAddon(ADDON_IDS.COLLECTIONS, 'collections'); return this.collections.listCollections(userId); },
+      getCollectionForUser: (userId, id) => { requireAddon(ADDON_IDS.COLLECTIONS, 'collections'); return this.collections.getCollection(userId, id); },
       // --- Collections write. The service self-gates per-collection role (assertAccess/
       // assertCanEdit throw status-tagged errors) — map those to the RPC error codes. ---
       createCollectionForUser: (userId, input) => {
         requireAddon(ADDON_IDS.COLLECTIONS, 'collections');
-        return mapCollectionError(() => createCollection(userId, input as never));
+        return mapCollectionError(() => this.collections.createCollection(userId, input as never));
       },
       updateCollectionForUser: (userId, id, input) => {
         requireAddon(ADDON_IDS.COLLECTIONS, 'collections');
-        return mapCollectionError(() => updateCollection(userId, id, input as never, undefined));
+        return mapCollectionError(() => this.collections.updateCollection(userId, id, input as never, undefined));
       },
       saveCollectionPlace: (userId, input) => {
         requireAddon(ADDON_IDS.COLLECTIONS, 'collections');
-        return mapCollectionError(() => saveCollectionPlaceSvc(userId, input as never, undefined));
+        return mapCollectionError(() => this.collections.savePlace(userId, input as never, undefined));
       },
       copyCollectionToTrip: (userId, input) => {
         requireAddon(ADDON_IDS.COLLECTIONS, 'collections');
-        return mapCollectionError(() => copyCollectionToTripSvc(userId, input as never));
+        return mapCollectionError(() => this.collections.copyToTrip(userId, input as never));
       },
       deleteCollectionPlace: (userId, placeId) => {
         requireAddon(ADDON_IDS.COLLECTIONS, 'collections');
-        mapCollectionError(() => deleteCollectionPlaceSvc(userId, placeId, undefined));
+        mapCollectionError(() => this.collections.deletePlace(userId, placeId, undefined));
         return { deleted: true };
       },
       // --- Atlas write: plain uid-scoped rows, no broadcasts in the service. ---

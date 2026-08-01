@@ -3,7 +3,6 @@ import { registerJourneyTools } from './tools/journey';
 import { registerMapsWeatherTools } from './tools/mapsWeather';
 import { registerNotificationTools } from './tools/notifications';
 import { registerAtlasTools } from './tools/atlas';
-import { registerCollectionTools } from './tools/collections';
 import { registerTransportTools } from './tools/transports';
 import { registerMcpPrompts } from './tools/prompts';
 import { getMcpRegistry } from './registry-handoff';
@@ -17,7 +16,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   // The place tools moved to the DI-discovered src/nest/places/places.mcp.ts
   // (@McpController, attached via the nest-mcp registry below).
 
-  registerCollectionTools(server, userId, scopes);
+  // The collection tools moved to the DI-discovered src/nest/collections/
+  // collections.mcp.ts (@McpController, attached via the nest-mcp registry below).
 
   // The budget tools moved to the DI-discovered src/nest/budget/budget.mcp.ts
   // (@McpController, attached via the nest-mcp registry below).

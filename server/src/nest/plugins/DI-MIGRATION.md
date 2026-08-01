@@ -126,8 +126,12 @@ became the injected `TripsService`, with the error classes now imported from
 `nest/trips/trips.service`; placeService swapped in 2026-07 with the place
 fold — its four imported symbols (`createPlace`, `updatePlace`, `deletePlace`,
 `getPlace`) became the injected `PlacesService`, the factory's 21st constructor
-dep; the remaining factory
-imports are all Wave-5 domains: journeys, atlas, collections).
+dep; collectionsService swapped in 2026-08 with the collections fold — its
+seven imported symbols (`listCollections`, `getCollection`, `createCollection`,
+`updateCollection`, `savePlace`, `copyToTrip`, `deletePlace`) became the
+injected `CollectionsService`, the factory's 22nd constructor dep, with
+`mapCollectionError` unchanged on top; the remaining factory
+imports are all Wave-5 domains: journeys, atlas).
 
 ### Test impact (as landed)
 
@@ -141,7 +145,10 @@ imports are all Wave-5 domains: journeys, atlas, collections).
   `nest/trips/trips.service` error classes); the ~22
   legacy-service path mocks shrank by one with the 2026-07 budget migration
   (the budgetService satisfy-the-import mock died with the legacy file — the
-  `budgetStub` gained `listBudgetItems` for the two swapped closures); a
+  `budgetStub` gained `listBudgetItems` for the two swapped closures); the
+  collectionsService path mock became `collectionsStub` with the 2026-08
+  collections fold (same sentinel behaviors — the status-tagged throws the
+  factory's `mapCollectionError` maps); a
   file-local shim keeps the
   historical `createRealRpcHost(id, granted)` call sites and supplies a default
   no-op router.

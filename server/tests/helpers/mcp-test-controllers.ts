@@ -10,6 +10,8 @@ import { CategoriesMcp } from '../../src/nest/categories/categories.mcp';
 import { CategoriesService } from '../../src/nest/categories/categories.service';
 import { CollabMcp } from '../../src/nest/collab/collab.mcp';
 import { CollabService } from '../../src/nest/collab/collab.service';
+import { CollectionsMcp } from '../../src/nest/collections/collections.mcp';
+import { CollectionsService } from '../../src/nest/collections/collections.service';
 import { DatabaseService } from '../../src/nest/database/database.service';
 import { DayNotesMcp } from '../../src/nest/days/day-notes.mcp';
 import { DayNotesService } from '../../src/nest/days/day-notes.service';
@@ -91,6 +93,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService)),
       new MapsMcp(mapsService),
       new PlacesMcp(placesService, mapsService, dbService),
+      new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService), dbService),
       new TransitMcp(new TransitService(), daysService, reservationsService, dbService),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },

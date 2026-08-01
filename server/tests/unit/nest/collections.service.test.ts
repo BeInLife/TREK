@@ -1,8 +1,12 @@
 /**
- * Unit tests for collectionsService (COLLECTIONS-SVC-001 … 040).
- * Real in-memory SQLite (full schema + migrations) so the SQL — owner/member
- * visibility, the collection-scoped dedup, the fusion state machine and the
- * widened photo-cache reference check — is exercised faithfully.
+ * Unit tests for the DI-native CollectionsService (COLLECTIONS-SVC-001 … 081;
+ * moved 1:1 from the legacy tests/unit/services/collectionsService.test.ts,
+ * case IDs preserved — the 080/081 membership-lookup cases are new with the
+ * fold). Real in-memory SQLite (full schema + migrations) so the SQL —
+ * owner/member visibility, the collection-scoped dedup, the fusion state
+ * machine and the widened photo-cache reference check — is exercised
+ * faithfully. Keeps its own clearCollections() reset (the shared
+ * resetTestDb RESET_TABLES list has no collection tables).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -44,9 +48,14 @@ import path from 'path';
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { createUser, createTrip, createPlace, createCategory, createTag, addTripMember } from '../../helpers/factories';
-import * as svc from '../../../src/services/collectionsService';
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
+import { CollectionsService } from '../../../src/nest/collections/collections.service';
 import { removeIfUnreferenced } from '../../../src/services/placePhotoCache';
 import { PLACE_IMAGES_DIR } from '../../../src/services/placeImage';
+
+const svc = new CollectionsService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new RealtimeService());
 
 function clearCollections() {
   testDb.exec(`
@@ -65,9 +74,13 @@ function clearCollections() {
   `);
 }
 
-beforeAll(() => {
+beforeAll(async () => {
   createTables(testDb);
   runMigrations(testDb);
+  // Warm the notificationService module: sendInvite does a fire-and-forget
+  // dynamic import of it, and a cold load can otherwise race the mock registry
+  // under slow (coverage) runs — same precaution as tests/integration/vacay.test.ts.
+  await import('../../../src/services/notificationService');
 });
 
 beforeEach(() => {
@@ -747,5 +760,38 @@ describe('collaborative ratings (#1435)', () => {
       .map(v => v.user_id).sort((a, b) => a - b);
     expect(ids).toEqual([owner.id, inTrip.id].sort((a, b) => a - b));
     expect(ids).not.toContain(notInTrip.id);
+  });
+});
+
+// ── Membership lookups ───────────────────────────────────────────────────────
+
+describe('membership lookups', () => {
+  it('COLLECTIONS-SVC-080: findMembership matches by google id and coords, never by bare name', () => {
+    const u = createUser(testDb).user;
+    const col = svc.createCollection(u.id, { name: 'Lookup' });
+    svc.savePlace(u.id, { collection_id: col.id, name: 'Starbucks', lat: 48.8584, lng: 2.2945, google_place_id: 'gp-1' });
+
+    expect(svc.findMembership(u.id, { google_place_id: 'gp-1' }).saved).toBe(true);
+    expect(svc.findMembership(u.id, { lat: 48.8584, lng: 2.2945 }).saved).toBe(true);
+    // A bare name is deliberately NOT a condition on its own — no false positives.
+    expect(svc.findMembership(u.id, { name: 'Starbucks' })).toEqual({ saved: false, lists: [] });
+    // No lists at all short-circuits.
+    const other = createUser(testDb).user;
+    expect(svc.findMembership(other.id, { google_place_id: 'gp-1' })).toEqual({ saved: false, lists: [] });
+  });
+
+  it('COLLECTIONS-SVC-081: findMembershipForUser reports owner / accepted / pending / none', () => {
+    const owner = createUser(testDb).user;
+    const member = createUser(testDb).user;
+    const outsider = createUser(testDb).user;
+    const col = svc.createCollection(owner.id, { name: 'M' });
+
+    expect(svc.findMembershipForUser(owner.id, col.id)).toEqual({ is_member: true, is_owner: true, status: 'accepted' });
+    expect(svc.findMembershipForUser(outsider.id, col.id)).toEqual({ is_member: false, is_owner: false, status: null });
+
+    svc.sendInvite(col.id, owner.id, owner.username, owner.email, member.id);
+    expect(svc.findMembershipForUser(member.id, col.id)).toEqual({ is_member: false, is_owner: false, status: 'pending' });
+    svc.acceptInvite(member.id, col.id, undefined);
+    expect(svc.findMembershipForUser(member.id, col.id)).toEqual({ is_member: true, is_owner: false, status: 'accepted' });
   });
 });

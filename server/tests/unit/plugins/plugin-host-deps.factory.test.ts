@@ -5,7 +5,7 @@
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
  * DI-native domains (budget/exchange-rates/reservations/tags/categories/todo/
  * packing/day-notes/days/assignments/oauth/llm-config/files/collab/vacay/
- * permissions/trips/places)
+ * permissions/trips/places/collections)
  * are constructor-injected stubs; legacy services/* domains stay path-mocked
  * until their own DI migration lands.
  */
@@ -267,19 +267,20 @@ vi.mock('../../../src/services/atlasService', () => ({
   createBucketItem: vi.fn((uid: number, data: { name: string }) => ({ id: 110, user_id: uid, name: data.name })),
   deleteBucketItem: vi.fn((_uid: number, itemId: number) => Number(itemId) !== 404),
 }));
-vi.mock('../../../src/services/collectionsService', () => {
-  const httpError = (status: number, message: string) => { const e = new Error(message) as Error & { status: number }; e.status = status; throw e; };
-  return {
-    listCollections: vi.fn((uid: number) => ({ collections: [{ id: 1, owner: uid }] })),
-    getCollection: vi.fn((uid: number, id: number) => ({ id, owner: uid, places: [] })),
-    createCollection: vi.fn((uid: number, body: unknown) => ({ id: 100, owner_id: uid, ...(body as object) })),
-    // id 99 = viewer-only (403); id 404 = invisible (404) — the service throws status-tagged errors
-    updateCollection: vi.fn((_uid: number, id: number, body: unknown) => { if (id === 99) httpError(403, 'read-only'); if (id === 404) httpError(404, 'Collection not found'); return { id, ...(body as object) }; }),
-    savePlace: vi.fn((uid: number, body: unknown) => ({ id: 101, saved_by: uid, ...(body as object) })),
-    copyToTrip: vi.fn(() => ({ copied: 2, skipped: [] })),
-    deletePlace: vi.fn((_uid: number, placeId: number) => { if (placeId === 404) httpError(404, 'Collection not found'); }),
-  };
-});
+// Collections is a constructor-injected stub since the collections fold (same
+// behaviors as the old services/collectionsService path mock — the service
+// throws status-tagged errors the factory maps onto the RPC error classes).
+const collectionsHttpError = (status: number, message: string) => { const e = new Error(message) as Error & { status: number }; e.status = status; throw e; };
+const collectionsStub = {
+  listCollections: vi.fn((uid: number) => ({ collections: [{ id: 1, owner: uid }] })),
+  getCollection: vi.fn((uid: number, id: number) => ({ id, owner: uid, places: [] })),
+  createCollection: vi.fn((uid: number, body: unknown) => ({ id: 100, owner_id: uid, ...(body as object) })),
+  // id 99 = viewer-only (403); id 404 = invisible (404) — the service throws status-tagged errors
+  updateCollection: vi.fn((_uid: number, id: number, body: unknown) => { if (id === 99) collectionsHttpError(403, 'read-only'); if (id === 404) collectionsHttpError(404, 'Collection not found'); return { id, ...(body as object) }; }),
+  savePlace: vi.fn((uid: number, body: unknown) => ({ id: 101, saved_by: uid, ...(body as object) })),
+  copyToTrip: vi.fn(() => ({ copied: 2, skipped: [] })),
+  deletePlace: vi.fn((_uid: number, placeId: number) => { if (placeId === 404) collectionsHttpError(404, 'Collection not found'); }),
+} as unknown as CollectionsService;
 // Day notes are a constructor-injected stub (same behaviors as the old path mock).
 const dayNotesStub = {
   list: vi.fn((dayId: number, tripId: number) => [{ id: 1, day_id: dayId, trip_id: tripId }]),
@@ -319,6 +320,7 @@ import type { CollabService } from '../../../src/nest/collab/collab.service';
 import type { VacayService } from '../../../src/nest/vacay/vacay.service';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { PlacesService } from '../../../src/nest/places/places.service';
+import type { CollectionsService } from '../../../src/nest/collections/collections.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { NotFoundError, ValidationError } from '../../../src/nest/trips/trips.service';
@@ -341,7 +343,7 @@ const tripsStub = {
   list: () => [{ id: 1 }],
   removeMember: vi.fn(),
 } as unknown as import('../../../src/nest/trips/trips.service').TripsService;
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub, addonsStub, new RealtimeService(), tripsStub, placesStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub, addonsStub, new RealtimeService(), tripsStub, placesStub, collectionsStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 

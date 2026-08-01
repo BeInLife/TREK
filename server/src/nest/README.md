@@ -29,7 +29,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
   collab, vacay, reservations, day, permissions, audit, budget, trip, maps,
-  transit, place, transit-itinerary — see the migration recipe below.
+  transit, place, transit-itinerary, collections — see the migration recipe
+  below.
 
 ## Cross-cutting Foundation pieces
 
@@ -292,6 +293,19 @@ dependency-honest order; the legacy module had no direct suite, so a new
 21-case `TRANSIT-ITIN-*` characterization suite now pins all 12 superRefine
 error strings, the `??` time fallbacks, the coordinate tolerances and the
 reservation endpoint/metadata builder).
+collectionsService followed (the biggest single fold yet — 1024 lines / 28
+exports into `CollectionsService` over DatabaseService + PermissionsService +
+RealtimeService, with the `deleteOldCollectionCover` path re-anchored one
+directory deeper and the `sendInvite` lazy notificationService `import()`
+kept, collab precedent; the 25-tool legacy registrar `mcp/tools/collections.ts`
+moved to `collections.mcp.ts` — deliberately with NO `when:` addon gate, since
+the legacy registrar registered unconditionally while REST/plugin-host gate on
+the addon, a parity quirk now pinned by a new 23-case `tools-collections`
+characterization suite (the legacy registrar had no tool-level tests at all);
+the plugin host swapped its 7 collections imports for the injected service —
+its 22nd constructor dep — and NO bridge was needed anywhere; the dead
+`buildDedupSet` module helper was dropped in the move, the only line that
+didn't relocate verbatim).
 Repeat these steps per
 service (next up: **the notifications fan-in** —
 per the dependency-honest order in
