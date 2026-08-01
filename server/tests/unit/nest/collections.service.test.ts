@@ -1,8 +1,9 @@
 /**
- * Unit tests for the DI-native CollectionsService (COLLECTIONS-SVC-001 … 081;
+ * Unit tests for the DI-native CollectionsService (COLLECTIONS-SVC-001 … 092;
  * moved 1:1 from the legacy tests/unit/services/collectionsService.test.ts,
  * case IDs preserved — the 080/081 membership-lookup cases are new with the
- * fold). Real in-memory SQLite (full schema + migrations) so the SQL —
+ * fold, and the 090–092 band pins the post-fold quirk fixes: all-or-nothing
+ * bulk writes and socket-id forwarding on the from-trip saves). Real in-memory SQLite (full schema + migrations) so the SQL —
  * owner/member visibility, the collection-scoped dedup, the fusion state
  * machine and the widened photo-cache reference check — is exercised
  * faithfully. Keeps its own clearCollections() reset (the shared
@@ -793,5 +794,61 @@ describe('membership lookups', () => {
     expect(svc.findMembershipForUser(member.id, col.id)).toEqual({ is_member: false, is_owner: false, status: 'pending' });
     svc.acceptInvite(member.id, col.id, undefined);
     expect(svc.findMembershipForUser(member.id, col.id)).toEqual({ is_member: true, is_owner: false, status: 'accepted' });
+  });
+});
+
+// ── Post-fold quirk fixes (the trailing fix(server) commit) ─────────────────
+
+describe('atomic bulk writes (post-fold quirk fixes)', () => {
+  it('COLLECTIONS-SVC-090: deletePlacesMany is all-or-nothing — a mid-list 403 deletes nothing', () => {
+    const u = createUser(testDb).user;
+    const otherOwner = createUser(testDb).user;
+    const mine = svc.createCollection(u.id, { name: 'Mine' });
+    const shared = svc.createCollection(otherOwner.id, { name: 'Shared' });
+    // u is an editor on the shared list — can add/edit but NOT delete (owner/admin only).
+    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', 'editor')").run(shared.id, u.id);
+    const p1 = svc.savePlace(u.id, { collection_id: mine.id, name: 'Deletable' }).place!;
+    const p2 = svc.savePlace(u.id, { collection_id: shared.id, name: 'Protected' }).place!;
+
+    // The relocated legacy interleaved checks with deletes, so p1 was gone by
+    // the time p2's 403 fired. Now every id is checked first: nothing deleted.
+    expect(() => svc.deletePlacesMany(u.id, [p1.id, p2.id])).toThrow('Only an admin can delete places from this list');
+    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_places WHERE id = ?').get(p1.id)).toEqual({ n: 1 });
+    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_places WHERE id = ?').get(p2.id)).toEqual({ n: 1 });
+  });
+
+  it('COLLECTIONS-SVC-091: assignLabels permission-checks every list before writing anything', () => {
+    const u = createUser(testDb).user;
+    const otherOwner = createUser(testDb).user;
+    const mine = svc.createCollection(u.id, { name: 'Mine' });
+    const readonly = svc.createCollection(otherOwner.id, { name: 'ReadOnly' });
+    testDb.prepare("INSERT INTO collection_members (collection_id, user_id, status, role) VALUES (?, ?, 'accepted', 'viewer')").run(readonly.id, u.id);
+    const label = svc.createLabel(u.id, mine.id, 'Coast');
+    const pa = svc.savePlace(u.id, { collection_id: mine.id, name: 'A' }).place!;
+    const pb = testDb.prepare('INSERT INTO collection_places (collection_id, owner_id, saved_by, name) VALUES (?, ?, ?, ?)')
+      .run(readonly.id, otherOwner.id, otherOwner.id, 'B').lastInsertRowid as number;
+
+    // The relocated legacy checked per list inside the write loop, so `mine`
+    // was labeled before `readonly`'s 403 fired. Now all lists check first.
+    expect(() => svc.assignLabels(u.id, [label.id], [pa.id, Number(pb)], false)).toThrow('You have read-only access to this list');
+    expect(testDb.prepare('SELECT COUNT(*) n FROM collection_place_labels WHERE collection_place_id = ?').get(pa.id)).toEqual({ n: 0 });
+  });
+
+  it('COLLECTIONS-SVC-092: from-trip saves forward the socket id so the origin client does not echo', () => {
+    const u = createUser(testDb).user;
+    createCategory(testDb);
+    const trip = createTrip(testDb, u.id);
+    const place = createPlace(testDb, trip.id, { name: 'Louvre' });
+    // Distinct coords — the factory default would coord-dedup against Louvre.
+    const place2 = createPlace(testDb, trip.id, { name: 'Orsay', lat: 48.86, lng: 2.3266 });
+    const col = svc.createCollection(u.id, { name: 'From trip' });
+
+    broadcastToUser.mockClear();
+    svc.saveFromTripPlace(u.id, col.id, trip.id, place.id, undefined, 'sock-1');
+    expect(broadcastToUser).toHaveBeenCalledWith(u.id, expect.objectContaining({ type: 'collections:updated' }), 'sock-1');
+
+    broadcastToUser.mockClear();
+    svc.saveFromTripPlaces(u.id, col.id, trip.id, [place2.id], undefined, 'sock-2');
+    expect(broadcastToUser).toHaveBeenCalledWith(u.id, expect.objectContaining({ type: 'collections:updated' }), 'sock-2');
   });
 });

@@ -418,8 +418,10 @@ export class CollectionsService {
   reorderCollections(userId: number, orderedIds: number[]): void {
     const visible = new Set(this.accessibleCollectionIds(userId));
     const stmt = this.db.prepare('UPDATE collections SET sort_order = ? WHERE id = ?');
-    orderedIds.forEach((cid, index) => {
-      if (visible.has(cid)) stmt.run(index, cid);
+    this.db.transaction(() => {
+      orderedIds.forEach((cid, index) => {
+        if (visible.has(cid)) stmt.run(index, cid);
+      });
     });
   }
 
@@ -492,42 +494,47 @@ export class CollectionsService {
     }
 
     const ownerId = this.ownerOf(body.collection_id);
-    const result = this.db.run(`
+    // Insert + tags + ratings-copy are one logical write — atomic since the
+    // post-fold quirk pass (the relocation carried them un-transacted).
+    const placeId = this.db.transaction(() => {
+      const result = this.db.run(`
     INSERT INTO collection_places (
       collection_id, owner_id, saved_by, name, description, lat, lng, address,
       category_id, price, currency, notes, image_url, google_place_id, google_ftid,
       osm_id, website, phone, status, source_trip_id, source_place_id, links
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
-      body.collection_id, ownerId, userId,
-      body.name, body.description ?? null, body.lat ?? null, body.lng ?? null, body.address ?? null,
-      body.category_id ?? null, body.price ?? null, body.currency ?? null, body.notes ?? null,
-      body.image_url ?? null, body.google_place_id ?? null, body.google_ftid ?? null,
-      body.osm_id ?? null, body.website ?? null, body.phone ?? null,
-      body.status ?? 'idea', body.source_trip_id ?? null, body.source_place_id ?? null,
-      serializeLinks(body.links),
-    );
+        body.collection_id, ownerId, userId,
+        body.name, body.description ?? null, body.lat ?? null, body.lng ?? null, body.address ?? null,
+        body.category_id ?? null, body.price ?? null, body.currency ?? null, body.notes ?? null,
+        body.image_url ?? null, body.google_place_id ?? null, body.google_ftid ?? null,
+        body.osm_id ?? null, body.website ?? null, body.phone ?? null,
+        body.status ?? 'idea', body.source_trip_id ?? null, body.source_place_id ?? null,
+        serializeLinks(body.links),
+      );
 
-    const placeId = Number(result.lastInsertRowid);
-    this.attachTags(placeId, body.tag_ids);
-    // Carry trip ratings ONLY when the caller can actually see the source place.
-    // source_place_id/source_trip_id are raw client input, so verify trip access +
-    // that the place lives in that trip before reading place_ratings — otherwise a
-    // member could harvest co-members' votes on places in trips they cannot access
-    // (mirrors the canAccessTrip gate in saveFromTripPlace).
-    if (
-      body.source_place_id && body.source_trip_id &&
-      this.db.canAccessTrip(body.source_trip_id, userId) &&
-      this.db.get('SELECT 1 FROM places WHERE id = ? AND trip_id = ?', body.source_place_id, body.source_trip_id)
-    ) {
-      this.copyTripRatings(body.source_place_id, placeId, body.collection_id);
-    }
+      const id = Number(result.lastInsertRowid);
+      this.attachTags(id, body.tag_ids);
+      // Carry trip ratings ONLY when the caller can actually see the source place.
+      // source_place_id/source_trip_id are raw client input, so verify trip access +
+      // that the place lives in that trip before reading place_ratings — otherwise a
+      // member could harvest co-members' votes on places in trips they cannot access
+      // (mirrors the canAccessTrip gate in saveFromTripPlace).
+      if (
+        body.source_place_id && body.source_trip_id &&
+        this.db.canAccessTrip(body.source_trip_id, userId) &&
+        this.db.get('SELECT 1 FROM places WHERE id = ? AND trip_id = ?', body.source_place_id, body.source_trip_id)
+      ) {
+        this.copyTripRatings(body.source_place_id, id, body.collection_id);
+      }
+      return id;
+    });
     this.notifyCollectionUsers(body.collection_id, socketId, 'collections:updated');
     return { place: this.getPlaceById(placeId) };
   }
 
   saveFromTripPlace(
-    userId: number, collectionId: number, tripId: number, placeId: number, force?: boolean,
+    userId: number, collectionId: number, tripId: number, placeId: number, force?: boolean, socketId?: string,
   ): CollectionSaveResult {
     this.assertCanEdit(userId, collectionId);
     if (!this.db.canAccessTrip(tripId, userId)) httpError(404, 'Trip not found');
@@ -555,14 +562,14 @@ export class CollectionsService {
       source_trip_id: tripId,
       source_place_id: placeId,
       force,
-    });
+    }, socketId);
   }
 
   /** Bulk copy of several trip places into a list in one shot — one access check,
    *  one WS notify (vs saving each place individually). Mirrors saveFromTripPlace's
    *  field mapping + dedup; skips duplicates unless force. Status starts at 'idea'. */
   saveFromTripPlaces(
-    userId: number, collectionId: number, tripId: number, placeIds: number[], force?: boolean,
+    userId: number, collectionId: number, tripId: number, placeIds: number[], force?: boolean, socketId?: string,
   ): { copied: number; skipped: { id: number; name: string }[] } {
     this.assertCanEdit(userId, collectionId);
     if (!this.db.canAccessTrip(tripId, userId)) httpError(404, 'Trip not found');
@@ -577,28 +584,31 @@ export class CollectionsService {
   `);
     let copied = 0;
     const skipped: { id: number; name: string }[] = [];
-    for (const placeId of placeIds) {
-      const p = this.db.get<Record<string, unknown>>('SELECT * FROM places WHERE id = ? AND trip_id = ?', placeId, tripId);
-      if (!p) continue;
-      const name = p.name as string;
-      const lat = (p.lat as number | null) ?? null;
-      const lng = (p.lng as number | null) ?? null;
-      if (!force && this.findDuplicateCollectionPlace(collectionId, { name, lat, lng })) {
-        skipped.push({ id: placeId, name });
-        continue;
+    // The whole batch is one logical write — atomic since the post-fold quirk pass.
+    this.db.transaction(() => {
+      for (const placeId of placeIds) {
+        const p = this.db.get<Record<string, unknown>>('SELECT * FROM places WHERE id = ? AND trip_id = ?', placeId, tripId);
+        if (!p) continue;
+        const name = p.name as string;
+        const lat = (p.lat as number | null) ?? null;
+        const lng = (p.lng as number | null) ?? null;
+        if (!force && this.findDuplicateCollectionPlace(collectionId, { name, lat, lng })) {
+          skipped.push({ id: placeId, name });
+          continue;
+        }
+        const res = insert.run(
+          collectionId, ownerId, userId,
+          name, (p.description as string | null) ?? null, lat, lng, (p.address as string | null) ?? null,
+          (p.category_id as number | null) ?? null, (p.price as number | null) ?? null, (p.currency as string | null) ?? null, (p.notes as string | null) ?? null,
+          (p.image_url as string | null) ?? null, (p.google_place_id as string | null) ?? null, (p.google_ftid as string | null) ?? null,
+          (p.osm_id as string | null) ?? null, (p.website as string | null) ?? null, (p.phone as string | null) ?? null,
+          tripId, placeId,
+        );
+        this.copyTripRatings(placeId, Number(res.lastInsertRowid), collectionId);
+        copied++;
       }
-      const res = insert.run(
-        collectionId, ownerId, userId,
-        name, (p.description as string | null) ?? null, lat, lng, (p.address as string | null) ?? null,
-        (p.category_id as number | null) ?? null, (p.price as number | null) ?? null, (p.currency as string | null) ?? null, (p.notes as string | null) ?? null,
-        (p.image_url as string | null) ?? null, (p.google_place_id as string | null) ?? null, (p.google_ftid as string | null) ?? null,
-        (p.osm_id as string | null) ?? null, (p.website as string | null) ?? null, (p.phone as string | null) ?? null,
-        tripId, placeId,
-      );
-      this.copyTripRatings(placeId, Number(res.lastInsertRowid), collectionId);
-      copied++;
-    }
-    if (copied > 0) this.notifyCollectionUsers(collectionId, undefined, 'collections:updated');
+    });
+    if (copied > 0) this.notifyCollectionUsers(collectionId, socketId, 'collections:updated');
     return { copied, skipped };
   }
 
@@ -632,21 +642,25 @@ export class CollectionsService {
       movedTo = body.collection_id;
     }
 
-    if (updates.length > 0) {
-      updates.push("updated_at = CURRENT_TIMESTAMP");
-      params.push(placeId);
-      this.db.run(`UPDATE collection_places SET ${updates.join(', ')} WHERE id = ?`, ...params);
-    }
+    // Field update + tag rewrite + label rewrite are one logical write — atomic
+    // since the post-fold quirk pass.
+    this.db.transaction(() => {
+      if (updates.length > 0) {
+        updates.push("updated_at = CURRENT_TIMESTAMP");
+        params.push(placeId);
+        this.db.run(`UPDATE collection_places SET ${updates.join(', ')} WHERE id = ?`, ...params);
+      }
 
-    if (body.tag_ids !== undefined) {
-      this.db.run('DELETE FROM collection_place_tags WHERE collection_place_id = ?', placeId);
-      this.attachTags(placeId, body.tag_ids);
-    }
+      if (body.tag_ids !== undefined) {
+        this.db.run('DELETE FROM collection_place_tags WHERE collection_place_id = ?', placeId);
+        this.attachTags(placeId, body.tag_ids);
+      }
 
-    // Labels are collection-scoped: a move invalidates the source list's labels;
-    // a provided label_ids set replaces them against the (target) collection.
-    if (movedTo) this.db.run('DELETE FROM collection_place_labels WHERE collection_place_id = ?', placeId);
-    if (body.label_ids !== undefined) this.setPlaceLabels(placeId, movedTo ?? currentCollection, body.label_ids);
+      // Labels are collection-scoped: a move invalidates the source list's labels;
+      // a provided label_ids set replaces them against the (target) collection.
+      if (movedTo) this.db.run('DELETE FROM collection_place_labels WHERE collection_place_id = ?', placeId);
+      if (body.label_ids !== undefined) this.setPlaceLabels(placeId, movedTo ?? currentCollection, body.label_ids);
+    });
 
     if (body.image_url !== undefined && prevImage !== (body.image_url ?? null)) {
       reclaimPlaceImage(prevImage);
@@ -695,6 +709,10 @@ export class CollectionsService {
   }
 
   deletePlacesMany(userId: number, ids: number[], socketId?: string): number[] {
+    // All-or-nothing since the post-fold quirk pass: every id is resolved and
+    // permission-checked BEFORE any delete (the relocated legacy interleaved
+    // checks with deletes, so a mid-list 403/404 left earlier deletes committed),
+    // and the deletes then run in one transaction.
     const deleted: number[] = [];
     const touched = new Set<number>();
     const images: (string | null)[] = [];
@@ -702,10 +720,14 @@ export class CollectionsService {
       const collectionId = this.collectionIdOfPlace(id);
       this.assertCanDelete(userId, collectionId);
       images.push(this.db.get<{ image_url: string | null }>('SELECT image_url FROM collection_places WHERE id = ?', id)?.image_url ?? null);
-      this.db.run('DELETE FROM collection_places WHERE id = ?', id);
-      deleted.push(id);
       touched.add(collectionId);
     }
+    this.db.transaction(() => {
+      for (const id of ids) {
+        this.db.run('DELETE FROM collection_places WHERE id = ?', id);
+        deleted.push(id);
+      }
+    });
     for (const image of images) reclaimPlaceImage(image);
     touched.forEach(cid => this.notifyCollectionUsers(cid, socketId, 'collections:updated'));
     return deleted;
@@ -776,28 +798,31 @@ export class CollectionsService {
 
     let copied = 0;
     const skipped: { id: number; name: string }[] = [];
-    for (const s of sources) {
-      if (!body.force && isCollectionPlaceDuplicate({ name: s.name, lat: s.lat, lng: s.lng }, dedup)) {
-        skipped.push({ id: s.id, name: s.name });
-        continue;
-      }
-      const res = insertPlace.run(
-        body.trip_id, s.name, s.description, s.lat, s.lng, s.address, s.category_id, s.price,
-        s.currency, s.notes, s.image_url, s.google_place_id, s.google_ftid, s.website, s.phone, s.osm_id,
-      );
-      const newPlaceId = Number(res.lastInsertRowid);
-      const tagIds = this.db.all<{ tag_id: number }>('SELECT tag_id FROM collection_place_tags WHERE collection_place_id = ?', s.id);
-      for (const t of tagIds) insertTag.run(newPlaceId, t.tag_id);
-      // Ratings travel into the trip too (#1435), but only for trip members — a
-      // collection voter who isn't on the trip stays out of it. Trip members keep
-      // voting there; nothing is mirrored back.
-      const votes = this.db.all<{ user_id: number; rating: number }>('SELECT user_id, rating FROM collection_place_ratings WHERE collection_place_id = ?', s.id);
-      for (const v of votes) if (tripMemberIds.has(v.user_id)) insertRating.run(newPlaceId, v.user_id, v.rating);
+    // The whole copy is one logical write — atomic since the post-fold quirk pass.
+    this.db.transaction(() => {
+      for (const s of sources) {
+        if (!body.force && isCollectionPlaceDuplicate({ name: s.name, lat: s.lat, lng: s.lng }, dedup)) {
+          skipped.push({ id: s.id, name: s.name });
+          continue;
+        }
+        const res = insertPlace.run(
+          body.trip_id, s.name, s.description, s.lat, s.lng, s.address, s.category_id, s.price,
+          s.currency, s.notes, s.image_url, s.google_place_id, s.google_ftid, s.website, s.phone, s.osm_id,
+        );
+        const newPlaceId = Number(res.lastInsertRowid);
+        const tagIds = this.db.all<{ tag_id: number }>('SELECT tag_id FROM collection_place_tags WHERE collection_place_id = ?', s.id);
+        for (const t of tagIds) insertTag.run(newPlaceId, t.tag_id);
+        // Ratings travel into the trip too (#1435), but only for trip members — a
+        // collection voter who isn't on the trip stays out of it. Trip members keep
+        // voting there; nothing is mirrored back.
+        const votes = this.db.all<{ user_id: number; rating: number }>('SELECT user_id, rating FROM collection_place_ratings WHERE collection_place_id = ?', s.id);
+        for (const v of votes) if (tripMemberIds.has(v.user_id)) insertRating.run(newPlaceId, v.user_id, v.rating);
 
-      if (s.name) dedup.names.add(s.name.trim().toLowerCase());
-      else if (s.lat != null && s.lng != null) dedup.coords.push({ lat: s.lat, lng: s.lng });
-      copied++;
-    }
+        if (s.name) dedup.names.add(s.name.trim().toLowerCase());
+        else if (s.lat != null && s.lng != null) dedup.coords.push({ lat: s.lat, lng: s.lng });
+        copied++;
+      }
+    });
     return { copied, skipped };
   }
 
@@ -936,21 +961,30 @@ export class CollectionsService {
       if (!byCollection.has(cid)) byCollection.set(cid, []);
       byCollection.get(cid)!.push(pid);
     }
+    // All-or-nothing since the post-fold quirk pass: every touched list is
+    // permission-checked BEFORE any write (the relocated legacy checked inside
+    // the write loop, so a later list's 403 left earlier lists modified), and
+    // the writes then run in one transaction. Broadcasts still skip lists where
+    // no provided label applied.
+    for (const cid of byCollection.keys()) this.assertCanEdit(userId, cid);
     let changed = 0;
-    for (const [cid, pids] of byCollection) {
-      this.assertCanEdit(userId, cid);
-      const valid = new Set(this.loadLabelsByCollection(cid).map(l => l.id));
-      const applicable = labelIds.filter(id => valid.has(id));
-      if (applicable.length === 0) continue;
-      if (remove) {
-        const del = this.db.prepare('DELETE FROM collection_place_labels WHERE collection_place_id = ? AND label_id = ?');
-        for (const pid of pids) for (const lid of applicable) changed += del.run(pid, lid).changes;
-      } else {
-        const ins = this.db.prepare('INSERT OR IGNORE INTO collection_place_labels (collection_place_id, label_id) VALUES (?, ?)');
-        for (const pid of pids) for (const lid of applicable) changed += ins.run(pid, lid).changes;
+    const notified: number[] = [];
+    this.db.transaction(() => {
+      for (const [cid, pids] of byCollection) {
+        const valid = new Set(this.loadLabelsByCollection(cid).map(l => l.id));
+        const applicable = labelIds.filter(id => valid.has(id));
+        if (applicable.length === 0) continue;
+        if (remove) {
+          const del = this.db.prepare('DELETE FROM collection_place_labels WHERE collection_place_id = ? AND label_id = ?');
+          for (const pid of pids) for (const lid of applicable) changed += del.run(pid, lid).changes;
+        } else {
+          const ins = this.db.prepare('INSERT OR IGNORE INTO collection_place_labels (collection_place_id, label_id) VALUES (?, ?)');
+          for (const pid of pids) for (const lid of applicable) changed += ins.run(pid, lid).changes;
+        }
+        notified.push(cid);
       }
-      this.notifyCollectionUsers(cid, socketId, 'collections:updated');
-    }
+    });
+    for (const cid of notified) this.notifyCollectionUsers(cid, socketId, 'collections:updated');
     return { changed };
   }
 

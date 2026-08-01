@@ -483,8 +483,47 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   23-case `tools-collections` characterization suite; and (b) the legacy registrar
   registered **without an addon gate** while REST and the plugin host both gate on the
   collections addon — a real behavioral asymmetry that a naive "add `when:` like todo"
-  port would have silently fixed; parity kept it and the new suite pins it (a quirk-fix
-  candidate for a trailing commit, not part of the relocation).
+  port would have silently fixed; parity kept it and the new suite pins it (fixed in the
+  trailing quirk commit below).
+
+## Quirks fixed after the collections fold (the trailing `fix(server)` commit)
+
+The relocation itself was byte-identical; these were then fixed on top, each with a
+regression test, so the parity diff and the behaviour change stayed in separate commits:
+
+1. **No transactions anywhere.** Every multi-statement write (savePlace + tags +
+   ratings-copy, saveFromTripPlaces, updatePlace's field/tag/label rewrite,
+   deletePlacesMany, copyToTrip's places/tags/ratings inserts, assignLabels,
+   reorderCollections) ran statement-by-statement. All now run in `db.transaction()`
+   ("Transactions are not optional", server/CLAUDE.md).
+2. **Bulk ops could partially commit.** `deletePlacesMany` interleaved
+   `assertCanDelete` with the deletes and `assignLabels` checked each list inside its
+   write loop — a mid-list 403/404 left earlier work committed. Both now permission-check
+   every id/list up front and write all-or-nothing (COLLECTIONS-SVC-090/091).
+3. **The MCP tools ignored the collections addon.** The legacy registrar registered its
+   25 tools unconditionally while REST (`CollectionsAddonGuard`) and the plugin host
+   (`requireAddon`) refuse when the addon is off — and the addon is seeded **disabled**
+   by default, so a fresh install exposed the whole MCP surface for a feature the admin
+   never turned on. Every entry now rides `when: collectionsAddonOn` (todo pattern);
+   the characterization case flipped from pinning the absence to pinning the gate.
+4. **The from-trip saves echoed to their origin client.** The client sends
+   `X-Socket-Id` on every request, but `POST /places/from-trip`(`-many`) never read the
+   header and `saveFromTripPlaces` hardcoded `socketId: undefined`, so the saving client
+   re-received its own `collections:updated`. Both routes now forward the header
+   (COLLECTIONS-SVC-092).
+5. **Two MCP handlers let unexpected throws escape.** `invite_to_collection` and
+   `accept_collection_invite` were the only handlers without try/catch — a db-level
+   throw surfaced as an SDK protocol error instead of `isError` text. Both now catch.
+
+**Quirks deliberately preserved** (parity, not oversights): `setRating` gates on
+`assertAccess`, not `assertCanEdit` — viewers cast personal votes by design (#1435);
+`sendInvite`'s notification send stays fire-and-forget with its double `.catch(() => {})`;
+`roleOf` collapses unknown member roles to `'editor'` (defensive default);
+`updateCollection`/`updateLabel` still broadcast even when no field changed (a harmless
+refresh); `updateLabel` sets no `updated_at` because `collection_labels` has no such
+column (not a defect); `reorderCollections` and `copyToTrip` still broadcast nothing;
+`findMembership` still refuses to match on a bare name (deliberate, anti-false-positive);
+and the dead `findMembershipForUser` export stays (now tested, zero consumers).
 
 ## Quirks fixed after the place fold (the trailing `fix(server)` commit)
 

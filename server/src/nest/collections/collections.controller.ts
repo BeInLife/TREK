@@ -113,14 +113,14 @@ export class CollectionsController {
 
   @Post('places/from-trip')
   @HttpCode(200)
-  saveFromTrip(@CurrentUser() user: User, @Body() body: CollectionSaveFromTripDto) {
-    return this.collections.saveFromTripPlace(user.id, body.collection_id, body.source_trip_id, body.source_place_id, body.force);
+  saveFromTrip(@CurrentUser() user: User, @Body() body: CollectionSaveFromTripDto, @Headers('x-socket-id') socketId?: string) {
+    return this.collections.saveFromTripPlace(user.id, body.collection_id, body.source_trip_id, body.source_place_id, body.force, socketId);
   }
 
   @Post('places/from-trip-many')
   @HttpCode(200)
-  saveFromTripMany(@CurrentUser() user: User, @Body() body: CollectionSaveFromTripManyDto) {
-    return this.collections.saveFromTripPlaces(user.id, body.collection_id, body.source_trip_id, body.source_place_ids, body.force);
+  saveFromTripMany(@CurrentUser() user: User, @Body() body: CollectionSaveFromTripManyDto, @Headers('x-socket-id') socketId?: string) {
+    return this.collections.saveFromTripPlaces(user.id, body.collection_id, body.source_trip_id, body.source_place_ids, body.force, socketId);
   }
 
   @Post('places/delete-many')

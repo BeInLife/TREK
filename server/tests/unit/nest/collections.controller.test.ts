@@ -90,8 +90,8 @@ describe('CollectionsController', () => {
       expect(svc.setStatus).toHaveBeenCalledWith(1, 9, 'want', 'sid');
       expect(c.deletePlace(user, '9', 'sid')).toEqual({ success: true });
       expect(svc.deletePlace).toHaveBeenCalledWith(1, 9, 'sid');
-      c.saveFromTrip(user, { collection_id: 3, source_trip_id: 5, source_place_id: 8 } as never);
-      expect(svc.saveFromTripPlace).toHaveBeenCalledWith(1, 3, 5, 8, undefined);
+      c.saveFromTrip(user, { collection_id: 3, source_trip_id: 5, source_place_id: 8 } as never, 'sid');
+      expect(svc.saveFromTripPlace).toHaveBeenCalledWith(1, 3, 5, 8, undefined, 'sid');
       expect(c.copyToTrip(user, { trip_id: 5, place_ids: [9] } as never)).toEqual({ copied: 1, skipped: [] });
     });
 

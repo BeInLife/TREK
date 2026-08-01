@@ -5,8 +5,9 @@
  * suite — so this is a characterization of the ported behavior: payload
  * shapes, error texts (the service's thrown httpError messages surfaced via
  * fail()), the owner-only available-users gate, demo denial on writes, the
- * collections read/write scope gating, and the deliberate ABSENCE of an
- * addon gate (the REST surface is addon-gated; the MCP tools never were).
+ * collections read/write scope gating, and — since the post-fold quirk pass —
+ * the collections-addon `when:` gate (the legacy registrar registered
+ * unconditionally while REST and the plugin host gated; the port fixed that).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -66,6 +67,9 @@ function clearCollections() {
 beforeAll(async () => {
   createTables(testDb);
   runMigrations(testDb);
+  // The collections addon is seeded DISABLED by default and every tool rides
+  // the `when:` addon gate (post-fold quirk fix) — enable it for the suite.
+  testDb.prepare('UPDATE addons SET enabled = 1 WHERE id = ?').run(ADDON_IDS.COLLECTIONS);
   // Warm the notificationService module: sendInvite does a fire-and-forget
   // dynamic import of it, and a cold load can otherwise race the mock registry
   // under slow (coverage) runs — same precaution as tests/integration/vacay.test.ts.
@@ -509,20 +513,20 @@ describe('Collection tools — scope gating', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Addon NON-gating — parity quirk carried over from the legacy registrar:
-// unlike the REST CollectionsAddonGuard and the plugin host's requireAddon,
-// the MCP tools register even with the collections addon disabled.
+// Addon gating — added with the post-fold quirk pass: the legacy registrar
+// registered unconditionally (unlike the REST CollectionsAddonGuard and the
+// plugin host's requireAddon); every entry now rides the collections addon
+// via the `when:` predicate.
 // ---------------------------------------------------------------------------
 
-describe('Collection tools — no addon gate (legacy parity)', () => {
-  it('still registers the tools when the collections addon is disabled', async () => {
+describe('Collection tools — collections addon gating', () => {
+  it('registers nothing when the collections addon is disabled', async () => {
     const { user } = createUser(testDb);
     testDb.prepare('UPDATE addons SET enabled = 0 WHERE id = ?').run(ADDON_IDS.COLLECTIONS);
     try {
       await withHarness(user.id, async (h) => {
         const names = (await h.client.listTools()).tools.map((t) => t.name);
-        expect(names).toContain('list_collections');
-        expect(names).toContain('create_collection');
+        for (const tool of [...READ_TOOLS, ...WRITE_TOOLS]) expect(names).not.toContain(tool);
       });
     } finally {
       testDb.prepare('UPDATE addons SET enabled = 1 WHERE id = ?').run(ADDON_IDS.COLLECTIONS);

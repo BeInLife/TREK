@@ -298,10 +298,16 @@ exports into `CollectionsService` over DatabaseService + PermissionsService +
 RealtimeService, with the `deleteOldCollectionCover` path re-anchored one
 directory deeper and the `sendInvite` lazy notificationService `import()`
 kept, collab precedent; the 25-tool legacy registrar `mcp/tools/collections.ts`
-moved to `collections.mcp.ts` — deliberately with NO `when:` addon gate, since
-the legacy registrar registered unconditionally while REST/plugin-host gate on
-the addon, a parity quirk now pinned by a new 23-case `tools-collections`
-characterization suite (the legacy registrar had no tool-level tests at all);
+moved to `collections.mcp.ts` — at relocation time deliberately with NO
+`when:` addon gate, since the legacy registrar registered unconditionally
+while REST/plugin-host gate on the addon; the trailing `fix(server)` quirk
+commit then gated all 25 tools (the addon ships disabled by default, so the
+ungated surface was live on fresh installs) alongside wrapping every
+multi-statement write in `db.transaction()`, making the bulk ops
+all-or-nothing, and forwarding `X-Socket-Id` on the from-trip saves — each
+pinned by a new 23-case `tools-collections` characterization suite plus the
+`COLLECTIONS-SVC-090…092` band (the legacy registrar had no tool-level tests
+at all);
 the plugin host swapped its 7 collections imports for the injected service —
 its 22nd constructor dep — and NO bridge was needed anywhere; the dead
 `buildDedupSet` module helper was dropped in the move, the only line that
