@@ -1,8 +1,32 @@
 # Legacy `src/services/` dependency graph
 
 Generated from the actual imports in `server/src` on **2026-08-01** (after the
-transitItineraryService relocation — the fourth and final link of step 4 in the
-dependency-honest order below, and the first pure-helpers relocation with no
+collectionsService fold — the biggest single fold yet, taken off the ready
+frontier while the notifications fan-in stays the order's official next step:
+the 1024-line saved-places core (visibility/roles, the collection-scoped
+dedup, saved-places CRUD, copy-to-trip with the ratings filters, labels, the
+fusion invitation state machine) folded into the DI-native `CollectionsService`
+over `DatabaseService` + `PermissionsService` + `RealtimeService` — the
+`permissions.bridge` and websocket `broadcastToUser` imports became injections,
+the `placeImage` helper import stays plain, the `sendInvite` call-time
+`import()` of notificationService stays lazily as-is (collab precedent), and
+`deleteOldCollectionCover` re-anchored its `__dirname` path one directory
+deeper. The whole 25-tool `mcp/tools/collections.ts` registrar moved onto the
+decorator registry as `collections.mcp.ts` — deliberately with **no `when:`
+addon gate**, because the legacy registrar registered unconditionally while
+REST (`CollectionsAddonGuard`) and the plugin host (`requireAddon`) gate on the
+addon; that asymmetry is now pinned as a characterization case. The plugin RPC
+host swapped its 7 collections imports for the injected `CollectionsService`
+(its 22nd constructor dep), so the domain needed **no bridge at all** — the
+fifth consecutive zero-bridge fold. The legacy registrar had no tool-level
+tests; a new 23-case `tools-collections` suite now covers payloads, error
+texts, scope gating and the addon-gate absence, and the moved 47-case
+`COLLECTIONS-SVC-*` suite gained two membership-lookup cases. A sibling DTO
+ratchet cleared both collections body-contract allow-list entries (`reorder`,
+`delete-many`), retiring the last two hand-rolled 400 strings of the domain in
+favour of the pipe envelope (places precedent). A day earlier, the
+transitItineraryService relocation closed step 4 — the fourth and final link
+of that chain, and the first pure-helpers relocation with no
 service fold at all: the 287-line module is 100% pure — no SQL, no DB, no
 broadcasts — so its Zod itinerary schemas + endpoint/metadata builders moved
 byte-identical to `nest/transit/transit-itinerary.helpers.ts` (the schemas must
@@ -11,8 +35,8 @@ stay module-level plain exports: `transit.mcp.ts` consumes them inside
 container exists), its sole consumer — the in-container `transit.mcp.ts` — was
 a one-import repoint, and a new 21-case `TRANSIT-ITIN-*` characterization suite
 pins the previously untested superRefine error strings, `??` time fallbacks,
-coordinate tolerances and builder output. **Step 4 is complete**; the
-notifications fan-in heads the frontier. A day earlier, the placeService
+coordinate tolerances and builder output. The
+notifications fan-in heads the frontier. Before that, the placeService
 migration (2026-07-30): the 1029-line place core (CRUD + ratings SQL,
 the GPX/KML/KMZ importers, the Google/Naver list importers) folded into the
 DI-native `PlacesService`; the pure pieces — the frozen XML parsers, the KMZ
@@ -128,9 +152,17 @@ How to read it:
   `days.mcp.ts`'s place creation, so injecting AssignmentsService there would
   close DaysModule → PlacesModule → AssignmentsModule → DaysModule; the same
   seam `reservations.mcp.ts` uses and the same trade `trips.bridge.ts`
-  documents).
+  documents),
+  collections (the 1024-line saved-places core folded into `CollectionsService`
+  over `DatabaseService`/`PermissionsService`/`RealtimeService`; the 25-tool
+  registrar moved to `collections.mcp.ts` **without** a `when:` addon gate —
+  the legacy registrar's addon-gate asymmetry, preserved and test-pinned; the
+  plugin host injects the service as its 22nd constructor dep; the `sendInvite`
+  lazy notificationService `import()` stays call-time (collab precedent); the
+  dead `buildDedupSet` module helper was dropped in the move — the only
+  non-verbatim line. **Zero bridge files**: every consumer is in-container).
 - **Domain migration targets** (the wave material): adminService, airportService, atlasService,
-  authService, backupService, collectionsService,
+  authService, backupService,
   journeyService, journeyShareService, notificationService, oauthService,
   oidcService, passkeyService, weatherService, wikiService.
 - **Cross-cutting Wave-2 targets:** permissions and auditLog are done (2026-07) — see the
@@ -161,7 +193,6 @@ flowchart TD
     weather[weatherService]:::ready
     airport["airportService (boot special case)"]:::ready
     wiki[wikiService]:::ready
-    collections[collectionsService]:::ready
     oauth[oauthService]:::ready
   end
 
@@ -177,7 +208,6 @@ flowchart TD
   memories["memories/ cluster"]:::infra
   cleanup[userCleanupService]:::infra
 
-  collections -.-> notifSvc
   notifSvc --> notifCluster
   admin --> auth & notifSvc & cleanup
   auth --> atlas
@@ -188,7 +218,13 @@ flowchart TD
   memories --> notifSvc & admin
 ```
 
-(The `transitItineraryService` node is gone since the 2026-08-01 relocation —
+(The `collectionsService` node is gone since the 2026-08-01 fold — its dotted
+call-time `import()` edge to notificationService survives inside the DI-native
+`CollectionsService`, exactly like the identical lazy sends in the
+already-migrated collab/packing/trips/reservations/vacay services, so it never
+appears here again; its `permissions.bridge` repoint became an injected
+`PermissionsService` and its `placeImage` import stays a plain helper import.
+The `transitItineraryService` node is gone since the 2026-08-01 relocation —
 its `transitService` edge had already become the pure
 `nest/transit/transit.helpers` import when the transit domain went DI-native,
 and the relocation moved the whole module into `nest/transit/` as
@@ -209,10 +245,7 @@ the writeAudit consumers to `nest/audit/audit.bridge`, and the log*-only consume
 tripService hub node is gone since the 2026-07 trip fold — the DI-native
 `TripsService` injects its former bridge targets and keeps the legacy
 avatarUrl/timezoneService/userCleanupService helpers as plain imports (helpers
-never block). The dotted
-`collections -.-> notifSvc` edge is a call-time `import()` for the collection-invite
-notification: it stays as-is through a migration, exactly like the identical lazy sends in the
-already-migrated collab/packing/trips/reservations/vacay services.)
+never block).)
 
 ## Full adjacency table
 
@@ -222,10 +255,9 @@ already-migrated collab/packing/trips/reservations/vacay services.)
 | `airportService` | (none) | (none) | nest/airports/airports.service.ts, nest/booking-import/kitinerary-mapper.ts | db/database.ts (lazy boot backfill), mcp/tools/mapsWeather.ts, mcp/tools/transports.ts |
 | `apiKeyCrypto` | (none) | adminService, airtrail/airtrailService, authService, llmConfig, memories/helpersService, memories/immichService, memories/photoResolverService, memories/synologyService, memories/unifiedService, notifications, oidcService, unsplashService | nest/maps/maps.service.ts, nest/plugins/plugin-oauth.service.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/settings/settings.service.ts | db/migrations.ts |
 | `atlasService` | (none) | authService | nest/atlas/atlas.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | mcp/resources.ts, mcp/tools/atlas.ts |
-| `authService` | apiKeyCrypto, atlasService, avatarUrl, demo, distanceService, ephemeralTokens, mfaCrypto, passwordPolicy, tripMembership, userCleanupService, webauthnConfig (+ `permissions.bridge`) | adminService, oidcService, passkeyService | nest/assignments/assignments.mcp.ts, nest/auth/auth.service.ts, nest/auth/passkey-enabled.guard.ts, nest/budget/budget.mcp.ts, nest/collab/collab.mcp.ts, nest/days/day-notes.mcp.ts, nest/days/days.mcp.ts, nest/oidc/oidc.service.ts, nest/packing/packing.mcp.ts, nest/places/places.mcp.ts, nest/reservations/reservations.mcp.ts, nest/share/share.mcp.ts, nest/tags/tags.mcp.ts, nest/todo/todo.mcp.ts, nest/transit/transit.mcp.ts, nest/trips/trips.mcp.ts, nest/vacay/vacay.mcp.ts | mcp/index.ts, mcp/tools/atlas.ts, mcp/tools/collections.ts, mcp/tools/journey.ts, mcp/tools/notifications.ts, mcp/tools/transports.ts |
+| `authService` | apiKeyCrypto, atlasService, avatarUrl, demo, distanceService, ephemeralTokens, mfaCrypto, passwordPolicy, tripMembership, userCleanupService, webauthnConfig (+ `permissions.bridge`) | adminService, oidcService, passkeyService | nest/assignments/assignments.mcp.ts, nest/auth/auth.service.ts, nest/auth/passkey-enabled.guard.ts, nest/budget/budget.mcp.ts, nest/collab/collab.mcp.ts, nest/collections/collections.mcp.ts, nest/days/day-notes.mcp.ts, nest/days/days.mcp.ts, nest/oidc/oidc.service.ts, nest/packing/packing.mcp.ts, nest/places/places.mcp.ts, nest/reservations/reservations.mcp.ts, nest/share/share.mcp.ts, nest/tags/tags.mcp.ts, nest/todo/todo.mcp.ts, nest/transit/transit.mcp.ts, nest/trips/trips.mcp.ts, nest/vacay/vacay.mcp.ts | mcp/index.ts, mcp/tools/atlas.ts, mcp/tools/journey.ts, mcp/tools/notifications.ts, mcp/tools/transports.ts |
 | `avatarUrl` | (none) | adminService, authService, inAppNotifications, journeyService | nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/files/files.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | (none) |
 | `backupService` | (none — `permissions.bridge`, plugin backup/paths infra only) | (none) | nest/backup/backup.controller.ts, nest/backup/backup.service.ts | scheduler.ts (lazy) |
-| `collectionsService` | notificationService (lazy), placeImage (+ `permissions.bridge`) | (none) | nest/collections/collections.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | mcp/tools/collections.ts |
 | `conflictResult` | (none) | (none) | nest/packing/packing.controller.ts, nest/packing/packing.service.ts, nest/places/places.controller.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | (none) |
 | `cookie` | (none) | (none) | nest/auth/auth-public.controller.ts, nest/auth/auth.service.ts, nest/auth/passkey.controller.ts, nest/oidc/oidc.controller.ts, nest/oidc/oidc.service.ts | (none) |
 | `demo` | (none) | authService | nest/auth/auth.controller.ts, nest/collections/collections.controller.ts, nest/files/files.controller.ts, nest/places/places.controller.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/trips/trips.controller.ts | middleware/auth.ts, middleware/mfaPolicy.ts |
@@ -240,12 +272,12 @@ already-migrated collab/packing/trips/reservations/vacay services.)
 | `mfaCrypto` | (none) | authService | (none) | (none) |
 | `notificationPreferencesService` | notifications, notifications/builtins, notifications/channelRegistry | inAppNotifications, notificationService, notifications, notifications/channelRegistry | nest/admin/admin.service.ts, nest/notifications/notifications.service.ts, nest/plugins/install/manifest.ts | (none) |
 | `notifications` | apiKeyCrypto, notificationPreferencesService (+ `audit-log.logger`) | notificationPreferencesService, notificationService, notifications/builtins | nest/auth/auth.service.ts, nest/notifications/notifications.service.ts | (none) |
-| `notificationService` | inAppNotifications, notificationPreferencesService, notifications, notifications/channelRegistry (+ `audit-log.logger`) | adminService, collectionsService, memories/synologyService, memories/unifiedService | nest/admin/admin.controller.ts, nest/collab/collab.service.ts, nest/packing/packing.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts, nest/vacay/vacay.service.ts | scheduler.ts (lazy) |
+| `notificationService` | inAppNotifications, notificationPreferencesService, notifications, notifications/channelRegistry (+ `audit-log.logger`) | adminService, memories/synologyService, memories/unifiedService | nest/admin/admin.controller.ts, nest/collab/collab.service.ts, nest/collections/collections.service.ts (lazy), nest/packing/packing.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts, nest/vacay/vacay.service.ts | scheduler.ts (lazy) |
 | `oauthService` | (none — `addons.bridge` + `audit.bridge` only) | (none) | nest/oauth/oauth-api.controller.ts, nest/oauth/oauth.service.ts | mcp/index.ts, mcp/oauthProvider.ts |
 | `oidcService` | apiKeyCrypto, authService, tripMembership | (none) | nest/oidc/oidc.service.ts | (none) |
 | `passkeyService` | authService, webauthnConfig | (none) | nest/admin/admin.service.ts, nest/auth/passkey.controller.ts | (none) |
 | `passwordPolicy` | (none) | adminService, authService | (none) | (none) |
-| `placeImage` | (none) | collectionsService | nest/collections/collections.controller.ts, nest/common/place-image-upload.ts, nest/places/places.controller.ts, nest/places/places.service.ts | (none) |
+| `placeImage` | (none) | (none) | nest/collections/collections.controller.ts, nest/collections/collections.service.ts, nest/common/place-image-upload.ts, nest/places/places.controller.ts, nest/places/places.service.ts | (none) |
 | `placePhotoCache` | (none) | (none) | nest/maps/maps.service.ts, nest/places/places.helpers.ts, nest/share/share.service.ts | scheduler.ts (lazy) |
 | `queryHelpers` | (none) | (none) | nest/assignments/assignments.service.ts, nest/days/days.service.ts, nest/places/places.service.ts, nest/share/share.service.ts | (none) |
 | `timezoneService` | (none) | airtrail/airtrailMapper | nest/transit/transit-itinerary.helpers.ts, nest/trips/trips.service.ts | (none) |
@@ -289,7 +321,6 @@ frontier candidates below can still go any time:
 
 | Candidate | Why now / why not | Bridge tax (legacy dependents + out-of-container) |
 |---|---|---|
-| **collectionsService** | Frontier-ready — legacy deps are the placeImage helper + `permissions.bridge`, plus a call-time lazy `import()` of notificationService that a migrated service keeps (collab precedent). Its dedup helpers are collection-scoped ports of the ones that just moved to `places.helpers.ts` — a fold could share them | `mcp/tools/collections.ts` |
 | **atlasService** | Zero deps, but its legacy dependent is `authService` (Wave-5) → bridge lives long | `authService`; `mcp/tools/atlas.ts`, `mcp/resources.ts` |
 | **oauthService** | Dependency-free since the Phase 0 addons extraction (adminService edge was only `isAddonEnabled` → `addons.bridge`) — but the coherence order keeps it after admin so the `mcp/oauthProvider.ts` merge (`mcp-2`) lands with it | `mcp/index.ts`, `mcp/oauthProvider.ts` |
 | **weatherService / wikiService / airportService** | Independent leaves; airport has the `db/database.ts` boot lazy-require special case | little / none |
@@ -309,10 +340,10 @@ frontier candidates below can still go any time:
   `journeyShareService` after. Note the place fold added two more in-container
   journeyService consumers (`places.service.ts`'s hooks and `places.mcp.ts`'s
   skeleton reconcile), so this migration's repoint list grew by two.
-- `collectionsService`/`backupService`: unblocked since the permissions fold (their edges are
-  `permissions.bridge` repoints now; collections' notificationService edge is lazy — see
-  above); backup still stays last by design (owns the closeDb/reinitialize lifecycle and the
-  plugin backup/paths infra).
+- `backupService`: unblocked since the permissions fold (its edge is a
+  `permissions.bridge` repoint now) but stays last by design (owns the
+  closeDb/reinitialize lifecycle and the plugin backup/paths infra).
+  `collectionsService` cashed in the same unblock on 2026-08-01 — done.
 
 **Dependency-honest order** (each step's deps are already done at that point;
 `vacayService`, `reservationService` (the residue fold), `dayService` and the
@@ -344,7 +375,10 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
    new 21-case `TRANSIT-ITIN-*` characterization suite — **step 4 complete**)
 5. `atlasService` → `authService` (+ oidc/passkey) → `adminService` → `oauthService`
 6. `memories/` cluster → `journeyService` → `journeyShareService`; `collectionsService`
-   (frontier-ready since the permissions fold — can also go any time)
+   (done 2026-08-01 — taken off the frontier ahead of step 3: the 1024-line fold
+   into `CollectionsService`, the 25-tool registrar onto `collections.mcp.ts`,
+   the plugin host injecting it as its 22nd constructor dep, no bridge, and the
+   DTO ratchet clearing both allow-list entries)
 7. Independent any time: `weatherService`, `wikiService`, `airportService` (move the
     boot backfill into Nest bootstrap when you do it); `backupService` last
 
@@ -433,6 +467,24 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   `buildTransitReservationParts` (the scheduled-time fallback one is a real defect, fixed
   in the trailing commits below); the durable cure is lifting the contract to
   `shared/src/`, which remains follow-up work, not part of the relocation.
+- (2026-08-01 regeneration, post collections fold) The frontier row's predictions held
+  almost exactly: the legacy deps really were just `placeImage` + `permissions.bridge` +
+  the lazy notificationService send, and the "bridge tax: `mcp/tools/collections.ts`"
+  claim resolved to **zero bridges** because the whole 25-tool registrar moved onto the
+  decorator registry rather than being repointed — the fifth consecutive zero-bridge fold,
+  which by now looks like the rule rather than the exception (the graph's "bridge tax"
+  column consistently over-predicts: a registrar is a *port*, not a repoint). The row's
+  suggestion that the fold could share the dedup helpers with `places.helpers.ts` was NOT
+  taken — the collection-scoped ports differ in table and semantics (name-first dedup with
+  coords as fallback, vs. places' variants), so they stayed private to the service; only
+  the never-called `buildDedupSet` module helper was dropped. Two things the graph had not
+  tracked: (a) like transit-itinerary before it, the domain's MCP surface had **no tests
+  at all** — the 25 tools were pinned only through the service suite — so the fold added a
+  23-case `tools-collections` characterization suite; and (b) the legacy registrar
+  registered **without an addon gate** while REST and the plugin host both gate on the
+  collections addon — a real behavioral asymmetry that a naive "add `when:` like todo"
+  port would have silently fixed; parity kept it and the new suite pins it (a quirk-fix
+  candidate for a trailing commit, not part of the relocation).
 
 ## Quirks fixed after the place fold (the trailing `fix(server)` commit)
 
