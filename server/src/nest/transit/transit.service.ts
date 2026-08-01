@@ -126,7 +126,7 @@ function mapStop(p: MotisPlaceRaw | undefined, kind: 'departure' | 'arrival'): T
     // A missing coordinate becomes 0 (null island) rather than null on
     // purpose: TransitLegStop.lat/lng are non-nullable across the wire
     // contract (transitStopSchema, the client picker) — making them nullable
-    // would ripple through transitItineraryService's validation and drop
+    // would ripple through transit-itinerary.helpers' validation and drop
     // otherwise-usable itineraries. MOTIS places carry coordinates in
     // practice; endpoint stops are re-checked by transitCoordinatesMatch.
     lat: typeof p?.lat === 'number' ? p.lat : 0,

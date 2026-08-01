@@ -29,7 +29,7 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
   collab, vacay, reservations, day, permissions, audit, budget, trip, maps,
-  transit, place — see the migration recipe below.
+  transit, place, transit-itinerary — see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -244,7 +244,8 @@ Transitous/MOTIS proxy became a dep-free `TransitService` (no
 frozen-at-import `TRANSIT_API_BASE` and lazy User-Agent memo staying
 module-scoped on purpose; the pure `deriveTransitStats` + mode whitelist +
 itinerary types moved to `transit.helpers.ts` (maps.helpers precedent) so the
-downstream legacy `transitItineraryService` needs no bridge; the whole 3-tool
+downstream legacy `transitItineraryService` needed no bridge (since relocated
+into the domain as `transit-itinerary.helpers.ts`); the whole 3-tool
 `mcp/tools/transit.ts` registrar moved to `transit.mcp.ts` — the two geo
 search tools on `access: { group: 'geo', mode: 'read' }` and
 `create_transit_journey` on `reservations:write`, with its days/reservations
@@ -278,9 +279,22 @@ empty-list short-circuit stays reachable, and retired three bespoke 400
 strings — 'Place name is required', 'ids must be an array of numbers' and
 'URL is required' — in favour of the pipe envelope, accepting that a
 malformed body now 400s ahead of the trip-access 404 (the todo/trips trade).
+transitItineraryService followed (the first pure-helpers relocation with no
+service fold at all — the 287-line module is 100% pure, so the recipe's SQL /
+bridge / DTO / plugin-host steps were all no-ops: the Zod itinerary schemas +
+endpoint/metadata builders moved byte-identical to
+`transit-itinerary.helpers.ts`, next to `transit.helpers.ts`; the schemas
+**must** stay module-level plain exports because `transit.mcp.ts` consumes
+them inside `@Tool({ inputSchema })` decorators, which evaluate at module load
+before any container exists; the sole consumer — the in-container
+`transit.mcp.ts` — was a one-import repoint, closing step 4 of the
+dependency-honest order; the legacy module had no direct suite, so a new
+21-case `TRANSIT-ITIN-*` characterization suite now pins all 12 superRefine
+error strings, the `??` time fallbacks, the coordinate tolerances and the
+reservation endpoint/metadata builder).
 Repeat these steps per
-service (next up: **transitItineraryService** —
-or the notifications fan-in — per the dependency-honest order in
+service (next up: **the notifications fan-in** —
+per the dependency-honest order in
 `migration-graph.md`). This is a
 **pure relocation** — byte-identical
 SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a

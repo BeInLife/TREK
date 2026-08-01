@@ -1,8 +1,19 @@
 # Legacy `src/services/` dependency graph
 
-Generated from the actual imports in `server/src` on **2026-07-30** (after the
-placeService migration — the third and final link of step 4 in the
-dependency-honest order below: the 1029-line place core (CRUD + ratings SQL,
+Generated from the actual imports in `server/src` on **2026-08-01** (after the
+transitItineraryService relocation — the fourth and final link of step 4 in the
+dependency-honest order below, and the first pure-helpers relocation with no
+service fold at all: the 287-line module is 100% pure — no SQL, no DB, no
+broadcasts — so its Zod itinerary schemas + endpoint/metadata builders moved
+byte-identical to `nest/transit/transit-itinerary.helpers.ts` (the schemas must
+stay module-level plain exports: `transit.mcp.ts` consumes them inside
+`@Tool({ inputSchema })` decorators, which evaluate at module load before any
+container exists), its sole consumer — the in-container `transit.mcp.ts` — was
+a one-import repoint, and a new 21-case `TRANSIT-ITIN-*` characterization suite
+pins the previously untested superRefine error strings, `??` time fallbacks,
+coordinate tolerances and builder output. **Step 4 is complete**; the
+notifications fan-in heads the frontier. A day earlier, the placeService
+migration (2026-07-30): the 1029-line place core (CRUD + ratings SQL,
 the GPX/KML/KMZ importers, the Google/Naver list importers) folded into the
 DI-native `PlacesService`; the pure pieces — the frozen XML parsers, the KMZ
 unpacker, the dedup predicates, the Google hex-id parsers, `reclaimPhotoCache`
@@ -96,9 +107,17 @@ How to read it:
   `TRANSIT_API_BASE` and lazy User-Agent memo stay module-scoped on purpose;
   the pure `deriveTransitStats` + `SCHEDULED_TRANSIT_MODES` + itinerary types
   are plain exports in `nest/transit/transit.helpers.ts` (maps.helpers
-  precedent) consumed by the legacy `transitItineraryService`; the 3-tool
+  precedent), consumed since the 2026-08 relocation by the colocated
+  `transit-itinerary.helpers.ts`; the 3-tool
   registrar moved to `transit.mcp.ts` and was deleted — no bridge ever
   existed for this domain),
+  transit-itinerary (the pure-helpers relocation closing step 4: schemas +
+  endpoint/metadata builders moved byte-identical from the legacy
+  `transitItineraryService` to `nest/transit/transit-itinerary.helpers.ts` —
+  plain exports, no service, no bridge, no DTO, no plugin-host work; the
+  `distanceService`/`timezoneService` helper imports stay plain, the
+  `EndpointInput` type import repointed from `reservations.bridge` to
+  `reservations.service` directly),
   place (the 1029-line place core folded into `PlacesService`, its pure half into
   `nest/places/places.helpers.ts`, and the whole MCP surface — 10 tools + the
   trip-places resource — onto `places.mcp.ts`; the `placeEnrichment` helper was
@@ -113,7 +132,7 @@ How to read it:
 - **Domain migration targets** (the wave material): adminService, airportService, atlasService,
   authService, backupService, collectionsService,
   journeyService, journeyShareService, notificationService, oauthService,
-  oidcService, passkeyService, transitItineraryService, weatherService, wikiService.
+  oidcService, passkeyService, weatherService, wikiService.
 - **Cross-cutting Wave-2 targets:** permissions and auditLog are done (2026-07) — see the
   DI-native list above; only tripAccess remains (delete, don't migrate).
 - **Helpers that stay as plain modules** (pure/infra, not wave material): avatarUrl,
@@ -143,7 +162,6 @@ flowchart TD
     airport["airportService (boot special case)"]:::ready
     wiki[wikiService]:::ready
     collections[collectionsService]:::ready
-    transitItin["transitItineraryService (stats/types → transit.helpers; bridge tax zero)"]:::ready
     oauth[oauthService]:::ready
   end
 
@@ -170,12 +188,15 @@ flowchart TD
   memories --> notifSvc & admin
 ```
 
-(The `placeService` node is gone since the 2026-07-30 fold — its legacy imports were
+(The `transitItineraryService` node is gone since the 2026-08-01 relocation —
+its `transitService` edge had already become the pure
+`nest/transit/transit.helpers` import when the transit domain went DI-native,
+and the relocation moved the whole module into `nest/transit/` as
+`transit-itinerary.helpers.ts`, so nothing was left to bridge or repoint beyond
+the one `transit.mcp.ts` import. The `placeService` node is gone since the
+2026-07-30 fold — its legacy imports were
 all helpers, and the former `placeService → mapsService` edge (via `placeEnrichment`)
-died with the helper rather than becoming a repoint. The
-`transitItineraryService → transitService` edge became the pure
-`nest/transit/transit.helpers` import when the transit domain went DI-native —
-helpers never block — so it sits alone at the head of the frontier;
+died with the helper rather than becoming a repoint.
 `notificationService → notifications cluster` is a hard import — the former
 `mapsService/transitService/webauthnConfig/
 oauthService → notifications` edges were only `getAppUrl`/`getMcpSafeUrl` and died with the
@@ -208,7 +229,7 @@ already-migrated collab/packing/trips/reservations/vacay services.)
 | `conflictResult` | (none) | (none) | nest/packing/packing.controller.ts, nest/packing/packing.service.ts, nest/places/places.controller.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | (none) |
 | `cookie` | (none) | (none) | nest/auth/auth-public.controller.ts, nest/auth/auth.service.ts, nest/auth/passkey.controller.ts, nest/oidc/oidc.controller.ts, nest/oidc/oidc.service.ts | (none) |
 | `demo` | (none) | authService | nest/auth/auth.controller.ts, nest/collections/collections.controller.ts, nest/files/files.controller.ts, nest/places/places.controller.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/trips/trips.controller.ts | middleware/auth.ts, middleware/mfaPolicy.ts |
-| `distanceService` | (none) | authService, transitItineraryService | (none) | (none) |
+| `distanceService` | (none) | authService | nest/transit/transit-itinerary.helpers.ts | (none) |
 | `ephemeralTokens` | (none) | authService | nest/files/files.service.ts | index.ts, websocket.ts |
 | `inAppNotificationActions` | (none) | inAppNotifications | (none) | (none) |
 | `inAppNotifications` | avatarUrl, inAppNotificationActions, notificationPreferencesService | notificationService | nest/notifications/notifications.service.ts | mcp/resources.ts, mcp/tools/notifications.ts |
@@ -227,8 +248,7 @@ already-migrated collab/packing/trips/reservations/vacay services.)
 | `placeImage` | (none) | collectionsService | nest/collections/collections.controller.ts, nest/common/place-image-upload.ts, nest/places/places.controller.ts, nest/places/places.service.ts | (none) |
 | `placePhotoCache` | (none) | (none) | nest/maps/maps.service.ts, nest/places/places.helpers.ts, nest/share/share.service.ts | scheduler.ts (lazy) |
 | `queryHelpers` | (none) | (none) | nest/assignments/assignments.service.ts, nest/days/days.service.ts, nest/places/places.service.ts, nest/share/share.service.ts | (none) |
-| `timezoneService` | (none) | airtrail/airtrailMapper, transitItineraryService | nest/trips/trips.service.ts | (none) |
-| `transitItineraryService` | distanceService, timezoneService (+ the pure `nest/transit/transit.helpers`, type-only `reservations.bridge`) | (none) | nest/transit/transit.mcp.ts | (none) |
+| `timezoneService` | (none) | airtrail/airtrailMapper | nest/transit/transit-itinerary.helpers.ts, nest/trips/trips.service.ts | (none) |
 | `tripAccess` | (none) | (none) | nest/booking-import/booking-import.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/days/day-notes.service.ts, nest/integrations/airtrail-import.controller.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/todo/todo.service.ts | (none) |
 | `tripMembership` | (none) | authService, oidcService | nest/plugins/host/plugin-host-deps.factory.ts, nest/trip-invite/trip-invite.service.ts | (none) |
 | `unsplashService` | apiKeyCrypto | (none) | nest/places/places.service.ts, nest/trips/trips.controller.ts, nest/trips/trips.service.ts | (none) |
@@ -261,9 +281,14 @@ already-migrated collab/packing/trips/reservations/vacay services.)
 
 **Ready frontier** (all legacy deps are helpers, `tripAccess`, or lazy sends):
 
+With step 4 closed by the 2026-08 transit-itinerary relocation, the pick is no
+longer on this table: the dependency-honest order's next step is the
+**notifications cluster → `notificationService`** fan-in (step 3, deferred
+while step 4 ran) — it must precede its admin/memories dependents. The
+frontier candidates below can still go any time:
+
 | Candidate | Why now / why not | Bridge tax (legacy dependents + out-of-container) |
 |---|---|---|
-| **transitItineraryService** ← pick | Frontier-ready since the transit fold (its transit edge is the pure `transit.helpers` import; distance/timezone are helpers, the reservations edge is type-only bridge) and now the **last unfinished link of step 4**; its only consumer is the in-container `transit.mcp.ts`, so the fold is a repoint | (none — `nest/transit/transit.mcp.ts` injects/repoints) |
 | **collectionsService** | Frontier-ready — legacy deps are the placeImage helper + `permissions.bridge`, plus a call-time lazy `import()` of notificationService that a migrated service keeps (collab precedent). Its dedup helpers are collection-scoped ports of the ones that just moved to `places.helpers.ts` — a fold could share them | `mcp/tools/collections.ts` |
 | **atlasService** | Zero deps, but its legacy dependent is `authService` (Wave-5) → bridge lives long | `authService`; `mcp/tools/atlas.ts`, `mcp/resources.ts` |
 | **oauthService** | Dependency-free since the Phase 0 addons extraction (adminService edge was only `isAddonEnabled` → `addons.bridge`) — but the coherence order keeps it after admin so the `mcp/oauthProvider.ts` merge (`mcp-2`) lands with it | `mcp/index.ts`, `mcp/oauthProvider.ts` |
@@ -313,7 +338,10 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
    plugin host inject it, so **no bridge**; the sibling `placeEnrichment` fold
    deleted `maps.bridge` with its last consumer, and the DTO ratchet cleared all
    seven `PlacesController` allow-list entries)
-   → **`transitItineraryService`** (the last link — frontier-ready, bridge tax zero)
+   → `transitItineraryService` (done 2026-08 — the last link: the 100%-pure
+   module relocated byte-identical to `nest/transit/transit-itinerary.helpers.ts`
+   as plain exports, `transit.mcp.ts` repointed, no service/bridge/DTO work, a
+   new 21-case `TRANSIT-ITIN-*` characterization suite — **step 4 complete**)
 5. `atlasService` → `authService` (+ oidc/passkey) → `adminService` → `oauthService`
 6. `memories/` cluster → `journeyService` → `journeyShareService`; `collectionsService`
    (frontier-ready since the permissions fold — can also go any time)
@@ -385,6 +413,26 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   now reached only from `nest/places/*` (kmlImport, placeImage, placePhotoCache,
   unsplashService) are the residue this fold could have absorbed and did not; none of them
   blocks anything, so they stay as plain modules for now.
+- (2026-08-01 regeneration, post transit-itinerary relocation) The "bridge tax zero" and
+  "the fold is a repoint" predictions held exactly — and the shape went one step further
+  than the frontier row implied: there was no fold at all. The module turned out to be
+  100% pure (no SQL, no DB access, no broadcasts), so every recipe step except the move
+  itself was a no-op, and a hard constraint settled the target shape: the Zod schemas are
+  consumed inside `transit.mcp.ts`'s `@Tool({ inputSchema })` decorators, which evaluate
+  at module load — before any container exists — so they must stay module-level plain
+  exports (maps.helpers precedent), not members of an injectable. The type-only
+  `reservations.bridge` import repointed to `reservations.service` directly (the bridge
+  only re-exports `EndpointInput`), so the relocation removed one of
+  `reservations.bridge.ts`'s remaining import sites without touching its runtime exports.
+  One risk the graph had not tracked: the legacy module had **no direct test suite** — its
+  12 superRefine error strings and the endpoint/metadata builder were pinned only through
+  the 9 MCP transit tool cases — so the relocation added a 21-case `TRANSIT-ITIN-*`
+  characterization suite (the file now sits inside the ≥80% `src/nest/**` coverage gate).
+  Still open, now tracked here: the client's `TransitSearchPanel.tsx` hand-duplicates the
+  `endpoints`/`metadata.transit` build with observable divergences from
+  `buildTransitReservationParts` (the scheduled-time fallback one is a real defect, fixed
+  in the trailing commits below); the durable cure is lifting the contract to
+  `shared/src/`, which remains follow-up work, not part of the relocation.
 
 ## Quirks fixed after the place fold (the trailing `fix(server)` commit)
 

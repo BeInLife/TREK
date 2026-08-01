@@ -12,7 +12,7 @@ import {
   transitCoordinatesSchema,
   transitItinerarySchema,
   transitPlaceSchema,
-} from '../../services/transitItineraryService';
+} from './transit-itinerary.helpers';
 import { hasTripPermission, noAccess, permissionDenied, safeBroadcast } from '../../mcp/tools/_shared';
 import { RateLimitService } from '../auth/rate-limit.service';
 import { DatabaseService } from '../database/database.service';
@@ -54,8 +54,7 @@ function rateLimit(userId: number, bucket: string, max: number) {
  * scope group — there is no geo:write) and the `canWrite(scopes,
  * 'reservations')` early return on create_transit_journey. The
  * days/reservations bridge imports became injected services; the itinerary
- * schemas/helpers still come from the legacy transitItineraryService until
- * that domain migrates.
+ * schemas/helpers live in the colocated transit-itinerary.helpers.ts.
  */
 @McpController()
 export class TransitMcp {

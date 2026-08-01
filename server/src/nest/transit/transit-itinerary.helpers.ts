@@ -1,7 +1,16 @@
-import { haversineKm } from './distanceService';
-import type { EndpointInput } from '../nest/reservations/reservations.bridge';
-import { localParts, resolveTimeZone } from './timezoneService';
-import { deriveTransitStats, type TransitItinerary, type TransitLeg } from '../nest/transit/transit.helpers';
+/**
+ * Pure transit-itinerary helpers — the wire schemas for provider itineraries
+ * plus the endpoint/metadata builder for automated transit reservations.
+ * Moved 1:1 from the legacy services/transitItineraryService.ts (identical
+ * schemas, tolerances, error strings and output shapes). Kept as plain
+ * exports (the maps.helpers.ts precedent): the schemas are consumed inside
+ * transit.mcp.ts's @Tool inputSchema decorators, which evaluate at module
+ * load — before any DI container exists — so they must stay module-level.
+ */
+import { haversineKm } from '../../services/distanceService';
+import type { EndpointInput } from '../reservations/reservations.service';
+import { localParts, resolveTimeZone } from '../../services/timezoneService';
+import { deriveTransitStats, type TransitItinerary, type TransitLeg } from './transit.helpers';
 
 import { z } from 'zod';
 

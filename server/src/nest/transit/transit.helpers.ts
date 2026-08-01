@@ -1,9 +1,8 @@
 /**
- * Pure transit helpers shared by TransitService and plain-module code outside
- * the container (the legacy services/transitItineraryService imports
- * deriveTransitStats + the itinerary types). Kept as plain functions/consts
- * (the maps.helpers.ts / files.constants.ts precedent) so no bridge is needed —
- * helpers never block a migration.
+ * Pure transit helpers shared by TransitService and the itinerary
+ * validation/reservation builders in transit-itinerary.helpers.ts. Kept as
+ * plain functions/consts (the maps.helpers.ts / files.constants.ts
+ * precedent) — helpers never block a migration.
  */
 
 // Modes the client may request — a strict whitelist so the proxy can't be used
