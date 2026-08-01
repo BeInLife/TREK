@@ -6,7 +6,13 @@ import {
   changePasswordRequestSchema,
   mfaVerifyLoginRequestSchema,
   mfaEnableRequestSchema,
+  mfaDisableRequestSchema,
   mcpTokenCreateRequestSchema,
+  mapsKeyUpdateRequestSchema,
+  apiKeysUpdateRequestSchema,
+  settingsUpdateRequestSchema,
+  appSettingsUpdateRequestSchema,
+  resourceTokenRequestSchema,
 } from './auth.schema';
 
 import { describe, it, expect } from 'vitest';
@@ -59,7 +65,42 @@ describe('mfa + mcp-token schemas', () => {
     expect(mfaVerifyLoginRequestSchema.safeParse({ mfa_token: 't', code: '123456' }).success).toBe(true);
     expect(mfaVerifyLoginRequestSchema.safeParse({ mfa_token: 't' }).success).toBe(false);
     expect(mfaEnableRequestSchema.safeParse({ code: '123456' }).success).toBe(true);
+    expect(mfaDisableRequestSchema.safeParse({ password: 'pw', code: '123456' }).success).toBe(true);
+    expect(mfaDisableRequestSchema.safeParse({ code: '123456' }).success).toBe(false);
     expect(mcpTokenCreateRequestSchema.safeParse({ name: 'CLI' }).success).toBe(true);
     expect(mcpTokenCreateRequestSchema.safeParse({}).success).toBe(true);
+  });
+});
+
+describe('api-key / settings schemas', () => {
+  it('mapsKey accepts a string, an explicit null (clear) and omission', () => {
+    expect(mapsKeyUpdateRequestSchema.safeParse({ maps_api_key: 'k' }).success).toBe(true);
+    expect(mapsKeyUpdateRequestSchema.safeParse({ maps_api_key: null }).success).toBe(true);
+    expect(mapsKeyUpdateRequestSchema.safeParse({}).success).toBe(true);
+    expect(mapsKeyUpdateRequestSchema.safeParse({ maps_api_key: 7 }).success).toBe(false);
+  });
+
+  it('apiKeys is a per-key partial with nullable values', () => {
+    expect(apiKeysUpdateRequestSchema.safeParse({ unsplash_api_key: null }).success).toBe(true);
+    expect(apiKeysUpdateRequestSchema.safeParse({ maps_api_key: 'k', openweather_api_key: 'w' }).success).toBe(true);
+    expect(apiKeysUpdateRequestSchema.safeParse({}).success).toBe(true);
+  });
+
+  it('settings accepts profile + key fields, all optional', () => {
+    expect(settingsUpdateRequestSchema.safeParse({ username: 'alice' }).success).toBe(true);
+    expect(settingsUpdateRequestSchema.safeParse({ email: 'a@b.c', maps_api_key: null }).success).toBe(true);
+    expect(settingsUpdateRequestSchema.safeParse({ username: 42 }).success).toBe(false);
+  });
+
+  it('appSettings is an open string-keyed map (the server owns the key allow-list)', () => {
+    expect(appSettingsUpdateRequestSchema.safeParse({ require_mfa: true, smtp_host: 'mail' }).success).toBe(true);
+    expect(appSettingsUpdateRequestSchema.safeParse({}).success).toBe(true);
+    expect(appSettingsUpdateRequestSchema.safeParse('nope').success).toBe(false);
+  });
+
+  it('resourceToken keeps purpose an optional string (the 400 is a service rule)', () => {
+    expect(resourceTokenRequestSchema.safeParse({ purpose: 'download' }).success).toBe(true);
+    expect(resourceTokenRequestSchema.safeParse({}).success).toBe(true);
+    expect(resourceTokenRequestSchema.safeParse({ purpose: 5 }).success).toBe(false);
   });
 });

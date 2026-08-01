@@ -64,3 +64,47 @@ export const mcpTokenCreateRequestSchema = z.object({
   name: z.string().optional(),
 });
 export type McpTokenCreateRequest = z.infer<typeof mcpTokenCreateRequestSchema>;
+
+// The client sends an explicit `null` to clear the stored key; optional keeps
+// the legacy accept-anything omission path (omitting also clears — service rule).
+export const mapsKeyUpdateRequestSchema = z.object({
+  maps_api_key: z.string().nullable().optional(),
+});
+export type MapsKeyUpdateRequest = z.infer<typeof mapsKeyUpdateRequestSchema>;
+
+// Per-key partial update: an absent key keeps the stored value, `null` clears it.
+export const apiKeysUpdateRequestSchema = z.object({
+  maps_api_key: z.string().nullable().optional(),
+  openweather_api_key: z.string().nullable().optional(),
+  unsplash_api_key: z.string().nullable().optional(),
+});
+export type ApiKeysUpdateRequest = z.infer<typeof apiKeysUpdateRequestSchema>;
+
+export const settingsUpdateRequestSchema = z.object({
+  maps_api_key: z.string().nullable().optional(),
+  openweather_api_key: z.string().nullable().optional(),
+  unsplash_api_key: z.string().nullable().optional(),
+  username: z.string().optional(),
+  email: z.string().optional(),
+});
+export type SettingsUpdateRequest = z.infer<typeof settingsUpdateRequestSchema>;
+
+// Deliberately an open map: the accepted keys are the server's ADMIN_SETTINGS_KEYS
+// allow-list (unknown keys are ignored there), and values arrive as strings or
+// booleans (`require_mfa` toggles) — the service owns the per-key coercion and
+// the lockout/self-MFA guards with their bespoke 400 strings.
+export const appSettingsUpdateRequestSchema = z.record(z.string(), z.unknown());
+export type AppSettingsUpdateRequest = z.infer<typeof appSettingsUpdateRequestSchema>;
+
+export const mfaDisableRequestSchema = z.object({
+  password: z.string(),
+  code: z.string(),
+});
+export type MfaDisableRequest = z.infer<typeof mfaDisableRequestSchema>;
+
+// `purpose` must be the literal 'download' today, but the 400 'Invalid purpose'
+// answer is a service rule (kept bespoke), so the wire type stays a plain string.
+export const resourceTokenRequestSchema = z.object({
+  purpose: z.string().optional(),
+});
+export type ResourceTokenRequest = z.infer<typeof resourceTokenRequestSchema>;
