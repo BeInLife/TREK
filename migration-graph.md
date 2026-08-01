@@ -1,10 +1,43 @@
 # Legacy `src/services/` dependency graph
 
 Generated from the actual imports in `server/src` on **2026-08-01** (after the
-authService fold — the Wave-5 chain opener, cashed in the moment the atlas fold
-unblocked it, while the notifications fan-in stays the order's official next
-step: the 1497-line auth core — the biggest single fold of the migration —
-split places-style. The pure crypto half (backup-code hash/match/generate with
+oidcService fold — the first frontier cash-in of the auth fold, landed the same
+day, while the notifications fan-in stays the order's official next step: the
+508-line SSO module folded whole into the existing thin wrapper
+`nest/oidc/oidc.service.ts` (`OidcService`) over `DatabaseService` + injected
+`AuthService` — the `resolveAuthToggles` import off `auth.bridge` (exactly the
+repoint the auth fold predicted for this trio) became the injection, shrinking
+the bridge's legacy customer list to adminService/passkeyService. The frontier
+row's "bridge tax: none" held exactly: no MCP registrar ever existed, the
+plugin host never imported it, and nothing outside the container consumes the
+domain — the first fold since day-notes/trip-invite with **no bridge and no
+repoints at all**. That zero made this the first fold where instance state was
+viable: the `pendingStates`/`authCodes` maps, their two sweep `setInterval`s
+(legacy started them at import, never unref'd), the single-slot discovery
+cache and the JWKS cache moved onto the `OidcService` instance — the
+module-scope precedent (permissions cache, atlas-geo, auth's maps) exists only
+so a bridge instance and the container singleton share one copy, and no such
+sharer exists here; the sweepers start in the constructor and are cleared in
+`onModuleDestroy`, the one wire-invisible deviation. Everything else relocated
+verbatim: the `uuid`/`bcryptjs` lazy requires, the `invite_exhausted`
+reference-compared sentinel transaction (reshaped one line for
+`DatabaseService.transaction`), the `||` env→db→literal config chains, all 14
+SQL strings. The controller and its unit suite needed zero edits. Tests moved
+with IDs preserved (tests/unit/services/oidcService.test.ts →
+tests/unit/nest/oidc.service.test.ts, OIDC-SVC-001…045, superseding the
+18-case delegation-shim suite whose wrapper cases carried over as 046–048),
+and the path-mock rot the auth fold flagged got cleaned at the source:
+oidc.e2e swapped its 12-fn whole-module mock for
+`vi.spyOn(app.get(OidcService), …)` instance spies, and the integration suite
+now spies the four HTTP methods on the container instance while driving the
+real `createState`/`createAuthCode` state on that same instance — the maps
+live where the routes look. No trailing quirk commit yet — the carried
+defects (un-timeboxed `fetch`es, the 10-min state cookie vs the 5-min
+STATE_TTL, the hand-built no-re-select new-user object, the single-slot
+discovery cache) await their own `fix(server)` pass. Before that, the
+authService fold — the Wave-5 chain opener, cashed in the moment the atlas
+fold unblocked it: the 1497-line auth core — the biggest single fold of the
+migration — split places-style. The pure crypto half (backup-code hash/match/generate with
 the bcrypt/legacy-SHA dual verify, `stripUserForClient`, key masking, the
 import-time `DUMMY_PASSWORD_HASH` timing equaliser and the `avatarDir` mkdir,
 both documented parity exceptions) moved to the plain module
@@ -34,7 +67,8 @@ predicted tax: `mcp/index.ts`'s token verification
 (`verifyMcpToken`/`verifyJwtToken`), `isDemoUser` for the three legacy
 registrars (journey/notifications/transports), and
 `resolveAuthToggles`/`generateToken`/`stripUserForClient`/`avatarUrl` for the
-still-legacy adminService/oidcService/passkeyService. Tests moved with case
+still-legacy consumers — adminService/oidcService/passkeyService then,
+adminService/passkeyService since the oidc fold later the same day. Tests moved with case
 IDs preserved (authService.test.ts → auth.helpers.test.ts,
 authServiceDb.test.ts → auth.service.test.ts, which also gained
 AUTH-BR-001…007 bridge-delegation cases and AUTH-DB-050…088 — the fold put
@@ -267,11 +301,19 @@ How to read it:
   adminService/oidcService/passkeyService, and the one in-container
   cycle-break consumer `atlas.mcp.ts` (AuthService injects AtlasService, so
   AtlasModule cannot import AuthModule — assignments.bridge precedent); the
-  other 15 domain `*.mcp.ts` demo guards inject `AuthService`).
+  other 15 domain `*.mcp.ts` demo guards inject `AuthService`),
+  oidc (the 508-line SSO flow folded into the wrapper `OidcService` over
+  `DatabaseService` + injected `AuthService` — the `auth.bridge`
+  `resolveAuthToggles` repoint cashed in as an injection; no MCP surface, no
+  plugin-host import, **no bridge** — nothing outside the container consumes
+  it, so the state/auth-code maps, sweep intervals and discovery/JWKS caches
+  are **instance state** with `onModuleDestroy` clearing the timers, the first
+  fold where that was viable; `apiKeyCrypto`/`tripMembership`/`cookie` stay
+  plain helper imports).
 - **Domain migration targets** (the wave material): adminService, airportService,
   backupService,
   journeyService, journeyShareService, notificationService, oauthService,
-  oidcService, passkeyService, weatherService, wikiService.
+  passkeyService, weatherService, wikiService.
 - **Cross-cutting Wave-2 targets:** permissions and auditLog are done (2026-07) — see the
   DI-native list above; only tripAccess remains (delete, don't migrate).
 - **Helpers that stay as plain modules** (pure/infra, not wave material): avatarUrl,
@@ -300,7 +342,6 @@ flowchart TD
     airport["airportService (boot special case)"]:::ready
     wiki[wikiService]:::ready
     oauth[oauthService]:::ready
-    oidc["oidcService (frontier since the 2026-08 auth fold)"]:::ready
     passkey["passkeyService (frontier since the 2026-08 auth fold)"]:::ready
   end
 
@@ -325,10 +366,15 @@ opener landed the same day its atlas blocker cleared. The three `--> auth`
 edges (admin/oidc/passkey, all `resolveAuthToggles`-class imports, passkey
 also `generateToken`/`stripUserForClient`/`avatarUrl`) became import-path-only
 repoints onto the 8-export `nest/auth/auth.bridge` (todo-bridge precedent),
-which puts **oidcService and passkeyService on the frontier** — their only
+which put **oidcService and passkeyService on the frontier** — their only
 other legacy deps are helpers (apiKeyCrypto/tripMembership,
 webauthnConfig) — while `adminService` stays blocked on its hard
-`notificationService` import alone. `userCleanupService` is infra, not a
+`notificationService` import alone. The `oidcService` node is gone since the
+2026-08-01 fold later the same day — its `auth.bridge` repoint became the
+injected `AuthService` inside the DI-native `OidcService`, its
+apiKeyCrypto/tripMembership edges stay plain helper imports (helpers never
+block), and no bridge replaced it (nothing outside the container consumes the
+domain), leaving `passkeyService` alone from that pair on the frontier. `userCleanupService` is infra, not a
 blocker (helpers never block). The `atlasService` node left the frontier
 earlier the same day as the first fold whose legacy dependent outlived it:
 its former `auth --> atlas` bridge edge died with the auth fold, and
@@ -368,7 +414,7 @@ never block).)
 |---|---|---|---|---|
 | `adminService` | apiKeyCrypto, avatarUrl, llmConfig, memories/helpersService, notificationService, passwordPolicy, userCleanupService (+ `permissions.bridge`, `addons.bridge`, `auth.bridge`) | (none) | nest/admin/admin.service.ts, nest/packing/packing.mcp.ts (`deletePackingTemplate`, the `admin-2` residual) | scheduler.ts (lazy) |
 | `airportService` | (none) | (none) | nest/airports/airports.service.ts, nest/booking-import/kitinerary-mapper.ts | db/database.ts (lazy boot backfill), mcp/tools/mapsWeather.ts, mcp/tools/transports.ts |
-| `apiKeyCrypto` | (none) | adminService, airtrail/airtrailService, llmConfig, memories/helpersService, memories/immichService, memories/photoResolverService, memories/synologyService, memories/unifiedService, notifications, oidcService, unsplashService | nest/auth/auth.helpers.ts, nest/auth/auth.service.ts, nest/maps/maps.service.ts, nest/plugins/plugin-oauth.service.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/settings/settings.service.ts | db/migrations.ts |
+| `apiKeyCrypto` | (none) | adminService, airtrail/airtrailService, llmConfig, memories/helpersService, memories/immichService, memories/photoResolverService, memories/synologyService, memories/unifiedService, notifications, unsplashService | nest/auth/auth.helpers.ts, nest/auth/auth.service.ts, nest/maps/maps.service.ts, nest/oidc/oidc.service.ts, nest/plugins/plugin-oauth.service.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/settings/settings.service.ts | db/migrations.ts |
 | `avatarUrl` | (none) | adminService, inAppNotifications, journeyService | nest/auth/auth.bridge.ts, nest/auth/auth.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/files/files.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | (none) |
 | `backupService` | (none — `permissions.bridge`, plugin backup/paths infra only) | (none) | nest/backup/backup.controller.ts, nest/backup/backup.service.ts | scheduler.ts (lazy) |
 | `conflictResult` | (none) | (none) | nest/packing/packing.controller.ts, nest/packing/packing.service.ts, nest/places/places.controller.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | (none) |
@@ -387,7 +433,6 @@ never block).)
 | `notifications` | apiKeyCrypto, notificationPreferencesService (+ `audit-log.logger`) | notificationPreferencesService, notificationService, notifications/builtins | nest/auth/auth.service.ts, nest/notifications/notifications.service.ts | (none) |
 | `notificationService` | inAppNotifications, notificationPreferencesService, notifications, notifications/channelRegistry (+ `audit-log.logger`) | adminService, memories/synologyService, memories/unifiedService | nest/admin/admin.controller.ts, nest/collab/collab.service.ts, nest/collections/collections.service.ts (lazy), nest/packing/packing.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts, nest/vacay/vacay.service.ts | scheduler.ts (lazy) |
 | `oauthService` | (none — `addons.bridge` + `audit.bridge` only) | (none) | nest/oauth/oauth-api.controller.ts, nest/oauth/oauth.service.ts | mcp/index.ts, mcp/oauthProvider.ts |
-| `oidcService` | apiKeyCrypto, tripMembership (+ `auth.bridge`) | (none) | nest/oidc/oidc.service.ts | (none) |
 | `passkeyService` | webauthnConfig (+ `auth.bridge`) | (none) | nest/admin/admin.service.ts, nest/auth/passkey.controller.ts | (none) |
 | `passwordPolicy` | (none) | adminService | nest/auth/auth.service.ts | (none) |
 | `placeImage` | (none) | (none) | nest/collections/collections.controller.ts, nest/collections/collections.service.ts, nest/common/place-image-upload.ts, nest/places/places.controller.ts, nest/places/places.service.ts | (none) |
@@ -395,7 +440,7 @@ never block).)
 | `queryHelpers` | (none) | (none) | nest/assignments/assignments.service.ts, nest/days/days.service.ts, nest/places/places.service.ts, nest/share/share.service.ts | (none) |
 | `timezoneService` | (none) | airtrail/airtrailMapper | nest/transit/transit-itinerary.helpers.ts, nest/trips/trips.service.ts | (none) |
 | `tripAccess` | (none) | (none) | nest/booking-import/booking-import.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/days/day-notes.service.ts, nest/integrations/airtrail-import.controller.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/todo/todo.service.ts | (none) |
-| `tripMembership` | (none) | oidcService | nest/auth/auth.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/trip-invite/trip-invite.service.ts | (none) |
+| `tripMembership` | (none) | (none) | nest/auth/auth.service.ts, nest/oidc/oidc.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/trip-invite/trip-invite.service.ts | (none) |
 | `unsplashService` | apiKeyCrypto | (none) | nest/places/places.service.ts, nest/trips/trips.controller.ts, nest/trips/trips.service.ts | (none) |
 | `userCleanupService` | (none — `budget.bridge`, plugin paths infra only) | adminService | nest/auth/auth.service.ts, nest/trips/trips.service.ts | (none) |
 | `weatherService` | (none) | (none) | nest/plugins/host/plugin-host-deps.factory.ts, nest/weather/weather.controller.ts, nest/weather/weather.service.ts | mcp/tools/mapsWeather.ts |
@@ -434,7 +479,7 @@ frontier candidates below can still go any time:
 
 | Candidate | Why now / why not | Bridge tax (legacy dependents + out-of-container) |
 |---|---|---|
-| **oidcService / passkeyService** | Frontier since the 2026-08 auth fold — their `authService` edges became `auth.bridge` repoints, leaving only helpers (apiKeyCrypto/tripMembership, webauthnConfig); both fold into existing thin Nest wrappers (`OidcService` already injects `AuthService`; `PasskeyController` still `import *`s the legacy module). The coherence order rides them with the auth chain, before/with adminService | oidc: none; passkey: none (both are leaves — nothing legacy imports them) |
+| **passkeyService** | Frontier since the 2026-08 auth fold — its `authService` edge became an `auth.bridge` repoint, leaving only the webauthnConfig helper; folds into the existing thin Nest surface (`PasskeyController` still `import *`s the legacy module). Its former row-mate **oidcService cashed in on 2026-08-01** — folded into the wrapper `OidcService` with the predicted zero bridge tax holding exactly. The coherence order rides passkey with the auth chain, before/with adminService | none (a leaf — nothing legacy imports it) |
 | **oauthService** | Dependency-free since the Phase 0 addons extraction (adminService edge was only `isAddonEnabled` → `addons.bridge`) — but the coherence order keeps it after admin so the `mcp/oauthProvider.ts` merge (`mcp-2`) lands with it | `mcp/index.ts`, `mcp/oauthProvider.ts` |
 | **weatherService / wikiService / airportService** | Independent leaves; airport has the `db/database.ts` boot lazy-require special case | little / none |
 
@@ -448,9 +493,9 @@ frontier candidates below can still go any time:
   helper — never blocks). `oauthService` is dependency-free since the
   Phase 0 addons extraction (its adminService edge was only `isAddonEnabled`, now
   `addons.bridge`), but the coherence order stays auth → admin → oauth so the
-  `mcp/oauthProvider.ts` merge (`mcp-2`) lands after admin (oidc/passkey are
-  frontier-ready bridge consumers now; permissions done 2026-07, atlas + auth done
-  2026-08).
+  `mcp/oauthProvider.ts` merge (`mcp-2`) lands after admin (passkey is a
+  frontier-ready bridge consumer now; permissions done 2026-07, atlas + auth +
+  oidc done 2026-08).
 - `journeyService` ← `memories/` cluster (which itself touches admin + notificationService) →
   `journeyShareService` after. Note the place fold added two more in-container
   journeyService consumers (`places.service.ts`'s hooks and `places.mcp.ts`'s
@@ -500,7 +545,14 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
    legacy registrars + admin/oidc/passkey, 15 `*.mcp.ts` demo guards injecting
    AuthService with `atlas.mcp.ts` as the documented cycle-break exception,
    and the DTO ratchet clearing all 14 auth allow-list entries)
-   → oidc/passkey → `adminService` → `oauthService`
+   → `oidcService` (done 2026-08 — the first frontier cash-in of the chain:
+   the 508-line SSO module folded into the wrapper `OidcService` over
+   DatabaseService + injected AuthService; no MCP surface, no plugin-host
+   import, **no bridge** — the state/auth-code maps, sweep intervals and
+   discovery/JWKS caches became instance state with `onModuleDestroy`
+   cleanup; tests moved with OIDC-SVC IDs preserved, the e2e/integration
+   path mocks became container-instance spies)
+   → passkey → `adminService` → `oauthService`
 6. `memories/` cluster → `journeyService` → `journeyShareService`; `collectionsService`
    (done 2026-08-01 — taken off the frontier ahead of step 3: the 1024-line fold
    into `CollectionsService`, the 25-tool registrar onto `collections.mcp.ts`,
@@ -651,6 +703,22 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   fold. Also borne out: moving ~1400 lines under the `src/nest/**` gate dropped its
   branch coverage below 80% until the fold added AUTH-DB-050…088 — the gate polices
   relocations, not just new code.
+
+- (2026-08-01 regeneration, post oidc fold) The frontier row's "bridge tax: none" held
+  **exactly** — no bridge, no repoints, the first zero-surface fold since
+  day-notes/trip-invite — and the auth fold's predicted `auth.bridge` cash-in landed as
+  a single injection swap. Two shapes worth naming: (a) **instance state became viable
+  for the first time** — every prior fold with module-level maps/caches/intervals kept
+  them module-scoped so a bridge instance and the container singleton share one copy,
+  but with no bridge and no out-of-container consumer the oidc maps moved onto the
+  service instance (with `onModuleDestroy` clearing the sweep timers); the module-scope
+  default is now a per-domain question, not a rule; and (b) the path-mock rot flagged
+  post-auth was three-deep here — the delegation-shim unit suite, oidc.e2e's 12-fn
+  whole-module stub, and the integration suite's `importOriginal` partial mock would all
+  have gone silently dead — and the integration conversion had a subtlety the others
+  didn't: its real `createState`/`createAuthCode` calls must run on the **container's**
+  instance now that the state maps are per-instance, or the routes look in a different
+  map than the test wrote to.
 
 ## Quirks fixed after the auth fold (the trailing `fix(server)` commit)
 
