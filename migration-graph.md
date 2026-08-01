@@ -652,27 +652,36 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   branch coverage below 80% until the fold added AUTH-DB-050…088 — the gate polices
   relocations, not just new code.
 
-## Quirks preserved in the auth fold (trailing `fix(server)` candidates)
+## Quirks fixed after the auth fold (the trailing `fix(server)` commit)
 
-The relocation was byte-identical; these verified oddities were carried as-is and await
-their own fix commit (atlas/collections precedent — parity first, fixes separate):
+The relocation itself was byte-identical; these were then fixed on top, each with a
+regression test (`AUTH-DB-089…093`), so the parity diff and the behaviour change stayed
+in separate commits:
 
-1. **`getTravelStats` drops 0-coordinates.** `if (p.lat && p.lng)` skips a place on the
-   equator or prime meridian (the exact `|| null` class the atlas trailing commit fixed
-   in bucket items).
-2. **`registerUser` multi-writes aren't transactional.** INSERT user → UPDATE
-   invite_tokens → `joinTripAsMember` run statement-by-statement; a mid-sequence throw
-   leaves a user without the invite bookkeeping.
-3. **`verifyMfaLogin` splices the backup code outside a transaction.** The backup-code
-   UPDATE and the last_login UPDATE are separate statements.
-4. **`enableMfa` bypasses `getPendingMfaSecret`'s TTL cleanup on failure** — a wrong code
-   leaves the pending secret live for the full 15 min (arguably by design).
-5. **The two "Password authentication is disabled" strings differ** between login
-   (`… Please sign in with SSO.`) and changePassword (bare) — parity says both stay.
-6. **`deleteMcpToken` calls `revokeUserSessions` unguarded** while changePassword/
-   resetPassword wrap the same call in try/catch — an inconsistency, not yet a defect.
-7. **`updateApiKeys` re-selects with `current!` non-null assertions** — a deleted-user
-   race throws instead of 404ing (pre-existing).
+1. **`getTravelStats` dropped 0-coordinates.** `if (p.lat && p.lng)` skipped a place on
+   the equator or prime meridian (the exact falsy class the atlas trailing commit fixed
+   in bucket items). Now explicit `!= null` checks (AUTH-DB-089).
+2. **`registerUser`'s multi-writes weren't transactional.** INSERT user → UPDATE
+   invite_tokens → `joinTripAsMember` ran statement-by-statement; a mid-sequence throw
+   left a half-registered user. The whole signup now runs in `db.transaction()` — a
+   throw rolls back the user row and the invite bookkeeping together (AUTH-DB-090).
+3. **`verifyMfaLogin` spliced the backup code outside a transaction.** The backup-code
+   UPDATE and the last_login UPDATE now commit as one atomic pair — the code must not
+   burn without the login landing, or vice versa (AUTH-DB-091).
+4. **`deleteMcpToken` called `revokeUserSessions` unguarded** while changePassword/
+   resetPassword wrap the same call in try/catch — a session-sweep failure turned a
+   successful token delete into a 500. Now best-effort like the others (AUTH-DB-092).
+5. **`updateApiKeys` re-selected with `current!` non-null assertions** — a user row
+   deleted mid-request threw a TypeError (→ 500) instead of degrading to a 0-row
+   UPDATE. Now `current?.… ?? null` (AUTH-DB-093).
+
+**Quirks deliberately preserved** (parity, not oversights): the two divergent
+"Password authentication is disabled" strings (login's `… Please sign in with SSO.`
+vs changePassword's bare form — both client-visible contracts); `enableMfa` leaving
+the pending secret live for the full 15-min TTL after a wrong code (re-entry by
+design); the import-time `DUMMY_PASSWORD_HASH` bcrypt and `avatarDir` mkdir (documented
+side-effect exceptions); and the module-scoped per-email reset throttle with its
+unref'd cleanup interval (shared across the bridge and container instances on purpose).
 
 ## Quirks fixed after the atlas fold (the trailing `fix(server)` commit)
 

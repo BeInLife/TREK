@@ -55,6 +55,7 @@ vi.mock('../../../src/services/apiKeyCrypto', () => ({
 }));
 vi.mock('../../../src/services/ephemeralTokens', () => ({ createEphemeralToken: vi.fn() }));
 vi.mock('../../../src/services/notifications', () => ({ sendPasswordResetEmail: vi.fn() }));
+vi.mock('../../../src/services/tripMembership', () => ({ joinTripAsMember: vi.fn() }));
 vi.mock('../../../src/mcp/sessionManager', () => ({ revokeUserSessions: vi.fn() }));
 vi.mock('../../../src/scheduler', () => ({
   startTripReminders: vi.fn(),
@@ -81,6 +82,8 @@ import { verifyJwtAndLoadUser } from '../../../src/middleware/auth';
 import { authenticator } from 'otplib';
 import { hashBackupCode } from '../../../src/nest/auth/auth.helpers';
 import { createEphemeralToken } from '../../../src/services/ephemeralTokens';
+import { joinTripAsMember } from '../../../src/services/tripMembership';
+import { revokeUserSessions } from '../../../src/mcp/sessionManager';
 
 const svc = new AuthService(
   new DatabaseService(testDb),
@@ -1188,6 +1191,69 @@ describe('ephemeral + demo helpers', () => {
     expect(svc.isDemoUser(user.id)).toBe(true);
     expect(svc.isDemoUser(other.id)).toBe(false);
     vi.unstubAllEnvs();
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// Quirk fixes after the DI fold (trailing fix(server) commit): AUTH-DB-089+.
+// The relocation carried these verbatim; the fixes land on top with a pin each.
+// ---------------------------------------------------------------------------
+
+describe('auth quirk fixes', () => {
+  it('AUTH-DB-089: getTravelStats keeps a place at lat 0 / lng 0 (equator, prime meridian)', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Null Island' });
+    testDb.prepare('INSERT INTO places (trip_id, name, lat, lng) VALUES (?, ?, ?, ?)').run(trip.id, 'Null Island', 0, 0);
+    const stats = svc.getTravelStats(user.id);
+    expect(stats.coords).toContainEqual({ lat: 0, lng: 0 });
+  });
+
+  it('AUTH-DB-090: a throw mid-registration rolls the whole signup back (user + invite bookkeeping)', () => {
+    const { user: owner } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+    const invite = createInviteToken(testDb, { max_uses: 5 });
+    testDb.prepare('UPDATE invite_tokens SET trip_id = ? WHERE id = ?').run(trip.id, invite.id);
+    vi.mocked(joinTripAsMember).mockImplementationOnce(() => { throw new Error('boom'); });
+
+    const result = svc.registerUser({ username: 'rollback', email: 'rollback@x.com', password: 'Secure123!', invite_token: invite.token });
+
+    expect(result).toEqual({ error: 'Error creating user', status: 500 });
+    expect(testDb.prepare("SELECT id FROM users WHERE email = 'rollback@x.com'").get()).toBeUndefined();
+    const { used_count } = testDb.prepare('SELECT used_count FROM invite_tokens WHERE id = ?').get(invite.id) as { used_count: number };
+    expect(used_count).toBe(0);
+  });
+
+  it('AUTH-DB-091: a backup-code login burns the code and records the login as one atomic pair', () => {
+    const { user, password } = createUser(testDb);
+    const secret = authenticator.generateSecret();
+    testDb.prepare('UPDATE users SET mfa_enabled = 1, mfa_secret = ?, mfa_backup_codes = ? WHERE id = ?')
+      .run('enc:' + secret, JSON.stringify([hashBackupCode('DDDD-4444')]), user.id);
+    const interstitial = svc.loginUser({ email: user.email, password });
+
+    const result = svc.verifyMfaLogin({ mfa_token: interstitial.mfa_token, code: 'DDDD-4444' });
+
+    expect(typeof result.token).toBe('string');
+    const row = testDb.prepare('SELECT mfa_backup_codes, login_count, last_login FROM users WHERE id = ?').get(user.id) as { mfa_backup_codes: string; login_count: number; last_login: string | null };
+    expect(JSON.parse(row.mfa_backup_codes)).toHaveLength(0);
+    expect(row.login_count).toBe(1);
+    expect(row.last_login).not.toBeNull();
+  });
+
+  it('AUTH-DB-092: deleteMcpToken succeeds even when the session sweep throws (best-effort)', () => {
+    const { user } = createUser(testDb);
+    const created = svc.createMcpToken(user.id, 'sweep-down');
+    const tokenId = String((created.token as { id: number }).id);
+    vi.mocked(revokeUserSessions).mockImplementationOnce(() => { throw new Error('sweep down'); });
+
+    expect(svc.deleteMcpToken(user.id, tokenId)).toEqual({ success: true });
+    expect(testDb.prepare('SELECT id FROM mcp_tokens WHERE id = ?').get(tokenId)).toBeUndefined();
+  });
+
+  it('AUTH-DB-093: updateApiKeys degrades gracefully when the user row is gone (no TypeError/500)', () => {
+    expect(() => svc.updateApiKeys(999999, { maps_api_key: 'k' })).not.toThrow();
+    const result = svc.updateApiKeys(999999, { openweather_api_key: 'w' });
+    expect(result.success).toBe(true);
   });
 });
 

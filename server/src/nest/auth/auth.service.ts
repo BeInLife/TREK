@@ -361,35 +361,39 @@ export class AuthService {
     const role = isFirstUser ? 'admin' : 'user';
 
     try {
-      const result = this.db.run(
-        'INSERT INTO users (username, email, password_hash, role, first_seen_version, login_count) VALUES (?, ?, ?, ?, ?, 0)',
-        username, email, password_hash, role, readEnv().app.appVersion || '0.0.0'
-      );
-
-      const user = { id: result.lastInsertRowid, username, email, role, avatar: null, mfa_enabled: false };
-      const token = this.generateToken(user);
-
-      if (validInvite) {
-        const updated = this.db.get(
-          'UPDATE invite_tokens SET used_count = used_count + 1 WHERE id = ? AND (max_uses = 0 OR used_count < max_uses) RETURNING used_count',
-          validInvite.id
+      // One transaction for the whole signup: a mid-sequence throw (invite
+      // bookkeeping, trip auto-join) must not leave a half-registered user.
+      return this.db.transaction(() => {
+        const result = this.db.run(
+          'INSERT INTO users (username, email, password_hash, role, first_seen_version, login_count) VALUES (?, ?, ?, ?, ?, 0)',
+          username, email, password_hash, role, readEnv().app.appVersion || '0.0.0'
         );
-        if (!updated) {
-          console.warn(`[Auth] Invite token ${validInvite.token.slice(0, 8)}... exceeded max_uses due to race condition`);
-        }
-        // Trip-bound invite (#1402): auto-add the freshly registered user to the
-        // trip. Idempotent + owner-safe; no-ops if the bound trip was since deleted.
-        if (validInvite.trip_id) {
-          joinTripAsMember(Number(validInvite.trip_id), Number(result.lastInsertRowid), validInvite.created_by ?? null);
-        }
-      }
 
-      return {
-        token,
-        user: { ...user, avatar_url: null },
-        auditUserId: Number(result.lastInsertRowid),
-        auditDetails: { username, email, role },
-      };
+        const user = { id: result.lastInsertRowid, username, email, role, avatar: null, mfa_enabled: false };
+        const token = this.generateToken(user);
+
+        if (validInvite) {
+          const updated = this.db.get(
+            'UPDATE invite_tokens SET used_count = used_count + 1 WHERE id = ? AND (max_uses = 0 OR used_count < max_uses) RETURNING used_count',
+            validInvite.id
+          );
+          if (!updated) {
+            console.warn(`[Auth] Invite token ${validInvite.token.slice(0, 8)}... exceeded max_uses due to race condition`);
+          }
+          // Trip-bound invite (#1402): auto-add the freshly registered user to the
+          // trip. Idempotent + owner-safe; no-ops if the bound trip was since deleted.
+          if (validInvite.trip_id) {
+            joinTripAsMember(Number(validInvite.trip_id), Number(result.lastInsertRowid), validInvite.created_by ?? null);
+          }
+        }
+
+        return {
+          token,
+          user: { ...user, avatar_url: null },
+          auditUserId: Number(result.lastInsertRowid),
+          auditDetails: { username, email, role },
+        };
+      });
     } catch {
       return { error: 'Error creating user', status: 500 };
     }
@@ -570,11 +574,13 @@ export class AuthService {
     const body = rawBody as { maps_api_key?: string; openweather_api_key?: string; unsplash_api_key?: string };
     const current = this.db.get<Pick<User, 'maps_api_key' | 'openweather_api_key' | 'unsplash_api_key'>>('SELECT maps_api_key, openweather_api_key, unsplash_api_key FROM users WHERE id = ?', userId);
 
+    // `?? null` instead of the former non-null assertions: a user row deleted
+    // mid-request must degrade to a 0-row UPDATE, not a TypeError/500.
     this.db.run(
       'UPDATE users SET maps_api_key = ?, openweather_api_key = ?, unsplash_api_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      body.maps_api_key !== undefined ? maybe_encrypt_api_key(body.maps_api_key) : current!.maps_api_key,
-      body.openweather_api_key !== undefined ? maybe_encrypt_api_key(body.openweather_api_key) : current!.openweather_api_key,
-      body.unsplash_api_key !== undefined ? maybe_encrypt_api_key(body.unsplash_api_key) : current!.unsplash_api_key,
+      body.maps_api_key !== undefined ? maybe_encrypt_api_key(body.maps_api_key) : current?.maps_api_key ?? null,
+      body.openweather_api_key !== undefined ? maybe_encrypt_api_key(body.openweather_api_key) : current?.openweather_api_key ?? null,
+      body.unsplash_api_key !== undefined ? maybe_encrypt_api_key(body.unsplash_api_key) : current?.unsplash_api_key ?? null,
       userId
     );
 
@@ -918,7 +924,9 @@ export class AuthService {
     const coords: { lat: number; lng: number }[] = [];
 
     places.forEach(p => {
-      if (p.lat && p.lng) coords.push({ lat: p.lat, lng: p.lng });
+      // Explicit null checks: lat/lng of exactly 0 (equator / prime meridian)
+      // are valid coordinates the former falsy check silently dropped.
+      if (p.lat != null && p.lng != null) coords.push({ lat: p.lat, lng: p.lng });
       if (p.address) {
         const parts = p.address.split(',').map(s => s.trim().replace(/\d{3,}/g, '').trim());
         const cityPart = parts.find(s => !KNOWN_COUNTRIES.has(s) && /^[A-Za-z\u00C0-\u00FF\s-]{2,}$/.test(s));
@@ -1101,12 +1109,18 @@ export class AuthService {
           return { error: 'Invalid verification code', status: 401 };
         }
         hashes.splice(idx, 1);
-        this.db.run('UPDATE users SET mfa_backup_codes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-          JSON.stringify(hashes),
-          user.id
-        );
+        // Consume the backup code and record the login atomically — the code
+        // must not burn without the login landing (or vice versa).
+        this.db.transaction(() => {
+          this.db.run('UPDATE users SET mfa_backup_codes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            JSON.stringify(hashes),
+            user.id
+          );
+          this.db.run('UPDATE users SET last_login = CURRENT_TIMESTAMP, login_count = login_count + 1 WHERE id = ?', user.id);
+        });
+      } else {
+        this.db.run('UPDATE users SET last_login = CURRENT_TIMESTAMP, login_count = login_count + 1 WHERE id = ?', user.id);
       }
-      this.db.run('UPDATE users SET last_login = CURRENT_TIMESTAMP, login_count = login_count + 1 WHERE id = ?', user.id);
       const sessionToken = this.generateToken(user, remember);
       const userSafe = stripUserForClient(user) as Record<string, unknown>;
       return {
@@ -1333,7 +1347,9 @@ export class AuthService {
     const token = this.db.get('SELECT id FROM mcp_tokens WHERE id = ? AND user_id = ?', tokenId, userId);
     if (!token) return { error: 'Token not found', status: 404 };
     this.db.run('DELETE FROM mcp_tokens WHERE id = ?', tokenId);
-    revokeUserSessions(userId);
+    // Best-effort, like the changePassword/resetPassword revocations: a session
+    // sweep failure must not turn a successful token delete into a 500.
+    try { revokeUserSessions?.(userId); } catch { /* best-effort */ }
     return { success: true };
   }
 
