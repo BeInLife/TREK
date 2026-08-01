@@ -1,11 +1,13 @@
 /**
- * Unit tests for the DI-native OidcService — OIDC-SVC-001 through OIDC-SVC-048
+ * Unit tests for the DI-native OidcService — OIDC-SVC-001 through OIDC-SVC-054
  * (moved 1:1 from the legacy tests/unit/services/oidcService.test.ts with case
  * IDs preserved; 046–048 carry over the wrapper cases from the superseded
- * delegation-shim suite). Covers state management, auth codes, role
- * resolution, findOrCreateUser, discover caching, and the ReDoS-sensitive
- * issuer trailing-slash regex. Constructed directly (no TestingModule, repo
- * convention) over a real in-memory SQLite database.
+ * delegation-shim suite; 049–054 pin the post-fold `fix(server)` quirk fixes —
+ * fetch timeout/validation, per-URL discovery cache, userinfo ok-check, the
+ * no_email guard and the post-insert re-select). Covers state management,
+ * auth codes, role resolution, findOrCreateUser, discover caching, and the
+ * ReDoS-sensitive issuer trailing-slash regex. Constructed directly (no
+ * TestingModule, repo convention) over a real in-memory SQLite database.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import { generateKeyPairSync } from 'crypto';
@@ -302,6 +304,51 @@ describe('discover', () => {
     );
   });
 
+  it('OIDC-SVC-049: passes an abort-signal timeout to the discovery fetch', async () => {
+    const doc = {
+      authorization_endpoint: 'https://unique-t.example.com/auth',
+      token_endpoint: 'https://unique-t.example.com/token',
+      userinfo_endpoint: 'https://unique-t.example.com/userinfo',
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => doc }));
+
+    await svc.discover('https://unique-t.example.com');
+
+    const fetchCall = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(fetchCall[1].signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('OIDC-SVC-050: rejects a discovery document missing the required endpoints', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ foo: 'bar' }) }));
+    await expect(svc.discover('https://unique-bad.example.com')).rejects.toThrow(
+      'Invalid OIDC discovery document',
+    );
+  });
+
+  it('OIDC-SVC-051: caches per discovery URL — two issuers do not thrash each other', async () => {
+    const docFor = (base: string) => ({
+      authorization_endpoint: `${base}/auth`,
+      token_endpoint: `${base}/token`,
+      userinfo_endpoint: `${base}/userinfo`,
+      issuer: base,
+    });
+    const fetchMock = vi.fn((url: string) => {
+      const base = url.replace('/.well-known/openid-configuration', '');
+      return Promise.resolve({ ok: true, json: async () => docFor(base) });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await svc.discover('https://unique-3.example.com');
+    await svc.discover('https://unique-4.example.com');
+    const again3 = await svc.discover('https://unique-3.example.com');
+    const again4 = await svc.discover('https://unique-4.example.com');
+
+    // One network round-trip per URL — the second pair served from cache.
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(again3.issuer).toBe('https://unique-3.example.com');
+    expect(again4.issuer).toBe('https://unique-4.example.com');
+  });
+
   it('OIDC-SVC-039: trailing-slash-only mismatch with explicit discoveryUrl does not warn', async () => {
     const doc = {
       issuer: 'https://auth.example.com/',
@@ -567,6 +614,26 @@ describe('findOrCreateUser', () => {
     expect(row.avatar).toBe('https://idp.example.com/u/new.png');
   });
 
+  it('OIDC-SVC-053: returns no_email when the email claim is missing (no throw)', () => {
+    const result = svc.findOrCreateUser({ sub: 'sub-no-email', name: 'No Email' }, MOCK_CONFIG);
+    expect('error' in result).toBe(true);
+    expect((result as { error: string }).error).toBe('no_email');
+  });
+
+  it('OIDC-SVC-054: a new user is returned as the re-selected DB row, not a hand-built partial', () => {
+    const result = svc.findOrCreateUser(
+      { sub: 'sub-full-row', email: 'fullrow@example.com', name: 'Full Row' },
+      MOCK_CONFIG
+    );
+    expect('user' in result).toBe(true);
+    const user = (result as { user: any }).user;
+    // Columns the legacy hand-built object silently lacked.
+    expect(user.password_version).toBeDefined();
+    expect(user.is_guest).toBeDefined();
+    expect(user.created_at).toBeDefined();
+    expect(user.email).toBe('fullrow@example.com');
+  });
+
   it('OIDC-SVC-045: a trip-bound invite auto-adds the new SSO user as a trip member (#1402)', () => {
     const { user: admin } = createUser(testDb, { role: 'admin' });
     const trip = createTrip(testDb, admin.id);
@@ -638,6 +705,7 @@ describe('getUserInfo', () => {
   it('OIDC-SVC-032: fetches userinfo with Bearer token and returns parsed JSON', async () => {
     const userInfoData = { sub: 'user-sub', email: 'user@example.com', name: 'User Name' };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
       json: async () => userInfoData,
     }));
 
@@ -648,6 +716,18 @@ describe('getUserInfo', () => {
 
     const fetchCall = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(fetchCall[1].headers.Authorization).toBe('Bearer access-token-123');
+  });
+
+  it('OIDC-SVC-052: throws on a non-ok userinfo response instead of parsing the error body', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'invalid_token' }),
+    }));
+
+    await expect(svc.getUserInfo('https://oidc.example.com/userinfo', 'expired-token')).rejects.toThrow(
+      'Userinfo fetch failed: HTTP 401',
+    );
   });
 });
 

@@ -31,10 +31,11 @@ oidc.e2e swapped its 12-fn whole-module mock for
 `vi.spyOn(app.get(OidcService), …)` instance spies, and the integration suite
 now spies the four HTTP methods on the container instance while driving the
 real `createState`/`createAuthCode` state on that same instance — the maps
-live where the routes look. No trailing quirk commit yet — the carried
-defects (un-timeboxed `fetch`es, the 10-min state cookie vs the 5-min
-STATE_TTL, the hand-built no-re-select new-user object, the single-slot
-discovery cache) await their own `fix(server)` pass. Before that, the
+live where the routes look. The trailing `fix(server)` commit then cleared
+the carried defects (un-timeboxed `fetch`es, the 10-min state cookie vs the
+5-min STATE_TTL, the hand-built no-re-select new-user object, the single-slot
+discovery cache, the `no_email` assert, the `any`-typed invite row and the
+lazy requires) — see "Quirks fixed after the oidc fold" below. Before that, the
 authService fold — the Wave-5 chain opener, cashed in the moment the atlas
 fold unblocked it: the 1497-line auth core — the biggest single fold of the
 migration — split places-style. The pure crypto half (backup-code hash/match/generate with
@@ -719,6 +720,50 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   didn't: its real `createState`/`createAuthCode` calls must run on the **container's**
   instance now that the state maps are per-instance, or the routes look in a different
   map than the test wrote to.
+
+## Quirks fixed after the oidc fold (the trailing `fix(server)` commit)
+
+The relocation itself was byte-identical; these were then fixed on top, each with a
+regression test (`OIDC-SVC-049…054` + a controller cookie case), so the parity diff and
+the behaviour change stayed in separate commits:
+
+1. **All four outbound `fetch`es ran unbounded and `as`-cast their responses.**
+   Discovery, token exchange, userinfo and JWKS now carry
+   `AbortSignal.timeout(10s)` + a content-length cap (transit/exchange-rates
+   pattern), and responses are boundary-validated instead of cast: the discovery
+   doc must carry its three endpoints (OIDC-SVC-049/050), the token response is
+   narrowed to its three typed fields, userinfo must be an object with a string
+   `sub`, and JWKS keys are filtered to records.
+2. **`getUserInfo` never checked `res.ok`** — a provider error body parsed as
+   userinfo and surfaced as a misleading `no_email` redirect. Non-ok now throws
+   (→ `server_error`) (OIDC-SVC-052).
+3. **The discovery cache was a single slot** keyed by `_issuer === url` — a second
+   configured issuer thrashed it every login. Now a Map keyed by discovery URL,
+   same 1 h TTL (OIDC-SVC-051).
+4. **The state cookie outlived its state**: cookie maxAge was 10 min against the
+   server's 5-min `STATE_TTL` — the extra five minutes could only ever produce
+   `invalid_state`. Both now share the exported `OIDC_STATE_TTL_MS` (controller
+   cookie case).
+5. **`findOrCreateUser` non-null-asserted `userInfo.email!`** — safe only via the
+   controller's `no_email` guard; a direct call threw a TypeError. Now an explicit
+   `{ error: 'no_email' }` guard, flowing through the controller's existing
+   error pass-through to the same redirect code (OIDC-SVC-053).
+6. **The new-user return was a hand-built partial** (`{ id, username, email, role,
+   avatar }`) with no post-insert re-select — missing `password_version`/
+   `is_guest`/`created_at` vs the real row the existing-user branch returns. Now
+   re-selected (OIDC-SVC-054).
+7. **`validInvite` was `any`** → a typed `InviteTokenRow`; and the `uuid`/`bcryptjs`
+   lazy `require()`s became top-level imports (both already load at boot
+   elsewhere), taking the relocated file's lint warnings to zero.
+
+**Quirks deliberately preserved** (parity, not oversights): `frontendUrl`'s
+case-sensitive `nodeEnv === 'production'` compare (commented "on purpose") with the
+hardcoded dev origin; `consumeAuthCode` burning an expired code before the expiry
+check (single-use beats replay); the `invite_exhausted` sentinel compared by
+reference across the transaction; the `${username}_${Date.now() % 10000}` collision
+fallback; the last-admin demotion guard (#1274), guest exclusion (#1362), avatar
+sync rules (#1399) and trip-bound invites (#1402); the documented missing-nonce gap
+in `verifyIdToken`; and the duplicated OIDC-SVC-025/025b test IDs.
 
 ## Quirks fixed after the auth fold (the trailing `fix(server)` commit)
 

@@ -1,6 +1,9 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 import crypto from 'crypto';
+import type { webcrypto } from 'crypto';
 import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
+import bcrypt from 'bcryptjs';
 import type { Request, Response } from 'express';
 import { readEnv, getAppUrl } from '../../app-config';
 import { JWT_SECRET, SESSION_DURATION_SECONDS } from '../../config';
@@ -58,9 +61,16 @@ export interface OidcConfig {
 
 const AUTH_CODE_TTL = 60000;          // 1 minute
 const AUTH_CODE_CLEANUP = 30000;      // 30 seconds
-const STATE_TTL = 5 * 60 * 1000;     // 5 minutes
+/** 5 minutes — the server-side pending-state TTL AND the controller's state-cookie maxAge. */
+export const OIDC_STATE_TTL_MS = 5 * 60 * 1000;
+const STATE_TTL = OIDC_STATE_TTL_MS;
 const STATE_CLEANUP = 60 * 1000;      // 1 minute
 const DISCOVERY_TTL = 60 * 60 * 1000; // 1 hour
+
+const FETCH_TIMEOUT_MS = 10_000;
+// Discovery docs, token responses, userinfo payloads and JWKS sets are all a
+// few KB; anything near this cap is not the endpoint we think it is.
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 // 5 minute JWKS cache — short enough to pick up key rotation within a
 // reasonable window, long enough that normal login flow doesn't fetch
@@ -74,6 +84,38 @@ type JwksEntry = { keys: Array<Record<string, unknown>>; fetchedAt: number };
 
 function base64url(buf: Buffer): string {
   return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+
+function isDiscoveryDoc(v: unknown): v is OidcDiscoveryDoc {
+  if (!isRecord(v)) return false;
+  if (typeof v.authorization_endpoint !== 'string' || typeof v.token_endpoint !== 'string' || typeof v.userinfo_endpoint !== 'string') return false;
+  if (v.issuer !== undefined && typeof v.issuer !== 'string') return false;
+  if (v.jwks_uri !== undefined && typeof v.jwks_uri !== 'string') return false;
+  return true;
+}
+
+// Same content-length pattern as transit.service.ts — structural param (the
+// express Response import shadows the fetch Response type here) and the
+// optional chain keeps header-less test stubs flowing through.
+function assertResponseSize(res: { headers?: { get(name: string): string | null } }): void {
+  const length = Number(res.headers?.get('content-length') ?? 0);
+  if (length > MAX_RESPONSE_BYTES) throw new Error('OIDC response too large');
+}
+
+/** The invite_tokens row shape findOrCreateUser consumes. */
+interface InviteTokenRow {
+  id: number;
+  token: string;
+  max_uses: number;
+  used_count: number;
+  expires_at: string | null;
+  created_by: number | null;
+  trip_id: number | null;
 }
 
 function base64UrlDecode(input: string): Buffer {
@@ -104,6 +146,16 @@ function safeOidcPicture(picture: unknown): string | null {
  * nothing outside the container consumes this domain, so no bridge needs to
  * share it. The sweepers start in the constructor (legacy started them at
  * import) and are cleared in onModuleDestroy.
+ *
+ * Post-migration fixes on top of the relocated legacy behavior (exchange-rates
+ * precedent): every outbound fetch carries an AbortSignal timeout and a
+ * content-length cap, responses are boundary-validated instead of `as`-cast
+ * (getUserInfo now also refuses non-ok responses), the discovery cache is
+ * keyed by URL instead of a single slot, findOrCreateUser guards the email
+ * claim and re-selects the inserted user row, and the uuid/bcryptjs lazy
+ * requires became top-level imports. Kept on purpose: frontendUrl's
+ * case-sensitive nodeEnv compare, consumeAuthCode burning expired codes
+ * before the expiry check, and the invite_exhausted reference sentinel.
  */
 @Injectable()
 export class OidcService implements OnModuleDestroy {
@@ -119,9 +171,9 @@ export class OidcService implements OnModuleDestroy {
 
   private readonly authCodes = new Map<string, { token: string; created: number }>();
 
-  // Discovery document cache (1 h TTL)
-  private discoveryCache: OidcDiscoveryDoc | null = null;
-  private discoveryCacheTime = 0;
+  // Discovery document cache (1 h TTL), keyed by discovery URL so two
+  // configured issuers no longer thrash a single slot.
+  private readonly discoveryCache = new Map<string, { doc: OidcDiscoveryDoc; fetchedAt: number }>();
 
   private readonly jwksCache = new Map<string, JwksEntry>();
 
@@ -176,7 +228,6 @@ export class OidcService implements OnModuleDestroy {
   }
 
   createAuthCode(token: string): string {
-    const { v4: uuidv4 } = require('uuid');
     const authCode: string = uuidv4();
     this.authCodes.set(authCode, { token, created: Date.now() });
     return authCode;
@@ -215,12 +266,16 @@ export class OidcService implements OnModuleDestroy {
 
   async discover(issuer: string, discoveryUrl?: string | null): Promise<OidcDiscoveryDoc> {
     const url = discoveryUrl || `${issuer}/.well-known/openid-configuration`;
-    if (this.discoveryCache && Date.now() - this.discoveryCacheTime < DISCOVERY_TTL && this.discoveryCache._issuer === url) {
-      return this.discoveryCache;
+    const cached = this.discoveryCache.get(url);
+    if (cached && Date.now() - cached.fetchedAt < DISCOVERY_TTL) {
+      return cached.doc;
     }
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new Error('Failed to fetch OIDC discovery document');
-    const doc = (await res.json()) as OidcDiscoveryDoc;
+    assertResponseSize(res);
+    const parsed: unknown = await res.json();
+    if (!isDiscoveryDoc(parsed)) throw new Error('Invalid OIDC discovery document');
+    const doc = parsed;
     // Validate that the discovery doc's issuer matches the operator-configured one.
     // When no custom discoveryUrl is set, a mismatch signals a MITM or misconfiguration
     // and we reject. When the operator explicitly overrides the discovery URL (e.g.
@@ -238,8 +293,7 @@ export class OidcService implements OnModuleDestroy {
       }
     }
     doc._issuer = url;
-    this.discoveryCache = doc;
-    this.discoveryCacheTime = Date.now();
+    this.discoveryCache.set(url, { doc, fetchedAt: Date.now() });
     return doc;
   }
 
@@ -304,8 +358,14 @@ export class OidcService implements OnModuleDestroy {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body,
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    const tokenData = (await tokenRes.json()) as OidcTokenResponse;
+    assertResponseSize(tokenRes);
+    // Error responses are still parsed on purpose — callers branch on _ok/_status.
+    const parsed: unknown = await tokenRes.json();
+    const tokenData: OidcTokenResponse = isRecord(parsed)
+      ? { access_token: str(parsed.access_token), id_token: str(parsed.id_token), token_type: str(parsed.token_type) }
+      : {};
     return { ...tokenData, _ok: tokenRes.ok, _status: tokenRes.status };
   }
 
@@ -316,8 +376,13 @@ export class OidcService implements OnModuleDestroy {
   async getUserInfo(userinfoEndpoint: string, accessToken: string): Promise<OidcUserInfo> {
     const res = await fetch(userinfoEndpoint, {
       headers: { Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    return (await res.json()) as OidcUserInfo;
+    if (!res.ok) throw new Error(`Userinfo fetch failed: HTTP ${res.status}`);
+    assertResponseSize(res);
+    const parsed: unknown = await res.json();
+    if (!isRecord(parsed) || typeof parsed.sub !== 'string') throw new Error('Invalid userinfo response');
+    return parsed as OidcUserInfo;
   }
 
   // -------------------------------------------------------------------------
@@ -327,10 +392,11 @@ export class OidcService implements OnModuleDestroy {
   private async fetchJwks(jwksUri: string): Promise<Array<Record<string, unknown>>> {
     const cached = this.jwksCache.get(jwksUri);
     if (cached && Date.now() - cached.fetchedAt < JWKS_TTL_MS) return cached.keys;
-    const res = await fetch(jwksUri);
+    const res = await fetch(jwksUri, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     if (!res.ok) throw new Error(`JWKS fetch failed: HTTP ${res.status}`);
-    const json = (await res.json()) as { keys?: Array<Record<string, unknown>> };
-    const keys = json.keys ?? [];
+    assertResponseSize(res);
+    const json: unknown = await res.json();
+    const keys = isRecord(json) && Array.isArray(json.keys) ? json.keys.filter(isRecord) : [];
     this.jwksCache.set(jwksUri, { keys, fetchedAt: Date.now() });
     return keys;
   }
@@ -367,7 +433,7 @@ export class OidcService implements OnModuleDestroy {
 
     let keys: Array<Record<string, unknown>>;
     try { keys = await this.fetchJwks(doc.jwks_uri); }
-    catch (e) { return { ok: false, error: 'jwks_fetch_failed' }; }
+    catch { return { ok: false, error: 'jwks_fetch_failed' }; }
 
     // When the token carries a `kid`, refuse to fall back to any other
     // key in the JWKS — a mismatch means the token was signed with a key
@@ -380,10 +446,10 @@ export class OidcService implements OnModuleDestroy {
 
     let publicKey;
     try {
-      // Node 16+ understands JWK directly; no PEM conversion library needed.
-      // Node's crypto accepts a JWK object directly as `{ key, format: 'jwk' }`.
-      // The type signature isn't strict on our TS config so we cast through any.
-      publicKey = crypto.createPublicKey({ key: jwk as any, format: 'jwk' });
+      // Node 16+ understands JWK directly; no PEM conversion library needed —
+      // JsonWebKey carries an unknown-valued index signature, so the record
+      // narrows without an any-cast.
+      publicKey = crypto.createPublicKey({ key: jwk as webcrypto.JsonWebKey, format: 'jwk' });
     } catch {
       return { ok: false, error: 'key_import_failed' };
     }
@@ -419,7 +485,11 @@ export class OidcService implements OnModuleDestroy {
     config: OidcConfig,
     inviteToken?: string,
   ): { user: User } | { error: string } {
-    const email = userInfo.email!.trim().toLowerCase();
+    // Defense-in-depth for direct callers — the controller redirects on a
+    // missing email before it ever calls this; the same code flows through its
+    // `oidc_error=' + result.error` pass-through if reached here.
+    if (!userInfo.email) return { error: 'no_email' };
+    const email = userInfo.email.trim().toLowerCase();
     const name = userInfo.name || userInfo.preferred_username || email.split('@')[0];
     const sub = userInfo.sub;
     const picture = safeOidcPicture(userInfo.picture);
@@ -477,9 +547,9 @@ export class OidcService implements OnModuleDestroy {
     const userCount = (this.db.prepare('SELECT COUNT(*) as count FROM users WHERE COALESCE(is_guest, 0) = 0').get() as { count: number }).count;
     const isFirstUser = userCount === 0;
 
-    let validInvite: any = null;
+    let validInvite: InviteTokenRow | null = null;
     if (inviteToken) {
-      validInvite = this.db.prepare('SELECT * FROM invite_tokens WHERE token = ?').get(inviteToken);
+      validInvite = (this.db.prepare('SELECT * FROM invite_tokens WHERE token = ?').get(inviteToken) as InviteTokenRow | undefined) ?? null;
       if (validInvite) {
         if (validInvite.max_uses > 0 && validInvite.used_count >= validInvite.max_uses) validInvite = null;
         if (validInvite?.expires_at && new Date(validInvite.expires_at) < new Date()) validInvite = null;
@@ -495,7 +565,6 @@ export class OidcService implements OnModuleDestroy {
 
     const role = this.resolveOidcRole(userInfo, isFirstUser);
     const randomPass = crypto.randomBytes(32).toString('hex');
-    const bcrypt = require('bcryptjs');
     const hash = bcrypt.hashSync(randomPass, 10);
 
     // Username: sanitize and avoid collisions. Keep dots — they are valid in
@@ -529,7 +598,10 @@ export class OidcService implements OnModuleDestroy {
         }
         return ins;
       }) as { lastInsertRowid: number | bigint };
-      user = { id: Number(result.lastInsertRowid), username, email, role, avatar: picture } as User;
+      // Re-select so the returned User carries the real row (password_version,
+      // is_guest, created_at, …) instead of a hand-built partial — same shape
+      // the existing-user branch returns.
+      user = this.db.prepare('SELECT * FROM users WHERE id = ?').get(Number(result.lastInsertRowid)) as User;
       return { user };
     } catch (err) {
       if (err === inviteRaceError) {
