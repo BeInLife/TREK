@@ -30,7 +30,7 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
   collab, vacay, reservations, day, permissions, audit, budget, trip, maps,
   transit, place, transit-itinerary, collections, atlas, auth, oidc, passkey,
-  notifications — see the migration recipe below.
+  notifications, admin — see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -440,8 +440,46 @@ notifications.inapp-prefs.test.ts (INOTIF-*); ~18 suites repointed their
 path mocks/warm-ups to the bridge; admin.controller.test and the plugin-host
 suite converted theirs to constructor stubs; the module e2e went DI-native
 (real notifications DDL, prefs/transports still path-mocked).)
+adminService followed (the last Wave-5 god file and the first fold where recipe
+steps 2-4 were all no-ops or near-no-ops: **no `src/mcp/tools/admin.ts` has ever
+existed** — the "11 MCP consumers" figure carried in `migrate.md` /
+`migration-graph.md` predated the Phase-0 addons extraction, so no registrar
+moved, `mcp/tools.ts` / `mcp/resources.ts` / `mcp-test-controllers.ts` were
+untouched — and `plugin-host-deps.factory.ts` never imported the domain either
+(its addon reads already went through the DI-native `AddonsService`). The
+851-line module folded into the wrapper `AdminService` over `DatabaseService`
+plus injected Settings/Addons/Passkey/Packing/Auth/Permissions/Notifications
+services: the `auth.bridge` (`resolveAuthToggles`), `notifications.bridge`
+(`send`) and `permissions.bridge` (`getAllPermissions`/`savePermissions`)
+imports all became injections, while `PERMISSION_ACTIONS` stayed a plain const
+import and the `mcp/sessionManager` deep import kept its anti-cycle comment.
+The pure + module-scoped half moved to `admin.helpers.ts` — `compareVersions`,
+`utcSuffix`, `BCRYPT_COST`, the import-time `isDocker` probe (a documented
+parity exception, auth.helpers precedent) and the 5-minute version cache, which
+stays module-scoped so the bridge instance and the container singleton share it.
+Ahead of the fold the 11 packing-template functions relocated to
+`PackingService`, which already owned all three template tables
+(`saveAsTemplate` writes every one of them) — that also resolved the `admin-2`
+residual without a bridge, since `packing.mcp.ts` already injects the service;
+`AdminModule` gained PackingModule and PermissionsModule, both cycle-free.
+A 1-export `admin.bridge.ts` (`checkAndNotifyVersion`) serves the only
+out-of-container consumer, `scheduler.ts`'s daily cron. Four lines are
+non-verbatim, all path re-anchoring one directory deeper for `nest/admin/`
+(`rotateJwtSecret`'s data dir, the `package.json` version require, the
+websocket/demo-reset lazy requires) — both resolved paths verified against the
+emitted `dist/` layout. Tests moved with IDs preserved (adminService.test.ts →
+`nest/admin.service.test.ts`, ADMIN-SVC-001…069 incl. the pre-existing 029/030
+gap and duplicated 069, + ADMIN-BR-001 pinning the bridge and the shared version
+cache; versionNotification.test.ts → `nest/admin.version-notification.test.ts`,
+VNOTIF-001…007; the template cases rode along to `packing.service.test.ts`), and
+the module e2e went DI-native — its 3-method whole-module mock died, 6 cases
+became 15 over real SQL. A sibling DTO ratchet cleared all twenty
+`AdminController` allow-list entries — the largest single block — trading the
+three `'enabled must be a boolean'` checks plus `'permissions object required'`
+and `'Object body required'` for the pipe envelope; the schemas are
+deliberately permissive wherever the service owns a bespoke 400 of its own.)
 Repeat these steps per
-service (next up: **adminService**, unblocked by the notifications fold —
+service (next up: **journeyService** / **oauthService** —
 per the dependency-honest order in
 `migration-graph.md`). This is a
 **pure relocation** — byte-identical

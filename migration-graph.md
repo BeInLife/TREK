@@ -1,7 +1,56 @@
 # Legacy `src/services/` dependency graph
 
 Generated from the actual imports in `server/src` on **2026-08-02** (after the
-notificationService fold — the notifications fan-in, step 3 of the
+adminService fold — the last Wave-5 god file, and the fold where two long-carried
+claims in this document turned out to be **wrong**: there is no admin MCP surface
+(`src/mcp/tools/admin.ts` has never existed in the repo's history; the
+"11 MCP consumers" figure below predated the Phase-0 addons extraction) and
+`plugin-host-deps.factory.ts` never imported the domain, so recipe steps 3 and 4
+were both no-ops — the `systemNotices/conditions.ts` consumer listed in the
+frontier table was stale too, it imports `addons.bridge`. Ahead of the fold the
+11 packing-template functions relocated to `PackingService`, which already owned
+all three template tables (`saveAsTemplate` writes every one of them); that
+resolved the `admin-2` residual **with no bridge**, since `packing.mcp.ts`
+already injects that service, and it kept one owner per table instead of freezing
+a create-here/delete-there split. The 851-line module then folded into the
+wrapper `AdminService` over `DatabaseService` + injected SettingsService,
+AddonsService, PasskeyService, PackingService, AuthService, PermissionsService
+and NotificationsService — the `auth.bridge` (`resolveAuthToggles`),
+`notifications.bridge` (`send`) and `permissions.bridge`
+(`getAllPermissions`/`savePermissions`) imports all became injections, while
+`PERMISSION_ACTIONS` stayed a plain const import and the deliberate
+`mcp/sessionManager` deep import kept its anti-cycle comment (the `../../mcp`
+barrel would close a nest->mcp->nest cycle). The pure + module-scoped half moved
+to the plain module `admin.helpers.ts`: `compareVersions`, `utcSuffix`,
+`BCRYPT_COST`, the import-time `isDocker` probe (`/.dockerenv` + `/proc/1/cgroup`
+at module evaluation — a documented parity exception, auth.helpers precedent) and
+the 5-minute version cache, **module-scoped on purpose** (permissions-cache
+precedent) so the bridge instance and the container singleton share one GitHub
+fetch between the cron and `GET /api/admin/version-check`. The bridge tax landed
+as predicted at one file: a 1-export `admin.bridge.ts` (`checkAndNotifyVersion`)
+for `scheduler.ts`'s daily cron. Four lines are non-verbatim, all path
+re-anchoring one directory deeper for `nest/admin/` — `rotateJwtSecret`'s
+`data/` dir, the `package.json` version require and the websocket/demo-reset
+lazy requires — with both resolved paths verified against the emitted `dist/`
+layout, since a wrong depth on the first would silently write `.jwt_secret` into
+`dist/` and log every user out on the next boot. Tests moved with IDs preserved
+(adminService.test.ts -> `nest/admin.service.test.ts`, ADMIN-SVC-001...069
+including the pre-existing 029/030 gap and the duplicated 069, plus a new
+ADMIN-BR-001 pinning both the bridge delegation and the shared version cache;
+versionNotification.test.ts -> `nest/admin.version-notification.test.ts`,
+VNOTIF-001...007, still driving real notification rows; the template cases rode
+along to `packing.service.test.ts`), and the module e2e went DI-native — the
+3-method whole-module mock died and 6 cases became 15 over real SQL. A sibling
+DTO ratchet cleared all **twenty** `AdminController` allow-list entries, the
+largest single block in the file, trading the three
+`'enabled must be a boolean'` checks plus `'permissions object required'` and
+`'Object body required'` for the pipe envelope; the twelve schemas are
+deliberately permissive wherever `AdminService` already owns a bespoke 400
+('Invalid role', 'Name is required', 'Username, email and password are
+required'), and `savePermissions` keeps `z.unknown()` values so bad levels still
+land in the 200 response's `skipped` list. **journeyService and oauthService now
+head the frontier.** Earlier the same day, the notificationService fold — the
+notifications fan-in, step 3 of the
 dependency-honest order, cashed in at last after being deferred through the
 whole step-4 chain: the 354-line `send()` dispatcher and the 371-line
 `inAppNotifications.ts` in-app store folded **together** into the existing
@@ -331,6 +380,13 @@ How to read it:
   **`maps.bridge.ts` is gone** — the place fold absorbed both of its consumers,
   the `placeEnrichment` helper and the places MCP registrar, and PlacesService /
   PlacesMcp / BookingImportService now inject `MapsService` directly),
+  admin (the 851-line Wave-5 god file folded into `AdminService`; the pure +
+  module-scoped half — `compareVersions`, `utcSuffix`, the import-time `isDocker`
+  probe and the 5-minute version cache — lives in the plain module
+  `admin.helpers.ts`, the cache module-scoped on purpose so `admin.bridge`'s
+  instance and the DI singleton share one GitHub fetch; the packing-template CRUD
+  went to `PackingService`, which already owned those tables; `admin.bridge.ts`
+  has a single export, `checkAndNotifyVersion`, for `scheduler.ts`'s cron),
   transit (the first fully SQL-free domain fold: the Transitous/MOTIS proxy
   became the dep-free `TransitService` — response cache, frozen-at-import
   `TRANSIT_API_BASE` and lazy User-Agent memo stay module-scoped on purpose;
@@ -385,8 +441,8 @@ How to read it:
   reset-throttle map (and its unref'd interval) stay module-scoped so the
   bridge and container instances share them; **one bridge**, the 8-export
   `auth.bridge.ts` — for `mcp/index.ts` token verification, the three legacy
-  registrars' `isDemoUser`, the still-legacy adminService (oidc and passkey
-  both folded 2026-08), and the one in-container
+  registrars' `isDemoUser` (oidc, passkey and admin all folded 2026-08 and
+  inject instead), and the one in-container
   cycle-break consumer `atlas.mcp.ts` (AuthService injects AtlasService, so
   AtlasModule cannot import AuthModule — assignments.bridge precedent); the
   other 15 domain `*.mcp.ts` demo guards inject `AuthService`),
@@ -415,11 +471,11 @@ How to read it:
   preference matrix, transports, channel registry and
   `inAppNotificationActions` stay plain infra imports; a 1-export
   `notifications.bridge.ts` (`send`) serves scheduler + legacy
-  adminService/memories + the six lazy fire-and-forget sends in migrated
-  Nest services; `AdminController` and the plugin host (24th factory dep)
-  inject; the 5-tool registrar + in-app resource moved to
+  memories + the six lazy fire-and-forget sends in migrated
+  Nest services; `AdminController`, `AdminService` (since the 2026-08 admin
+  fold) and the plugin host (24th factory dep) inject; the 5-tool registrar + in-app resource moved to
   `notifications.mcp.ts`).
-- **Domain migration targets** (the wave material): adminService, airportService,
+- **Domain migration targets** (the wave material): airportService,
   backupService,
   journeyService, journeyShareService, oauthService,
   weatherService, wikiService.
@@ -452,7 +508,6 @@ flowchart TD
   classDef infra fill:#455a64,color:#fff
 
   subgraph frontier["READY FRONTIER (no unmigrated domain deps)"]
-    admin[adminService]:::ready
     journey[journeyService]:::ready
     weather[weatherService]:::ready
     airport["airportService (boot special case)"]:::ready
@@ -465,7 +520,6 @@ flowchart TD
   memories["memories/ cluster"]:::infra
   cleanup[userCleanupService]:::infra
 
-  admin --> cleanup
   journey --> memories
   journeyShare --> journey
 ```
@@ -529,9 +583,14 @@ DI-native with the 2026-08-02 fold (the cluster stays plain infra under
 `mapsService/transitService/webauthnConfig/
 oauthService → notifications` edges were only `getAppUrl`/`getMcpSafeUrl` and died with the
 Phase 0 move to `src/app-config`, which had put mapsService on the frontier.
-The `memories/ → admin` edge is what still tangles the journey/memories
-corner with the admin corner (its notificationService edge became a bridge
-repoint with the fold). The former
+The `memories/ ⇄ admin` tangle is gone since the 2026-08 admin fold. The
+direction was always the other way round than this document claimed: nothing
+under `memories/` imports the admin domain (thumbnailService's edge was only
+`isAddonEnabled`, an `addons.bridge` repoint since Phase 0) — it was
+`adminService` that imported `getPhotoProviderConfig` from
+`memories/helpersService`. That is now a plain helper import in the DI-native
+`AdminService`, and helpers never block, so the journey/memories corner is a
+clean frontier pick. The former
 `auth/collections/backup → permissions` and `notifSvc/oauth → auditLog` edges are gone since the
 2026-07 Wave-2 pair: the permissions consumers repointed to `nest/permissions/permissions.bridge`,
 the writeAudit consumers to `nest/audit/audit.bridge`, and the log*-only consumers to the plain
@@ -545,10 +604,9 @@ never block).)
 
 | service | imports (services/) | imported by (services/) | nest consumers | out-of-container consumers |
 |---|---|---|---|---|
-| `adminService` | apiKeyCrypto, avatarUrl, llmConfig, memories/helpersService, passwordPolicy, userCleanupService (+ `permissions.bridge`, `addons.bridge`, `auth.bridge`, `notifications.bridge`) | (none) | nest/admin/admin.service.ts, nest/packing/packing.mcp.ts (`deletePackingTemplate`, the `admin-2` residual) | scheduler.ts (lazy) |
 | `airportService` | (none) | (none) | nest/airports/airports.service.ts, nest/booking-import/kitinerary-mapper.ts | db/database.ts (lazy boot backfill), mcp/tools/mapsWeather.ts, mcp/tools/transports.ts |
-| `apiKeyCrypto` | (none) | adminService, airtrail/airtrailService, llmConfig, memories/helpersService, memories/immichService, memories/photoResolverService, memories/synologyService, memories/unifiedService, notifications, unsplashService | nest/auth/auth.helpers.ts, nest/auth/auth.service.ts, nest/maps/maps.service.ts, nest/oidc/oidc.service.ts, nest/plugins/plugin-oauth.service.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/settings/settings.service.ts | db/migrations.ts |
-| `avatarUrl` | (none) | adminService, journeyService | nest/auth/auth.bridge.ts, nest/auth/auth.service.ts, nest/auth/passkey.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/files/files.service.ts, nest/notifications/notifications.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | (none) |
+| `apiKeyCrypto` | (none) | airtrail/airtrailService, llmConfig, memories/helpersService, memories/immichService, memories/photoResolverService, memories/synologyService, memories/unifiedService, notifications, unsplashService | nest/admin/admin.service.ts, nest/auth/auth.helpers.ts, nest/auth/auth.service.ts, nest/maps/maps.service.ts, nest/oidc/oidc.service.ts, nest/plugins/plugin-oauth.service.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/settings/settings.service.ts | db/migrations.ts |
+| `avatarUrl` | (none) | journeyService | nest/admin/admin.service.ts, nest/auth/auth.bridge.ts, nest/auth/auth.service.ts, nest/auth/passkey.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/files/files.service.ts, nest/notifications/notifications.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | (none) |
 | `backupService` | (none — `permissions.bridge`, plugin backup/paths infra only) | (none) | nest/backup/backup.controller.ts, nest/backup/backup.service.ts | scheduler.ts (lazy) |
 | `conflictResult` | (none) | (none) | nest/packing/packing.controller.ts, nest/packing/packing.service.ts, nest/places/places.controller.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | (none) |
 | `cookie` | (none) | (none) | nest/auth/auth-public.controller.ts, nest/auth/auth.service.ts, nest/auth/passkey.controller.ts, nest/oidc/oidc.controller.ts, nest/oidc/oidc.service.ts | (none) |
@@ -559,12 +617,12 @@ never block).)
 | `journeyService` | avatarUrl, memories/photoResolverService | journeyShareService | nest/assignments/assignments.service.ts, nest/journey/journey.service.ts, nest/places/places.mcp.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/plugins/journal-entry-rows.controller.ts | mcp/resources.ts, mcp/tools/journey.ts |
 | `journeyShareService` | journeyService | (none) | nest/journey/journey.service.ts | mcp/tools/journey.ts |
 | `kmlImport` | (none) | (none) | nest/places/places.helpers.ts, nest/places/places.service.ts | (none) |
-| `llmConfig` | apiKeyCrypto | adminService | nest/llm-parse/llm-client.factory.ts, nest/llm-parse/llm-config.resolver.ts | (none) |
+| `llmConfig` | apiKeyCrypto | (none) | nest/admin/admin.service.ts, nest/llm-parse/llm-client.factory.ts, nest/llm-parse/llm-config.resolver.ts | (none) |
 | `mfaCrypto` | (none) | (none) | nest/auth/auth.service.ts | (none) |
 | `notificationPreferencesService` | notifications, notifications/builtins, notifications/channelRegistry | notifications, notifications/channelRegistry | nest/admin/admin.service.ts, nest/notifications/notifications.service.ts, nest/plugins/install/manifest.ts | (none) |
 | `notifications` | apiKeyCrypto, notificationPreferencesService (+ `audit-log.logger`) | notificationPreferencesService, notifications/builtins | nest/auth/auth.service.ts, nest/notifications/notifications.service.ts | (none) |
 | `oauthService` | (none — `addons.bridge` + `audit.bridge` only) | (none) | nest/oauth/oauth-api.controller.ts, nest/oauth/oauth.service.ts | mcp/index.ts, mcp/oauthProvider.ts |
-| `passwordPolicy` | (none) | adminService | nest/auth/auth.service.ts | (none) |
+| `passwordPolicy` | (none) | (none) | nest/admin/admin.service.ts, nest/auth/auth.service.ts | (none) |
 | `placeImage` | (none) | (none) | nest/collections/collections.controller.ts, nest/collections/collections.service.ts, nest/common/place-image-upload.ts, nest/places/places.controller.ts, nest/places/places.service.ts | (none) |
 | `placePhotoCache` | (none) | (none) | nest/maps/maps.service.ts, nest/places/places.helpers.ts, nest/share/share.service.ts | scheduler.ts (lazy) |
 | `queryHelpers` | (none) | (none) | nest/assignments/assignments.service.ts, nest/days/days.service.ts, nest/places/places.service.ts, nest/share/share.service.ts | (none) |
@@ -572,7 +630,7 @@ never block).)
 | `tripAccess` | (none) | (none) | nest/booking-import/booking-import.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/days/day-notes.service.ts, nest/integrations/airtrail-import.controller.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/todo/todo.service.ts | (none) |
 | `tripMembership` | (none) | (none) | nest/auth/auth.service.ts, nest/oidc/oidc.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/trip-invite/trip-invite.service.ts | (none) |
 | `unsplashService` | apiKeyCrypto | (none) | nest/places/places.service.ts, nest/trips/trips.controller.ts, nest/trips/trips.service.ts | (none) |
-| `userCleanupService` | (none — `budget.bridge`, plugin paths infra only) | adminService | nest/auth/auth.service.ts, nest/trips/trips.service.ts | (none) |
+| `userCleanupService` | (none — `budget.bridge`, plugin paths infra only) | (none) | nest/admin/admin.service.ts, nest/auth/auth.service.ts, nest/trips/trips.service.ts | (none) |
 | `weatherService` | (none) | (none) | nest/plugins/host/plugin-host-deps.factory.ts, nest/weather/weather.controller.ts, nest/weather/weather.service.ts | mcp/tools/mapsWeather.ts |
 | `webauthnConfig` | (none) | (none) | nest/auth/auth.service.ts, nest/auth/passkey.service.ts | (none) |
 | `wikiService` | (none) | (none) | nest/help/help.controller.ts | (none) |
@@ -605,17 +663,14 @@ never block).)
 
 **Ready frontier** (all legacy deps are helpers, `tripAccess`, or lazy sends):
 
-With the notifications fan-in cashed in on 2026-08-02 (step 3, the last
-deferred step), the dependency-honest order's next step is **adminService** —
-now on the frontier with the heaviest surface left (14 Nest + 11 MCP
-consumers, the `admin-2` residual, the two `AdminController.*` notification
-allow-list entries). The frontier candidates:
+With the adminService fold landed on 2026-08-02, **every Wave-5 god file is
+done** and the remaining legacy surface is the journey corner, the oauth pair
+and three independent leaves. The frontier candidates:
 
 | Candidate | Why now / why not | Bridge tax (legacy dependents + out-of-container) |
 |---|---|---|
-| **adminService** | Unblocked by the 2026-08-02 notifications fold — its last hard domain import (`send`) became a `notifications.bridge` repoint; remaining legacy deps are all helpers (+ the four bridges). The order's official next step | `scheduler.ts` (lazy require), `systemNotices/conditions.ts` |
-| **journeyService** | Unblocked the same day, unpredicted: the memories cluster's last domain edge (`synology/unified → notificationService`) became a bridge repoint, leaving journey's deps pure infra (avatarUrl + memories/photoResolver). Coherence still says memories/journey land after admin | `mcp/resources.ts`, `mcp/tools/journey.ts`, `journeyShareService` |
-| **oauthService** | Dependency-free since the Phase 0 addons extraction (adminService edge was only `isAddonEnabled` → `addons.bridge`) — but the coherence order keeps it after admin so the `mcp/oauthProvider.ts` merge (`mcp-2`) lands with it. Its former table-mate **passkeyService cashed in on 2026-08-02** — the predicted "none (a leaf)" bridge tax held exactly | `mcp/index.ts`, `mcp/oauthProvider.ts` |
+| **journeyService** | Unblocked 2026-08-02: the memories cluster's last domain edge (`synology/unified → notificationService`) became a bridge repoint, leaving journey's deps pure infra (avatarUrl + memories/photoResolver). With admin done, coherence now puts it first — and it is the only remaining domain-on-domain blocker (`journeyShareService`). Note the place fold added two in-container consumers (`places.service.ts` hooks, `places.mcp.ts` skeleton reconcile) | `mcp/resources.ts`, `mcp/tools/journey.ts`, `journeyShareService` |
+| **oauthService** | Dependency-free since the Phase 0 addons extraction (adminService edge was only `isAddonEnabled` → `addons.bridge`), and no longer held back by the coherence order now that admin is done — take it with the `mcp/oauthProvider.ts` merge (`mcp-2`). Its former table-mate **passkeyService cashed in on 2026-08-02** — the predicted "none (a leaf)" bridge tax held exactly | `mcp/index.ts`, `mcp/oauthProvider.ts` |
 | **weatherService / wikiService / airportService** | Independent leaves; airport has the `db/database.ts` boot lazy-require special case | little / none |
 
 **Blocked, and by what (shortest unblock path):**
@@ -912,6 +967,72 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   wrapper. The trailing `fix(server)` commit then cleared the verified defects the
   relocation had faithfully carried — see "Quirks fixed after the notifications fold"
   below.
+
+## Quirks fixed after the admin fold (the trailing `fix(server)` commit)
+
+The relocation itself was byte-identical; these were then fixed on top, each with a
+regression pin, so the parity diff and the behaviour change stayed in separate commits:
+
+1. **The three places toggles were fail-open** — `getPlacesPhotos`/`Autocomplete`/
+   `Details` read `row?.value !== 'false'` (unset ⇒ ON) while their sibling
+   `AddonsService.getBagTracking()` reads `=== 'true'` (unset ⇒ OFF). The asymmetry
+   was long documented as deliberate, but it contradicts the fail-closed rule. All
+   three now read `=== 'true'`, and an **append-only migration** (schema version 185)
+   backfills `'true'` for the three keys with `INSERT OR IGNORE`, so an install that
+   never touched the switches keeps the features it has today and an explicit
+   `'false'` is left alone (ADMIN-SVC-071).
+2. **`updateTemplateItem`/`deleteTemplateItem` ignored their `:templateId`** — the
+   path param was accepted and never used, so any admin could edit or delete an item
+   through an unrelated template's URL. Both now look the item up through
+   `packing_template_categories`, exactly as the sibling category routes do
+   (ADMIN-SVC-076).
+3. **`updateUser` silently no-opped on an empty username/email** — `username || null`
+   fell through `COALESCE(?, username)` and meant "leave unchanged", so the admin UI
+   reported success for a change it never made. Both now 400
+   (`'Username cannot be empty'` / `'Email cannot be empty'`) (ADMIN-SVC-072).
+4. **`createInvite` swallowed an unresolvable `trip_id`** — a stale or non-integer id
+   bound `null` and handed back a plain registration invite the admin never asked for.
+   It now 404s `'Trip not found'`; an absent or blank binding still means a plain
+   invite (ADMIN-SVC-073).
+5. **`listOAuthSessions` parsed `scopes` without a guard** — one malformed row threw
+   and 500'd the entire admin OAuth-sessions panel. Bad JSON now yields `scopes: null`
+   for that row and the rest still render (ADMIN-SVC-074).
+6. **GitHub fetches had no timeout, no size cap and a silent `catch`** — both
+   `getGithubReleases` and `checkVersion` violated the outbound-fetch rule in
+   `server/CLAUDE.md`. They now share a `fetchGithub` helper with
+   `AbortSignal.timeout(10s)`, a 2 MB response cap and an error log.
+7. **`checkVersion` cached only the success path** — every early return (`!resp.ok`,
+   no prereleases, throw) re-fetched on the next call, so a GitHub outage meant a live
+   request on every admin page load. Failures now cache on a 60s TTL, successes keep
+   the 5-minute one (ADMIN-SVC-070).
+8. **Multi-statement writes were not transactional** — `updateOidcSettings`' five
+   sequential `INSERT OR REPLACE`s (a partial apply leaves an issuer with no client
+   id) and `updateAddon`'s enabled-then-config pair now run in `db.transaction()`, as
+   does `updateUser`'s write. The writes with non-SQL side effects
+   (`deleteMcpToken`/`revokeOAuthSession` session revocation,
+   `checkAndNotifyVersion`'s `await send`, `deleteUser`'s `emitUserDeleted`)
+   deliberately keep the side effect **outside** the transaction — a rollback must not
+   un-send a notification (ADMIN-SVC-075).
+9. **`admin.oauth_session.revoke` used dot separators** where every sibling audit
+   action uses underscores; renamed to `admin.oauth_session_revoke`. Historical rows
+   keep the old spelling, so the log holds two names for one action.
+10. **Two mutations wrote no audit row** — `POST /packing-templates` and
+    `DELETE /mcp-tokens/:id` now emit `admin.packing_template_create` and
+    `admin.mcp_token_delete`, matching sibling naming and detail shape.
+11. **`getAuditLog` emitted a `{ _parse_error: true }` sentinel** for unparseable
+    `details`, which the admin UI rendered as a literal object. It now falls back to
+    the raw stored string (ADMIN-SVC-046, retitled).
+
+**Quirks deliberately preserved** (parity, not oversights): `isDocker`'s disk I/O at
+module evaluation (making it lazy would change *when* `fs` is consulted relative to a
+suite's `vi.mock` setup, and could shift `is_docker` in `checkVersion` payloads — it
+stays a documented exception in `admin.helpers.ts`); the two coexisting UTC-suffix
+implementations (`utcSuffix` for users, an inlined variant for audit rows);
+`MCP_RELEVANT_ADDONS` being rebuilt per `updateAddon` call; `createInvite`'s
+`max_uses: 0 = unlimited` / `|| 1` / cap-5 arithmetic; the `COALESCE(is_guest, 0) = 0`
+guest exclusions being present on five user queries but deliberately absent from the
+admin-count and `deleteUser` lookups; and `saveDemoBaseline` answering 404
+`'Not found'` rather than 403 when demo mode is off.
 
 ## Quirks fixed after the notifications fold (the trailing `fix(server)` commit)
 
