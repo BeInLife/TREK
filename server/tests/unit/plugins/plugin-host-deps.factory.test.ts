@@ -5,7 +5,7 @@
  * host, and trip broadcasts are force-namespaced to plugin:{id}:{event}.
  * DI-native domains (budget/exchange-rates/reservations/tags/categories/todo/
  * packing/day-notes/days/assignments/oauth/llm-config/files/collab/vacay/
- * permissions/trips/places/collections/atlas)
+ * permissions/trips/places/collections/atlas/notifications)
  * are constructor-injected stubs; legacy services/* domains stay path-mocked
  * until their own DI migration lands.
  */
@@ -208,8 +208,10 @@ const collabStub = {
 vi.mock('../../../src/services/tripMembership', () => ({
   joinTripAsMember: vi.fn((tripId: number, userId: number) => ({ joined: userId !== 5, tripId })), // owner add = no-op
 }));
-const { notifySend } = vi.hoisted(() => ({ notifySend: vi.fn(async () => undefined) }));
-vi.mock('../../../src/services/notificationService', () => ({ send: notifySend }));
+// Notifications are a constructor-injected stub since the notifications fold
+// (same behavior as the old services/notificationService path mock).
+const notifySend = vi.fn(async () => undefined);
+const notificationsStub = { send: notifySend } as unknown as NotificationsService;
 // userId 7 = no provider configured; everyone else resolves to a stub config.
 // Constructor-injected stub since the resolver became DI-native (settings migration).
 const llmConfigStub = {
@@ -324,6 +326,7 @@ import type { PermissionsService } from '../../../src/nest/permissions/permissio
 import type { PlacesService } from '../../../src/nest/places/places.service';
 import type { CollectionsService } from '../../../src/nest/collections/collections.service';
 import type { AtlasService } from '../../../src/nest/atlas/atlas.service';
+import type { NotificationsService } from '../../../src/nest/notifications/notifications.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { NotFoundError, ValidationError } from '../../../src/nest/trips/trips.service';
@@ -346,7 +349,7 @@ const tripsStub = {
   list: () => [{ id: 1 }],
   removeMember: vi.fn(),
 } as unknown as import('../../../src/nest/trips/trips.service').TripsService;
-const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub, addonsStub, new RealtimeService(), tripsStub, placesStub, collectionsStub, atlasStub);
+const factory = new PluginHostDepsFactory(budgetStub, reservationsStub, tagsStub, categoriesStub, todoStub, packingStub, oauthStub, dayNotesStub, assignmentsStub, llmConfigStub, new DatabaseService(mockDb), filesStub, collabStub, vacayStub, daysStub, permissionsStub, exchangeRatesStub, addonsStub, new RealtimeService(), tripsStub, placesStub, collectionsStub, atlasStub, notificationsStub);
 const stubRouter: PluginCallRouter = { callPlugin: async () => undefined, emitPluginEvent: () => {} };
 const createRealRpcHost = (id: string, granted: ReadonlySet<string>, router: PluginCallRouter = stubRouter) => factory.create(id, granted, router);
 

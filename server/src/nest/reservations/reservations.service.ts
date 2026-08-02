@@ -151,7 +151,7 @@ export class ReservationsService {
 
   /** Fire-and-forget booking-change notification, mirroring the legacy dynamic import. */
   notifyBookingChange(tripId: string | number, actorId: number, booking: string, type: string): void {
-    import('../../services/notificationService')
+    import('../notifications/notifications.bridge')
       .then(({ send }) => {
         try {
           const actor = this.db.get<{ email: string }>('SELECT email FROM users WHERE id = ?', actorId);

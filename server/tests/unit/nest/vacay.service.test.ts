@@ -26,7 +26,7 @@ vi.mock('../../../src/config', () => ({
 // Mock websocket so notifyPlanUsers doesn't throw
 vi.mock('../../../src/websocket', () => ({ broadcastToUser: vi.fn() }));
 // shareCalendar fires a notification after inserting — keep that out of unit scope
-vi.mock('../../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../../../src/nest/notifications/notifications.bridge', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
@@ -53,7 +53,7 @@ beforeAll(async () => {
   // Warm the (mocked) notificationService module: sendInvite/shareCalendar do a
   // fire-and-forget dynamic import of it, and a cold load can otherwise race the
   // worker teardown ("Cannot load ... after the environment was torn down").
-  await import('../../../src/services/notificationService');
+  await import('../../../src/nest/notifications/notifications.bridge');
 });
 
 beforeEach(() => {

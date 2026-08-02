@@ -591,7 +591,7 @@ export class PackingService {
   /** Fire-and-forget tag notification, mirroring the legacy dynamic import. */
   notifyTagged(tripId: string, actor: User, category: string, userIds: unknown): void {
     if (!Array.isArray(userIds) || userIds.length === 0) return;
-    import('../../services/notificationService').then(({ send }) => {
+    import('../notifications/notifications.bridge').then(({ send }) => {
       const tripInfo = this.db.get<{ title: string }>('SELECT title FROM trips WHERE id = ?', tripId);
       send({
         event: 'packing_tagged',

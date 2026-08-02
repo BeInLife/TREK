@@ -49,7 +49,7 @@ const checkPermission = vi.fn(() => true);
 const permissionsStub = { checkPermission } as unknown as PermissionsService;
 
 const { send } = vi.hoisted(() => ({ send: vi.fn(() => Promise.resolve()) }));
-vi.mock('../../../src/services/notificationService', () => ({ send }));
+vi.mock('../../../src/nest/notifications/notifications.bridge', () => ({ send }));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';

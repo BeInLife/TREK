@@ -29,8 +29,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
   collab, vacay, reservations, day, permissions, audit, budget, trip, maps,
-  transit, place, transit-itinerary, collections, atlas, auth, oidc, passkey —
-  see the migration recipe below.
+  transit, place, transit-itinerary, collections, atlas, auth, oidc, passkey,
+  notifications — see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -415,8 +415,33 @@ PASSKEY-SVC-001…030 were written fresh with the fold (characterization over a
 real `:memory:` DB, `@simplewebauthn/server` mocked at the ceremony-verdict
 boundary — the repo's first such mock); auth-guard.test.ts's PasskeyController
 block swapped its path mock for a constructor stub.)
+notificationService followed (the notifications fan-in, step 3 of the
+dependency-honest order: the `send()` dispatcher **and** the
+`inAppNotifications.ts` store folded together into the existing
+`NotificationsService` over DatabaseService + RealtimeService — the wrapper's
+in-app delegation became the real SQL, while the prefs matrix, the smtp/
+webhook/ntfy transports, the channel registry and `inAppNotificationActions`
+stay plain-module imports (graph-classified infra helpers, complete with
+their registry⇄prefs cycle). A one-export `notifications.bridge.ts` (`send`)
+covers the outside-container consumers — scheduler's two cron `require`s,
+legacy adminService and memories/{unified,synology} — **and** the six
+deliberately-lazy fire-and-forget `import().then(({ send }) => …)` sends in
+migrated Nest services (collab/collections/packing/reservations/trips/vacay,
+path-only repoints; kept lazy so a send can never block or cycle a domain
+module). In-container static consumers inject instead: `AdminController`'s
+dev test send (AdminModule → NotificationsModule) and the plugin host
+(`NotificationsService` = `PluginHostDepsFactory`'s 24th dep). The 5-tool
+legacy registrar + the `notifications-in-app` resource moved 1:1 to
+`notifications.mcp.ts` (no `when:` — the domain is core, not addon-gated).
+Tests moved with IDs preserved: notificationService.test.ts →
+notifications.service.test.ts (NSVC-001…019/NTFY-SVCB-*/NSVC-PLUG-001…007,
+plus the NSVC-020 bridge pin), inAppNotificationPrefs.test.ts →
+notifications.inapp-prefs.test.ts (INOTIF-*); ~18 suites repointed their
+path mocks/warm-ups to the bridge; admin.controller.test and the plugin-host
+suite converted theirs to constructor stubs; the module e2e went DI-native
+(real notifications DDL, prefs/transports still path-mocked).)
 Repeat these steps per
-service (next up: **the notifications fan-in** —
+service (next up: **adminService**, unblocked by the notifications fold —
 per the dependency-honest order in
 `migration-graph.md`). This is a
 **pure relocation** — byte-identical

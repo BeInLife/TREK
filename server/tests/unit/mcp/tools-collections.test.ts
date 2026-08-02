@@ -39,7 +39,7 @@ vi.mock('../../../src/config', () => ({
 }));
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser }));
 const { notifSend } = vi.hoisted(() => ({ notifSend: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../../../src/services/notificationService', () => ({ send: notifSend }));
+vi.mock('../../../src/nest/notifications/notifications.bridge', () => ({ send: notifSend }));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
@@ -70,10 +70,10 @@ beforeAll(async () => {
   // The collections addon is seeded DISABLED by default and every tool rides
   // the `when:` addon gate (post-fold quirk fix) — enable it for the suite.
   testDb.prepare('UPDATE addons SET enabled = 1 WHERE id = ?').run(ADDON_IDS.COLLECTIONS);
-  // Warm the notificationService module: sendInvite does a fire-and-forget
+  // Warm the notifications bridge module: sendInvite does a fire-and-forget
   // dynamic import of it, and a cold load can otherwise race the mock registry
   // under slow (coverage) runs — same precaution as tests/integration/vacay.test.ts.
-  await import('../../../src/services/notificationService');
+  await import('../../../src/nest/notifications/notifications.bridge');
 });
 
 beforeEach(() => {

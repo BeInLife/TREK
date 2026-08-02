@@ -169,7 +169,7 @@ function startTripReminders(): void {
   reminderTask = cron.schedule('0 9 * * *', async () => {
     try {
       const { db } = require('./db/database');
-      const { send } = require('./services/notificationService');
+      const { send } = require('./nest/notifications/notifications.bridge');
 
       const trips = db.prepare(`
         SELECT t.id, t.title, t.user_id, t.reminder_days FROM trips t
@@ -214,7 +214,7 @@ function startTodoReminders(): void {
   const tz = readEnv().app.tz || 'UTC';
   todoReminderTask = cron.schedule('0 9 * * *', async () => {
     try {
-      const { send } = require('./services/notificationService');
+      const { send } = require('./nest/notifications/notifications.bridge');
 
       // Select unchecked todos with a due date inside the lead window
       // that haven't been reminded in the last 24 hours. `due_date` is

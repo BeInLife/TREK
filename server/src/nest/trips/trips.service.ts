@@ -1225,7 +1225,7 @@ export class TripsService {
 
   /** Fire-and-forget trip-invite notification (mirrors the route's dynamic import). */
   notifyInvite(tripId: string, actor: User, targetUserId: number, tripTitle: string, inviteeEmail: string): void {
-    import('../../services/notificationService').then(({ send }) => {
+    import('../notifications/notifications.bridge').then(({ send }) => {
       send({
         event: 'trip_invite',
         actorId: actor.id,

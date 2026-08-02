@@ -6,7 +6,7 @@ import { isUpdateConflict } from '../../../services/conflictResult';
 import { getWeather } from '../../../services/weatherService';
 import { BLOCKED_EXTENSIONS, filesDir } from '../../files/files.constants';
 import { joinTripAsMember } from '../../../services/tripMembership';
-import { send as sendNotification } from '../../../services/notificationService';
+import { NotificationsService } from '../../notifications/notifications.service';
 import { createLlmClient } from '../../llm-parse/llm-client.factory';
 import { readUserSettingDecrypted } from '../plugins.service';
 import { PluginOAuthService } from '../plugin-oauth.service';
@@ -132,8 +132,8 @@ export interface PluginCallRouter {
  *
  * DI-native domain services (budget, exchange-rates, reservations, tags,
  * categories, todo, packing, day-notes, assignments, oauth, files, collab,
- * vacay, trips, places, collections, atlas, the LLM config resolver) and
- * the DatabaseService (all inline SQL + the trip-access helper) are
+ * vacay, trips, places, collections, atlas, notifications, the LLM config
+ * resolver) and the DatabaseService (all inline SQL + the trip-access helper) are
  * constructor-injected; legacy `services/*` domains stay plain function
  * imports until their own migration lands (DI-MIGRATION.md), at which point
  * each swaps one import for one injected service.
@@ -164,6 +164,7 @@ export class PluginHostDepsFactory {
     private readonly places: PlacesService,
     private readonly collections: CollectionsService,
     private readonly atlas: AtlasService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -362,13 +363,13 @@ export class PluginHostDepsFactory {
         return { removed: true };
       },
       // --- Host-mediated notifications. Recipient resolution + channel fan-out +
-      // per-user preferences are all owned by notificationService.send; the plugin
+      // per-user preferences are all owned by NotificationsService.send; the plugin
       // supplies only the target (host-scoped by the router) + plain text. actorId is
       // null (no user sender), so the message body carries the plugin's content. ---
       canAccessTripForNotify: (tripId, userId) => !!this.db.canAccessTrip(tripId, userId),
       sendPluginNotification: async (_pluginId, input) => {
         if (!budgetFor(id).take('notify', Date.now())) throw new BadParams('daily notification budget exhausted (resets at UTC midnight)');
-        await sendNotification({
+        await this.notifications.send({
           event: 'plugin_notification',
           actorId: null,
           params: { title: input.title, body: input.body, ...(input.link ? { link: input.link } : {}) },

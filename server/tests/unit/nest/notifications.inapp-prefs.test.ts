@@ -1,6 +1,9 @@
 /**
- * Unit tests for in-app notification preference filtering in createNotification().
- * Covers INOTIF-001 to INOTIF-004.
+ * Unit tests for in-app notification preference filtering in
+ * NotificationsService.createNotification() and the respondToBoolean flow —
+ * INOTIF-001 to INOTIF-004 (moved 1:1 from the legacy
+ * tests/unit/services/inAppNotificationPrefs.test.ts when the in-app store
+ * SQL folded into nest/notifications).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
@@ -30,13 +33,23 @@ vi.mock('../../../src/config', () => ({
 // Mock WebSocket broadcast — must use vi.hoisted() so broadcastMock is available
 // when the vi.mock factory is evaluated (factories are hoisted before const declarations)
 const { broadcastMock } = vi.hoisted(() => ({ broadcastMock: vi.fn() }));
-vi.mock('../../../src/websocket', () => ({ broadcastToUser: broadcastMock }));
+// RealtimeService imports both names from src/websocket, so the mock must
+// export both even though only broadcastToUser is asserted here.
+vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: broadcastMock }));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin, disableNotificationPref } from '../../helpers/factories';
-import { createNotification, createNotificationForRecipient, respondToBoolean } from '../../../src/services/inAppNotifications';
+import { registerAction } from '../../../src/services/inAppNotificationActions';
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
+import { NotificationsService } from '../../../src/nest/notifications/notifications.service';
+
+const notifications = new NotificationsService(new DatabaseService(testDb), new RealtimeService());
+const createNotification = notifications.createNotification.bind(notifications);
+const createNotificationForRecipient = notifications.createNotificationForRecipient.bind(notifications);
+const respondToBoolean = notifications.respond.bind(notifications);
 
 beforeAll(() => {
   createTables(testDb);
@@ -290,5 +303,98 @@ describe('respondToBoolean', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/not found/i);
+  });
+
+  // ── Regression pins from the post-fold fix(server) commit ──────────────────
+
+  it('INOTIF-011 — a concurrent double-submit executes the action handler exactly once (CAS before handler)', async () => {
+    const { user } = createUser(testDb);
+    const calls: string[] = [];
+    // Slow handler: with the legacy handler-before-CAS order, both submits
+    // passed the response-IS-NULL pre-check while the first awaited here and
+    // the action ran twice.
+    registerAction('slow_approve', async () => {
+      calls.push('run');
+      await new Promise((resolve) => setImmediate(resolve));
+    });
+    const id = testDb.prepare(`
+      INSERT INTO notifications (
+        type, scope, target, sender_id, recipient_id,
+        title_key, title_params, text_key, text_params,
+        positive_text_key, negative_text_key, positive_callback, negative_callback
+      ) VALUES ('boolean', 'user', ?, NULL, ?, 'notif.test.title', '{}', 'notif.test.text', '{}',
+        'notif.action.accept', 'notif.action.decline',
+        '{"action":"slow_approve","payload":{}}', '{"action":"slow_approve","payload":{}}'
+      )
+    `).run(user.id, user.id).lastInsertRowid as number;
+
+    const [first, second] = await Promise.all([
+      respondToBoolean(id, user.id, 'positive'),
+      respondToBoolean(id, user.id, 'negative'),
+    ]);
+
+    expect(calls).toHaveLength(1);
+    const outcomes = [first, second];
+    expect(outcomes.filter((r) => r.success)).toHaveLength(1);
+    expect(outcomes.find((r) => !r.success)?.error).toMatch(/already responded/i);
+  });
+
+  it('INOTIF-012 — a handler failure releases the claim: error returned, notification stays unresponded, retry succeeds', async () => {
+    const { user } = createUser(testDb);
+    let shouldFail = true;
+    registerAction('flaky_approve', async () => {
+      if (shouldFail) throw new Error('downstream unavailable');
+    });
+    const id = testDb.prepare(`
+      INSERT INTO notifications (
+        type, scope, target, sender_id, recipient_id,
+        title_key, title_params, text_key, text_params,
+        positive_text_key, negative_text_key, positive_callback, negative_callback
+      ) VALUES ('boolean', 'user', ?, NULL, ?, 'notif.test.title', '{}', 'notif.test.text', '{}',
+        'notif.action.accept', 'notif.action.decline',
+        '{"action":"flaky_approve","payload":{}}', '{"action":"flaky_approve","payload":{}}'
+      )
+    `).run(user.id, user.id).lastInsertRowid as number;
+
+    const failed = await respondToBoolean(id, user.id, 'positive');
+    expect(failed).toEqual({ success: false, error: 'downstream unavailable' });
+    const row = testDb.prepare('SELECT response, is_read FROM notifications WHERE id = ?').get(id) as { response: string | null; is_read: number };
+    expect(row.response).toBeNull();
+    expect(row.is_read).toBe(0);
+
+    shouldFail = false;
+    const retried = await respondToBoolean(id, user.id, 'positive');
+    expect(retried.success).toBe(true);
+  });
+
+  it('INOTIF-013 — respond result + broadcast carry an ISO-UTC created_at (toUtcIso, #1149 parity across paths)', async () => {
+    const { user } = createUser(testDb);
+    const id = insertBooleanNotification(user.id);
+
+    const result = await respondToBoolean(id, user.id, 'positive');
+
+    expect(result.notification?.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+    const broadcastPayload = broadcastMock.mock.calls
+      .map((call) => call[1] as { type: string; notification: { created_at: string } })
+      .find((p) => p.type === 'notification:updated');
+    expect(broadcastPayload?.notification.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
+  });
+
+  it('INOTIF-014 — createNotification broadcast carries an ISO-UTC created_at (was the un-patched #1149 path)', () => {
+    const { user } = createUser(testDb);
+
+    createNotification({
+      type: 'simple',
+      scope: 'user',
+      target: user.id,
+      sender_id: null,
+      title_key: 'notif.test.title',
+      text_key: 'notif.test.text',
+    });
+
+    const broadcastPayload = broadcastMock.mock.calls
+      .map((call) => call[1] as { type: string; notification: { created_at: string } })
+      .find((p) => p.type === 'notification:new');
+    expect(broadcastPayload?.notification.created_at).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
   });
 });

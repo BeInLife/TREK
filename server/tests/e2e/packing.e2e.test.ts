@@ -110,7 +110,7 @@ vi.mock('../../src/db/database', () => ({
   reinitialize: () => {},
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
-vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../../src/nest/notifications/notifications.bridge', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 

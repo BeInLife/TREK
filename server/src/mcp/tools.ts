@@ -1,7 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { registerJourneyTools } from './tools/journey';
 import { registerMapsWeatherTools } from './tools/mapsWeather';
-import { registerNotificationTools } from './tools/notifications';
 import { registerTransportTools } from './tools/transports';
 import { registerMcpPrompts } from './tools/prompts';
 import { getMcpRegistry } from './registry-handoff';
@@ -35,7 +34,8 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
 
   registerMapsWeatherTools(server, userId, scopes);
 
-  registerNotificationTools(server, userId, scopes);
+  // The notification tools moved to the DI-discovered src/nest/notifications/
+  // notifications.mcp.ts (@McpController, attached via the nest-mcp registry below).
 
   // The atlas tools moved to the DI-discovered src/nest/atlas/atlas.mcp.ts
   // (@McpController, attached via the nest-mcp registry below).

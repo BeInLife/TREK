@@ -1,5 +1,4 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp';
-import { getNotifications } from '../services/inAppNotifications';
 import { isAddonEnabled } from '../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../addons';
 import { canAccessJourney, getJourneyFull, listEntries, listJourneys } from '../services/journeyService';
@@ -91,16 +90,9 @@ export function registerResources(server: McpServer, userId: number, scopes: str
   // The trip-packing-bags resource moved to the DI-discovered
   // src/nest/packing/packing.mcp.ts (@ResourceTemplate).
 
-  // In-app notifications
-  if (canRead(scopes, 'notifications')) server.registerResource(
-    'notifications-in-app',
-    'trek://notifications/in-app',
-    { description: "The current user's in-app notifications (most recent 50, unread first)", mimeType: 'application/json' },
-    async (uri) => {
-      const result = getNotifications(userId, { limit: 50 });
-      return jsonContent(uri.href, result);
-    }
-  );
+  // The notifications-in-app resource moved to the DI-discovered
+  // src/nest/notifications/notifications.mcp.ts (@Resource, attached via the
+  // nest-mcp registry in registerTools).
 
   // The atlas-stats and atlas-regions resources moved to the DI-discovered
   // src/nest/atlas/atlas.mcp.ts (@Resource, attached via the nest-mcp registry

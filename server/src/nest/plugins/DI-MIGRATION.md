@@ -135,8 +135,12 @@ the atlas fold — its nine imported symbols (`listVisitedCountries`,
 `listManuallyVisitedRegions`, `listBucketList`, `markCountryVisited`,
 `unmarkCountryVisited`, `markRegionVisited`, `unmarkRegionVisited`,
 `createBucketItem`, `deleteBucketItem`) became the injected `AtlasService`,
-the factory's 23rd constructor dep; the remaining factory import is the
-Wave-5 journeys domain).
+the factory's 23rd constructor dep; notificationService swapped in 2026-08
+with the notifications fold — its single imported symbol (`send as
+sendNotification`, the `sendPluginNotification` closure) became the injected
+`NotificationsService`, the factory's 24th constructor dep; the remaining
+factory domain imports are `weatherService` (`getWeather`) and the Wave-5
+journeys domain).
 
 ### Test impact (as landed)
 
@@ -155,7 +159,10 @@ Wave-5 journeys domain).
   collections fold (same sentinel behaviors — the status-tagged throws the
   factory's `mapCollectionError` maps); the atlasService path mock became
   `atlasStub` with the 2026-08 atlas fold (same sentinel behaviors, keyed by
-  the service method names — `bucketList`, `markCountry`, …); a
+  the service method names — `bucketList`, `markCountry`, …); the
+  notificationService path mock became `notificationsStub` with the 2026-08
+  notifications fold (the hoisted `notifySend` handle survived as the stub's
+  `send`); a
   file-local shim keeps the
   historical `createRealRpcHost(id, granted)` call sites and supplies a default
   no-op router.

@@ -104,7 +104,7 @@ const MAX_LABELS_PER_COLLECTION = 50;
  * per-user broadcast fan-outs). The `place_edit` trip permission (copyToTrip)
  * goes through PermissionsService; per-user WebSocket delivery goes through
  * RealtimeService; the notification send in sendInvite keeps its call-time
- * lazy import of the legacy notificationService (collab precedent).
+ * lazy import of the notifications bridge (collab precedent).
  */
 @Injectable()
 export class CollectionsService {
@@ -1012,7 +1012,7 @@ export class CollectionsService {
 
     this.realtime.broadcastToUser(targetUserId, { type: 'collections:invite', from: { id: inviterId, username: inviterUsername }, collectionId });
 
-    import('../../services/notificationService').then(({ send }) => {
+    import('../notifications/notifications.bridge').then(({ send }) => {
       send({ event: 'collection_invite', actorId: inviterId, scope: 'user', targetId: targetUserId, params: { actor: inviterEmail, collectionId: String(collectionId) } }).catch(() => {});
     }).catch(() => {});
 

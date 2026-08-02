@@ -1,6 +1,11 @@
 /**
- * Unit tests for the unified notificationService.send().
- * Covers NSVC-001 to NSVC-014.
+ * Unit tests for the DI-native NotificationsService.send() — NSVC-001 through
+ * NSVC-019, NTFY-SVCB-*, NSVC-PLUG-001..007 (moved 1:1 from the legacy
+ * tests/unit/services/notificationService.test.ts when the send dispatcher +
+ * in-app SQL folded into nest/notifications), plus the NSVC-020 bridge
+ * delegation pin. Uses a real in-memory SQLite DB so the SQL is exercised
+ * faithfully; email/webhook/ntfy transports are mocked at the nodemailer/fetch
+ * boundary.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 
@@ -32,10 +37,18 @@ vi.mock('../../../src/services/apiKeyCrypto', () => ({
   encrypt_api_key: (v: string) => v,
 }));
 
-const { sendMailMock, fetchMock, broadcastMock } = vi.hoisted(() => ({
+const { sendMailMock, fetchMock, broadcastMock, logErrorMock } = vi.hoisted(() => ({
   sendMailMock: vi.fn().mockResolvedValue({ accepted: ['test@test.com'] }),
   fetchMock: vi.fn(),
   broadcastMock: vi.fn(),
+  logErrorMock: vi.fn(),
+}));
+vi.mock('../../../src/nest/audit/audit-log.logger', () => ({
+  LOG_LEVEL: 'error',
+  logInfo: vi.fn(),
+  logDebug: vi.fn(),
+  logError: logErrorMock,
+  logWarn: vi.fn(),
 }));
 
 vi.mock('nodemailer', () => ({
@@ -48,7 +61,9 @@ vi.mock('nodemailer', () => ({
 }));
 
 vi.stubGlobal('fetch', fetchMock);
-vi.mock('../../../src/websocket', () => ({ broadcastToUser: broadcastMock }));
+// RealtimeService imports both names from src/websocket, so the mock must
+// export both even though only broadcastToUser is asserted here.
+vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: broadcastMock }));
 vi.mock('../../../src/utils/ssrfGuard', () => ({
   checkSsrf: vi.fn(async () => ({ allowed: true, isPrivate: false, resolvedIp: '1.2.3.4' })),
   createPinnedDispatcher: vi.fn(() => ({})),
@@ -58,8 +73,14 @@ import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin, setAppSetting, setNotificationChannels, disableNotificationPref } from '../../helpers/factories';
-import { send } from '../../../src/services/notificationService';
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
+import { NotificationsService, type NotificationPayload } from '../../../src/nest/notifications/notifications.service';
+import { send as bridgeSend } from '../../../src/nest/notifications/notifications.bridge';
 import { setPluginChannelSource, type ExternalChannel } from '../../../src/services/notifications/channelRegistry';
+
+const notifications = new NotificationsService(new DatabaseService(testDb), new RealtimeService());
+const send = (payload: NotificationPayload) => notifications.send(payload);
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -480,6 +501,7 @@ describe('send() — channel failure resilience', () => {
     expect(sendMailMock).toHaveBeenCalledTimes(1);
     expect(countAllNotifications()).toBe(1);
   });
+
 });
 
 // ── Ntfy dispatch ─────────────────────────────────────────────────────────────
@@ -674,5 +696,37 @@ describe('send() — plugin notification channels', () => {
 
     await send({ event: 'booking_change', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Rome', actor: 'Alice', tripId: '1' } });
     expect(sendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('NSVC-021 — a rejected channel dispatch logs the unwrapped Error message (fix-commit pin)', async () => {
+    const { user } = createUser(testDb);
+    installPluginChannel({ sendToUser: vi.fn().mockRejectedValue(new Error('gotify is down')) });
+    setNotificationChannels(testDb, 'plugin:gotify');
+    logErrorMock.mockClear();
+
+    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Rome', actor: 'Alice', invitee: 'Bob', tripId: '1' } });
+
+    const dispatchLog = logErrorMock.mock.calls.map(([msg]) => String(msg)).find(m => m.includes('channel dispatch failed'));
+    // The legacy per-recipient log interpolated the raw reason ("Error: gotify
+    // is down"); the admin path always unwrapped — now both do.
+    expect(dispatchLog).toContain(': gotify is down');
+    expect(dispatchLog).not.toContain('Error: gotify is down');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bridge delegation (notifications.bridge.ts — outside-container entry point)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('notifications.bridge', () => {
+  it('NSVC-020 — send delegates to the DI service over the shared db proxy', async () => {
+    const { user } = createUser(testDb);
+    setNotificationChannels(testDb, 'none');
+
+    await bridgeSend({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Lisbon', actor: 'Alice', invitee: 'Bob', tripId: '7' } });
+
+    expect(countAllNotifications()).toBe(1);
+    expect(broadcastMock).toHaveBeenCalledTimes(1);
+    expect(getInAppNotifications(user.id)[0].navigate_target).toBe('/trips/7');
   });
 });

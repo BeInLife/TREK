@@ -39,7 +39,7 @@ vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: (
 vi.mock('../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
 vi.mock('../../src/mcp', () => ({ invalidateMcpSessions: vi.fn() }));
 vi.mock('../../src/services/notificationPreferencesService', () => ({ getPreferencesMatrix: vi.fn(() => ({})), setAdminPreferences: vi.fn() }));
-vi.mock('../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../../src/nest/notifications/notifications.bridge', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
 const { adminSvc } = vi.hoisted(() => ({
   adminSvc: { listUsers: vi.fn(), createUser: vi.fn(), updatePlacesPhotos: vi.fn() },

@@ -42,7 +42,7 @@ const permissionsStub = { checkPermission } as unknown as PermissionsService;
 const budget = { createBudgetItem: vi.fn(), updateBudgetItem: vi.fn(), deleteBudgetItem: vi.fn(), linkBudgetItemToReservation: vi.fn() };
 
 const { notif } = vi.hoisted(() => ({ notif: { send: vi.fn().mockResolvedValue(undefined) } }));
-vi.mock('../../../src/services/notificationService', () => notif);
+vi.mock('../../../src/nest/notifications/notifications.bridge', () => notif);
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';

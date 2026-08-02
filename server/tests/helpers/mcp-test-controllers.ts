@@ -22,6 +22,8 @@ import { DaysMcp } from '../../src/nest/days/days.mcp';
 import { DaysService } from '../../src/nest/days/days.service';
 import { MapsMcp } from '../../src/nest/maps/maps.mcp';
 import { MapsService } from '../../src/nest/maps/maps.service';
+import { NotificationsMcp } from '../../src/nest/notifications/notifications.mcp';
+import { NotificationsService } from '../../src/nest/notifications/notifications.service';
 import { PackingMcp } from '../../src/nest/packing/packing.mcp';
 import { PackingService } from '../../src/nest/packing/packing.service';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
@@ -100,6 +102,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService), dbService, authService),
       new TransitMcp(new TransitService(), daysService, reservationsService, dbService, authService),
       new AtlasMcp(new AtlasService(dbService)),
+      new NotificationsMcp(new NotificationsService(dbService, realtimeService), authService),
     ],
     { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess },
   );

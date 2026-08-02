@@ -9,7 +9,7 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { getClientIp } from '../audit/client-ip';
 import { logInfo } from '../audit/audit-log.logger';
 import { AuditService } from '../audit/audit.service';
-import { send as sendNotification } from '../../services/notificationService';
+import { NotificationsService } from '../notifications/notifications.service';
 import type { User } from '../../types';
 
 /** Throw the legacy {error,status} envelope when a service call reports failure. */
@@ -38,6 +38,7 @@ export class AdminController {
     private readonly admin: AdminService,
     private readonly pluginRuntime: PluginRuntimeService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ── Users ──
@@ -353,14 +354,14 @@ export class AdminController {
       throw new NotFoundException();
     }
     try {
-      await sendNotification({
+      await this.notifications.send({
         event: body.event ?? 'trip_reminder',
         actorId: user.id,
         scope: body.scope ?? 'user',
         targetId: body.targetId ?? user.id,
         params: { actor: user.email, ...(body.params ?? {}) },
         inApp: body.inApp,
-      } as unknown as Parameters<typeof sendNotification>[0]);
+      } as unknown as Parameters<NotificationsService['send']>[0]);
       return { success: true };
     } catch (err) {
       throw new HttpException({ error: err instanceof Error ? err.message : String(err) }, 400);

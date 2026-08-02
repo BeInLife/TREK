@@ -495,7 +495,7 @@ export class CollabService {
 
   /** Fire-and-forget collab notification (mirrors the legacy route's dynamic import). */
   notifyCollab(tripId: string, actor: User, preview?: string): void {
-    import('../../services/notificationService').then(({ send }) => {
+    import('../notifications/notifications.bridge').then(({ send }) => {
       const tripInfo = this.db.get<{ title: string }>('SELECT title FROM trips WHERE id = ?', tripId);
       const params: Record<string, string> = { trip: tripInfo?.title || 'Untitled', actor: actor.email, tripId: String(tripId) };
       if (preview !== undefined) params.preview = preview;

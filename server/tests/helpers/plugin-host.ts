@@ -22,6 +22,7 @@ import { TripsService } from '../../src/nest/trips/trips.service';
 import { PlacesService } from '../../src/nest/places/places.service';
 import { CollectionsService } from '../../src/nest/collections/collections.service';
 import { AtlasService } from '../../src/nest/atlas/atlas.service';
+import { NotificationsService } from '../../src/nest/notifications/notifications.service';
 import { MapsService } from '../../src/nest/maps/maps.service';
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 import { AuditService } from '../../src/nest/audit/audit.service';
@@ -72,6 +73,7 @@ export function createHostDepsFactory(dbs: DatabaseService): PluginHostDepsFacto
     places,
     new CollectionsService(dbs, permissions, realtime),
     new AtlasService(dbs),
+    new NotificationsService(dbs, realtime),
   );
 }
 

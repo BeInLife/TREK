@@ -4,13 +4,12 @@ import type { Request } from 'express';
 
 vi.mock('../../../src/nest/audit/client-ip', () => ({ getClientIp: vi.fn(() => '1.2.3.4') }));
 vi.mock('../../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', logInfo: vi.fn(), logDebug: vi.fn(), logError: vi.fn(), logWarn: vi.fn() }));
-vi.mock('../../../src/services/notificationService', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
 import { AdminController } from '../../../src/nest/admin/admin.controller';
 import type { AdminService } from '../../../src/nest/admin/admin.service';
 import type { PluginRuntimeService } from '../../../src/nest/plugins/plugin-runtime.service';
 import type { AuditService } from '../../../src/nest/audit/audit.service';
-import { send as sendNotification } from '../../../src/services/notificationService';
+import type { NotificationsService } from '../../../src/nest/notifications/notifications.service';
 import type { User } from '../../../src/types';
 
 const user = { id: 1, role: 'admin', email: 'admin@example.test' } as User;
@@ -24,8 +23,12 @@ function svc(o: Partial<AdminService> = {}): AdminService {
 // wrapper keeps the historical construction sites positional.
 const writeAudit = vi.fn();
 const audit = { writeAudit } as unknown as AuditService;
+// Notifications are a constructor-injected stub since the notifications fold
+// (same behavior as the old services/notificationService path mock).
+const sendNotification = vi.fn().mockResolvedValue(undefined);
+const notifications = { send: sendNotification } as unknown as NotificationsService;
 const adminCtl = (s: AdminService, rt?: PluginRuntimeService) =>
-  new AdminController(s, rt as unknown as PluginRuntimeService, audit);
+  new AdminController(s, rt as unknown as PluginRuntimeService, audit, notifications);
 function thrown(fn: () => unknown): { status: number; body: unknown } {
   try { fn(); } catch (err) {
     if (err instanceof NotFoundException) return { status: 404, body: err.getResponse() };

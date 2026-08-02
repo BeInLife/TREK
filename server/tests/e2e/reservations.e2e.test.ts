@@ -38,7 +38,7 @@ vi.mock('../../src/db/database', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 const { notificationSend } = vi.hoisted(() => ({ notificationSend: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../../src/services/notificationService', () => ({ send: notificationSend }));
+vi.mock('../../src/nest/notifications/notifications.bridge', () => ({ send: notificationSend }));
 
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 

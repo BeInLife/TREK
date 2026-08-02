@@ -13,7 +13,7 @@ import { resolveAuthToggles } from '../nest/auth/auth.bridge';
 import { avatarUrl } from './avatarUrl';
 import { prepareLlmAddonConfigForWrite, maskLlmAddonConfig } from './llmConfig';
 import { getPhotoProviderConfig } from './memories/helpersService';
-import { send as sendNotification } from './notificationService';
+import { send as sendNotification } from '../nest/notifications/notifications.bridge';
 import { validatePassword } from './passwordPolicy';
 import { getAllPermissions, savePermissions as savePerms, PERMISSION_ACTIONS } from '../nest/permissions/permissions.bridge';
 import { deleteUserCompletely } from './userCleanupService';
