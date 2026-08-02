@@ -1,9 +1,53 @@
 # Legacy `src/services/` dependency graph
 
 Generated from the actual imports in `server/src` on **2026-08-02** (after the
+notificationService fold — the notifications fan-in, step 3 of the
+dependency-honest order, cashed in at last after being deferred through the
+whole step-4 chain: the 354-line `send()` dispatcher and the 371-line
+`inAppNotifications.ts` in-app store folded **together** into the existing
+thin wrapper `nest/notifications/notifications.service.ts`
+(`NotificationsService`) over `DatabaseService` + injected `RealtimeService` —
+the wrapper's in-app delegation became the real SQL (identical statements,
+the three divergent `toUtcIso` treatments, the action-before-CAS respond
+flow), and `send()` arrived with its event-config map, gating and log lines
+verbatim. The notifications *cluster* did NOT fold: the preference matrix,
+the smtp/webhook/ntfy transports, `notifications/{channelRegistry,builtins}`
+(their registry⇄prefs cycle included) and `inAppNotificationActions` stay
+plain infra modules per the classification below — the fold consumes the
+cluster's seams as plain imports, exactly like tripAccess/webauthnConfig
+before them. The bridge tax — the heaviest of any remaining fold — landed as
+ONE file: the 1-export `notifications.bridge.ts` (`send`) serves the
+scheduler's two cron `require()`s, the legacy adminService +
+memories/{unified,synology} senders, and the six deliberately-lazy
+fire-and-forget `import().then(({ send }) => …)` sends inside migrated Nest
+services (collab/collections/packing/reservations/trips/vacay — path-only
+repoints that keep the lazy shape so a send can never block or cycle a
+domain module). In-container static consumers inject instead:
+`AdminController`'s dev test-notification send (AdminModule →
+NotificationsModule) and the plugin RPC host, where
+`sendPluginNotification`'s legacy import became the injected
+`NotificationsService` — the factory's 24th constructor dep, leaving
+weatherService + journeyService as its last legacy domain imports. The
+5-tool legacy registrar `mcp/tools/notifications.ts` and the
+`notifications-in-app` resource moved onto the decorator registry as
+`notifications.mcp.ts` (no `when:` — the domain is core, not addon-gated;
+the `'Notification not found.'` trailing-period divergence from REST's
+`'Not found'` is pinned, not fixed). Tests moved with IDs preserved
+(notificationService.test.ts → nest/notifications.service.test.ts,
+NSVC-001…019/NTFY-SVCB-*/NSVC-PLUG-001…007 + the new NSVC-020 bridge pin;
+inAppNotificationPrefs.test.ts → nest/notifications.inapp-prefs.test.ts,
+INOTIF-*), ~18 suites repointed their path mocks/warm-ups to the bridge
+path, admin.controller.test and the plugin-host factory suite converted
+theirs to constructor stubs, and the module e2e went DI-native (real
+notifications DDL; prefs/transports stay path-mocked). A sibling DTO ratchet
+cleared all five `NotificationsController` allow-list entries —
+`testNtfyRequestSchema` gained `.nullable()` server/token because the client
+sends null to mean "use the saved value" — trading the inline
+`response`-enum and url-type checks for the pipe envelope. **adminService is
+unblocked and heads the frontier.** Earlier the same day, the
 passkeyService fold — the second frontier cash-in of the auth fold and the
-last member of the oidc/passkey pair, while the notifications fan-in stays
-the order's official next step: the 364-line WebAuthn module folded into a
+last member of the oidc/passkey pair:
+the 364-line WebAuthn module folded into a
 **new** `nest/auth/passkey.service.ts` (`PasskeyService`) over
 `DatabaseService` + injected `AuthService` — unlike every prior fold there
 was no wrapper service to fill: the delegation shim was `PasskeyController`
@@ -161,7 +205,7 @@ all three `AtlasController` body-contract allow-list entries
 whitespace-only bucket name keeps its legacy `'Name is required'` trim guard.
 Earlier the same day, the collectionsService fold —
 the biggest single fold yet, taken off the ready
-frontier while the notifications fan-in stays the order's official next step:
+frontier while the notifications fan-in stayed the order's official next step:
 the 1024-line saved-places core (visibility/roles, the collection-scoped
 dedup, saved-places CRUD, copy-to-trip with the ratings filters, labels, the
 fusion invitation state machine) folded into the DI-native `CollectionsService`
@@ -195,7 +239,8 @@ container exists), its sole consumer — the in-container `transit.mcp.ts` — w
 a one-import repoint, and a new 21-case `TRANSIT-ITIN-*` characterization suite
 pins the previously untested superRefine error strings, `??` time fallbacks,
 coordinate tolerances and builder output. The
-notifications fan-in heads the frontier. Before that, the placeService
+notifications fan-in headed the frontier from there (cashed in 2026-08-02,
+above). Before that, the placeService
 migration (2026-07-30): the 1029-line place core (CRUD + ratings SQL,
 the GPX/KML/KMZ importers, the Google/Naver list importers) folded into the
 DI-native `PlacesService`; the pure pieces — the frozen XML parsers, the KMZ
@@ -245,8 +290,9 @@ How to read it:
   `tripAccess` (Wave-2 "don't migrate, delete": absorb into `DatabaseService.canAccessTrip`).
   Edges tagged **(lazy)** are `import()`/`require()` at call time — they never block a
   migration, because a migrated Nest service can keep the same lazy import until the target
-  domain migrates (collab/packing/trips/reservations/vacay all do exactly that for
-  `notificationService`).
+  domain migrates (collab/collections/packing/trips/reservations/vacay all did exactly that
+  for `notificationService`; since its 2026-08 fold those lazy `import()`s point at
+  `nest/notifications/notifications.bridge`, still lazily).
 - **imported by (services/)** — legacy files that would need a **bridge or repoint** when this
   one migrates (a legacy module can't inject).
 - **nest consumers** — in-container consumers: repoint to the injected service
@@ -362,10 +408,20 @@ How to read it:
   `AdminService` injects it for the passkey reset via `exports:
   [PasskeyService]` + an AdminModule→AuthModule import;
   `webauthnConfig`/`stripUserForClient`/`avatarUrl` stay plain helper
-  imports).
+  imports),
+  notifications (the `send()` dispatcher **and** the `inAppNotifications`
+  in-app store folded together into the pre-existing wrapper
+  `NotificationsService` over `DatabaseService` + `RealtimeService`; the
+  preference matrix, transports, channel registry and
+  `inAppNotificationActions` stay plain infra imports; a 1-export
+  `notifications.bridge.ts` (`send`) serves scheduler + legacy
+  adminService/memories + the six lazy fire-and-forget sends in migrated
+  Nest services; `AdminController` and the plugin host (24th factory dep)
+  inject; the 5-tool registrar + in-app resource moved to
+  `notifications.mcp.ts`).
 - **Domain migration targets** (the wave material): adminService, airportService,
   backupService,
-  journeyService, journeyShareService, notificationService, oauthService,
+  journeyService, journeyShareService, oauthService,
   weatherService, wikiService.
 - **Cross-cutting Wave-2 targets:** permissions and auditLog are done (2026-07) — see the
   DI-native list above; only tripAccess remains (delete, don't migrate).
@@ -376,11 +432,13 @@ How to read it:
   already treats it as one — consumed by nest/auth, nest/oidc, nest/trip-invite and the
   plugin host; a candidate to fold into the trip-invite or trips domain some day, but
   nothing blocks on it),
-  inAppNotifications, inAppNotificationActions, notificationPreferencesService, notifications
+  inAppNotificationActions, notificationPreferencesService, notifications
   (+ `notifications/` registry), `memories/` cluster, `airtrail/` cluster. Several of these are
-  themselves candidates to fold *into* a domain service when its domain migrates — and two
-  already have: exchangeRateService → budget (2026-07) and **placeEnrichment → place**
-  (2026-07), the latter also retiring a bridge. The four still reached only from
+  themselves candidates to fold *into* a domain service when its domain migrates — and three
+  already have: exchangeRateService → budget (2026-07), **placeEnrichment → place**
+  (2026-07, the latter also retiring a bridge), and **inAppNotifications → notifications**
+  (2026-08 — the in-app store folded with the dispatcher; the rest of the notifications
+  cluster stayed plain on purpose). The four still reached only from
   `nest/places/*` (kmlImport, placeImage, placePhotoCache, unsplashService) are the
   next obvious fold candidates, but none of them blocks anything.
 
@@ -394,37 +452,48 @@ flowchart TD
   classDef infra fill:#455a64,color:#fff
 
   subgraph frontier["READY FRONTIER (no unmigrated domain deps)"]
+    admin[adminService]:::ready
+    journey[journeyService]:::ready
     weather[weatherService]:::ready
     airport["airportService (boot special case)"]:::ready
     wiki[wikiService]:::ready
     oauth[oauthService]:::ready
   end
 
-  notifSvc[notificationService]:::blocked
-  admin[adminService]:::blocked
-  journey[journeyService]:::blocked
   journeyShare[journeyShareService]:::blocked
   backup["backupService (last by design)"]:::infra
-  notifCluster["notifications cluster<br/>(notifications + prefs + inApp + channelRegistry)"]:::infra
   memories["memories/ cluster"]:::infra
   cleanup[userCleanupService]:::infra
 
-  notifSvc --> notifCluster
-  admin --> notifSvc & cleanup
+  admin --> cleanup
   journey --> memories
   journeyShare --> journey
-  memories --> notifSvc & admin
 ```
 
-(The `authService` node is gone since the 2026-08-01 fold — the Wave-5 chain
+(The `notificationService` node — and the `notifications cluster` infra node
+under it — are gone since the 2026-08-02 fold: the dispatcher + in-app store
+went DI-native, the cluster's only remaining consumers are the DI-native
+`NotificationsService`'s plain imports (infra never blocks), and every legacy
+edge onto the domain became a `nest/notifications/notifications.bridge`
+repoint (adminService, memories/{unified,synology}, the scheduler's two lazy
+`require()`s) or an injection (AdminController, the plugin host's 24th
+factory dep). That cleared `adminService`'s last hard domain import — and,
+unpredicted, the `memories/` cluster's last domain edge with it, so **both
+adminService and journeyService moved into the frontier** (journey's only
+legacy deps are the avatarUrl helper + the now-pure-infra
+memories/photoResolver seam; journeyShareService stays blocked on
+journeyService itself). The lazy sends inside migrated Nest services keep
+their call-time shape, pointed at the bridge.
+The `authService` node is gone since the 2026-08-01 fold — the Wave-5 chain
 opener landed the same day its atlas blocker cleared. The three `--> auth`
 edges (admin/oidc/passkey, all `resolveAuthToggles`-class imports, passkey
 also `generateToken`/`stripUserForClient`/`avatarUrl`) became import-path-only
 repoints onto the 8-export `nest/auth/auth.bridge` (todo-bridge precedent),
 which put **oidcService and passkeyService on the frontier** — their only
 other legacy deps are helpers (apiKeyCrypto/tripMembership,
-webauthnConfig) — while `adminService` stays blocked on its hard
-`notificationService` import alone. The `oidcService` node is gone since the
+webauthnConfig) — while `adminService` stayed blocked on its hard
+`notificationService` import alone (cleared by the 2026-08-02 notifications
+fold above). The `oidcService` node is gone since the
 2026-08-01 fold later the same day — its `auth.bridge` repoint became the
 injected `AuthService` inside the DI-native `OidcService`, its
 apiKeyCrypto/tripMembership edges stay plain helper imports (helpers never
@@ -454,11 +523,15 @@ the one `transit.mcp.ts` import. The `placeService` node is gone since the
 2026-07-30 fold — its legacy imports were
 all helpers, and the former `placeService → mapsService` edge (via `placeEnrichment`)
 died with the helper rather than becoming a repoint.
-`notificationService → notifications cluster` is a hard import — the former
+The former `notificationService → notifications cluster` hard import went
+DI-native with the 2026-08-02 fold (the cluster stays plain infra under
+`NotificationsService`); the even earlier
 `mapsService/transitService/webauthnConfig/
 oauthService → notifications` edges were only `getAppUrl`/`getMcpSafeUrl` and died with the
-Phase 0 move to `src/app-config`, which had put mapsService on the frontier. `memories/` ↔ admin/notificationService edges make the
-journey/memories corner tangle with the admin corner. The former
+Phase 0 move to `src/app-config`, which had put mapsService on the frontier.
+The `memories/ → admin` edge is what still tangles the journey/memories
+corner with the admin corner (its notificationService edge became a bridge
+repoint with the fold). The former
 `auth/collections/backup → permissions` and `notifSvc/oauth → auditLog` edges are gone since the
 2026-07 Wave-2 pair: the permissions consumers repointed to `nest/permissions/permissions.bridge`,
 the writeAudit consumers to `nest/audit/audit.bridge`, and the log*-only consumers to the plain
@@ -472,26 +545,24 @@ never block).)
 
 | service | imports (services/) | imported by (services/) | nest consumers | out-of-container consumers |
 |---|---|---|---|---|
-| `adminService` | apiKeyCrypto, avatarUrl, llmConfig, memories/helpersService, notificationService, passwordPolicy, userCleanupService (+ `permissions.bridge`, `addons.bridge`, `auth.bridge`) | (none) | nest/admin/admin.service.ts, nest/packing/packing.mcp.ts (`deletePackingTemplate`, the `admin-2` residual) | scheduler.ts (lazy) |
+| `adminService` | apiKeyCrypto, avatarUrl, llmConfig, memories/helpersService, passwordPolicy, userCleanupService (+ `permissions.bridge`, `addons.bridge`, `auth.bridge`, `notifications.bridge`) | (none) | nest/admin/admin.service.ts, nest/packing/packing.mcp.ts (`deletePackingTemplate`, the `admin-2` residual) | scheduler.ts (lazy) |
 | `airportService` | (none) | (none) | nest/airports/airports.service.ts, nest/booking-import/kitinerary-mapper.ts | db/database.ts (lazy boot backfill), mcp/tools/mapsWeather.ts, mcp/tools/transports.ts |
 | `apiKeyCrypto` | (none) | adminService, airtrail/airtrailService, llmConfig, memories/helpersService, memories/immichService, memories/photoResolverService, memories/synologyService, memories/unifiedService, notifications, unsplashService | nest/auth/auth.helpers.ts, nest/auth/auth.service.ts, nest/maps/maps.service.ts, nest/oidc/oidc.service.ts, nest/plugins/plugin-oauth.service.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/settings/settings.service.ts | db/migrations.ts |
-| `avatarUrl` | (none) | adminService, inAppNotifications, journeyService | nest/auth/auth.bridge.ts, nest/auth/auth.service.ts, nest/auth/passkey.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/files/files.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | (none) |
+| `avatarUrl` | (none) | adminService, journeyService | nest/auth/auth.bridge.ts, nest/auth/auth.service.ts, nest/auth/passkey.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/files/files.service.ts, nest/notifications/notifications.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | (none) |
 | `backupService` | (none — `permissions.bridge`, plugin backup/paths infra only) | (none) | nest/backup/backup.controller.ts, nest/backup/backup.service.ts | scheduler.ts (lazy) |
 | `conflictResult` | (none) | (none) | nest/packing/packing.controller.ts, nest/packing/packing.service.ts, nest/places/places.controller.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | (none) |
 | `cookie` | (none) | (none) | nest/auth/auth-public.controller.ts, nest/auth/auth.service.ts, nest/auth/passkey.controller.ts, nest/oidc/oidc.controller.ts, nest/oidc/oidc.service.ts | (none) |
 | `demo` | (none) | (none) | nest/auth/auth.controller.ts, nest/auth/auth.service.ts, nest/collections/collections.controller.ts, nest/files/files.controller.ts, nest/places/places.controller.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/trips/trips.controller.ts | middleware/auth.ts, middleware/mfaPolicy.ts |
 | `distanceService` | (none) | (none) | nest/auth/auth.service.ts, nest/transit/transit-itinerary.helpers.ts | (none) |
 | `ephemeralTokens` | (none) | (none) | nest/auth/auth.service.ts, nest/files/files.service.ts | index.ts, websocket.ts |
-| `inAppNotificationActions` | (none) | inAppNotifications | (none) | (none) |
-| `inAppNotifications` | avatarUrl, inAppNotificationActions, notificationPreferencesService | notificationService | nest/notifications/notifications.service.ts | mcp/resources.ts, mcp/tools/notifications.ts |
+| `inAppNotificationActions` | (none) | (none) | nest/notifications/notifications.service.ts | (none) |
 | `journeyService` | avatarUrl, memories/photoResolverService | journeyShareService | nest/assignments/assignments.service.ts, nest/journey/journey.service.ts, nest/places/places.mcp.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/plugins/journal-entry-rows.controller.ts | mcp/resources.ts, mcp/tools/journey.ts |
 | `journeyShareService` | journeyService | (none) | nest/journey/journey.service.ts | mcp/tools/journey.ts |
 | `kmlImport` | (none) | (none) | nest/places/places.helpers.ts, nest/places/places.service.ts | (none) |
 | `llmConfig` | apiKeyCrypto | adminService | nest/llm-parse/llm-client.factory.ts, nest/llm-parse/llm-config.resolver.ts | (none) |
 | `mfaCrypto` | (none) | (none) | nest/auth/auth.service.ts | (none) |
-| `notificationPreferencesService` | notifications, notifications/builtins, notifications/channelRegistry | inAppNotifications, notificationService, notifications, notifications/channelRegistry | nest/admin/admin.service.ts, nest/notifications/notifications.service.ts, nest/plugins/install/manifest.ts | (none) |
-| `notifications` | apiKeyCrypto, notificationPreferencesService (+ `audit-log.logger`) | notificationPreferencesService, notificationService, notifications/builtins | nest/auth/auth.service.ts, nest/notifications/notifications.service.ts | (none) |
-| `notificationService` | inAppNotifications, notificationPreferencesService, notifications, notifications/channelRegistry (+ `audit-log.logger`) | adminService, memories/synologyService, memories/unifiedService | nest/admin/admin.controller.ts, nest/collab/collab.service.ts, nest/collections/collections.service.ts (lazy), nest/packing/packing.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts, nest/vacay/vacay.service.ts | scheduler.ts (lazy) |
+| `notificationPreferencesService` | notifications, notifications/builtins, notifications/channelRegistry | notifications, notifications/channelRegistry | nest/admin/admin.service.ts, nest/notifications/notifications.service.ts, nest/plugins/install/manifest.ts | (none) |
+| `notifications` | apiKeyCrypto, notificationPreferencesService (+ `audit-log.logger`) | notificationPreferencesService, notifications/builtins | nest/auth/auth.service.ts, nest/notifications/notifications.service.ts | (none) |
 | `oauthService` | (none — `addons.bridge` + `audit.bridge` only) | (none) | nest/oauth/oauth-api.controller.ts, nest/oauth/oauth.service.ts | mcp/index.ts, mcp/oauthProvider.ts |
 | `passwordPolicy` | (none) | adminService | nest/auth/auth.service.ts | (none) |
 | `placeImage` | (none) | (none) | nest/collections/collections.controller.ts, nest/collections/collections.service.ts, nest/common/place-image-upload.ts, nest/places/places.controller.ts, nest/places/places.service.ts | (none) |
@@ -510,14 +581,18 @@ never block).)
 
 - **`notifications/`**: `channelRegistry` ⇄ `notificationPreferencesService` (cycle),
   `builtins → notifications + channelRegistry`, and `notificationPreferencesService →
-  builtins` (registering the built-in channels closes a second loop). Migrates as one unit
-  with `notifications.ts`/`notificationService`.
+  builtins` (registering the built-in channels closes a second loop). **Stayed plain infra
+  through the 2026-08 notifications fold** — the DI-native `NotificationsService` consumes
+  the cluster via plain imports (the cycles never blocked the fold), and only
+  `inAppNotifications` folded into the service.
 - **`memories/`**: `helpersService` (base) ← immich/synology/unified/photoResolver;
   `photoResolverService` is the seam `journeyService` consumes (it also pulls
   immich/synology/thumbnail/`trekPhotoCache` — the latter is swept by `scheduler.ts`);
-  `synology/unified → notificationService` couples this
-  cluster to the admin corner (`thumbnailService`'s adminService edge was only
-  `isAddonEnabled` — now `addons.bridge`); `immichService` writes audits via `nest/audit/audit.bridge`.
+  `synology/unified` send via `nest/notifications/notifications.bridge` since the 2026-08
+  fold — that was the cluster's **last legacy-domain edge** (`thumbnailService`'s
+  adminService edge was only `isAddonEnabled` — `addons.bridge` since Phase 0), so the
+  cluster is pure infra now and no longer blocks the journey corner; `immichService`
+  writes audits via `nest/audit/audit.bridge`.
 - **`airtrail/`**: `airtrailClient` (base) ← mapper ← service ← import/sync; `import`/`sync`
   consume (since the 2026-07 reservations fold) the
   `nest/reservations/reservations.bridge` instead of the deleted `reservationService`
@@ -530,33 +605,25 @@ never block).)
 
 **Ready frontier** (all legacy deps are helpers, `tripAccess`, or lazy sends):
 
-With step 4 closed by the 2026-08 transit-itinerary relocation, the pick is no
-longer on this table: the dependency-honest order's next step is the
-**notifications cluster → `notificationService`** fan-in (step 3, deferred
-while step 4 ran) — it must precede its admin/memories dependents. The
-frontier candidates below can still go any time:
+With the notifications fan-in cashed in on 2026-08-02 (step 3, the last
+deferred step), the dependency-honest order's next step is **adminService** —
+now on the frontier with the heaviest surface left (14 Nest + 11 MCP
+consumers, the `admin-2` residual, the two `AdminController.*` notification
+allow-list entries). The frontier candidates:
 
 | Candidate | Why now / why not | Bridge tax (legacy dependents + out-of-container) |
 |---|---|---|
+| **adminService** | Unblocked by the 2026-08-02 notifications fold — its last hard domain import (`send`) became a `notifications.bridge` repoint; remaining legacy deps are all helpers (+ the four bridges). The order's official next step | `scheduler.ts` (lazy require), `systemNotices/conditions.ts` |
+| **journeyService** | Unblocked the same day, unpredicted: the memories cluster's last domain edge (`synology/unified → notificationService`) became a bridge repoint, leaving journey's deps pure infra (avatarUrl + memories/photoResolver). Coherence still says memories/journey land after admin | `mcp/resources.ts`, `mcp/tools/journey.ts`, `journeyShareService` |
 | **oauthService** | Dependency-free since the Phase 0 addons extraction (adminService edge was only `isAddonEnabled` → `addons.bridge`) — but the coherence order keeps it after admin so the `mcp/oauthProvider.ts` merge (`mcp-2`) lands with it. Its former table-mate **passkeyService cashed in on 2026-08-02** — the predicted "none (a leaf)" bridge tax held exactly | `mcp/index.ts`, `mcp/oauthProvider.ts` |
 | **weatherService / wikiService / airportService** | Independent leaves; airport has the `db/database.ts` boot lazy-require special case | little / none |
 
 **Blocked, and by what (shortest unblock path):**
 
-- `notificationService` ← notifications cluster (its auditLog edge is now the plain
-  `audit-log.logger` import — gone as a blocker since the 2026-07 Wave-2 pair).
-- `adminService` corner: `authService` is DONE (2026-08 — the fold repointed
-  adminService's `resolveAuthToggles` import to `auth.bridge`), so adminService is
-  blocked by its hard `notificationService` import alone (userCleanupService is a
-  helper — never blocks). `oauthService` is dependency-free since the
-  Phase 0 addons extraction (its adminService edge was only `isAddonEnabled`, now
-  `addons.bridge`), but the coherence order stays auth → admin → oauth so the
-  `mcp/oauthProvider.ts` merge (`mcp-2`) lands after admin (permissions done
-  2026-07; atlas + auth + oidc + passkey done 2026-08).
-- `journeyService` ← `memories/` cluster (which itself touches admin + notificationService) →
-  `journeyShareService` after. Note the place fold added two more in-container
-  journeyService consumers (`places.service.ts`'s hooks and `places.mcp.ts`'s
-  skeleton reconcile), so this migration's repoint list grew by two.
+- `journeyShareService` ← `journeyService` (the only remaining domain-on-domain
+  block). Note the place fold added two more in-container journeyService
+  consumers (`places.service.ts`'s hooks and `places.mcp.ts`'s skeleton
+  reconcile), so that migration's repoint list grew by two.
 - `backupService`: unblocked since the permissions fold (its edge is a
   `permissions.bridge` repoint now) but stays last by design (owns the
   closeDb/reinitialize lifecycle and the plugin backup/paths infra).
@@ -573,7 +640,16 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
 2. `tripService` (done 2026-07 — the hub folded into `TripsService`; the trips/share MCP
    surfaces moved to the decorator registry, the plugin host injects it, and the
    todo/share/collab/vacay bridges died with their last consumers)
-3. notifications cluster → `notificationService`
+3. notifications cluster → `notificationService` (done 2026-08-02 — deferred
+   while steps 4–5 ran, then landed as one fold: the `send()` dispatcher +
+   `inAppNotifications` store into the wrapper `NotificationsService` over
+   DatabaseService + RealtimeService, the cluster deliberately staying plain
+   infra; the 1-export `notifications.bridge.ts` covers scheduler +
+   adminService + memories + the six lazy Nest sends, AdminController and the
+   plugin host (24th factory dep) inject, the 5-tool registrar + in-app
+   resource moved to `notifications.mcp.ts`, and the DTO ratchet cleared all
+   five `NotificationsController` allow-list entries — **adminService and,
+   unpredicted, journeyService joined the frontier**)
 4. `mapsService` (done 2026-07 — the geo core folded into `MapsService`, geo MCP
    tools onto the decorator registry, BookingImportService injects it, and a
    3-export `maps.bridge` covered placeEnrichment + the places registrar)
@@ -810,6 +886,72 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   `{ password }` body and the un-transactioned check→INSERT in registerVerify — see
   "Quirks fixed after the passkey fold" below; the rest (cross-user challenge burn,
   counter-0 clone exemption, unthrottled register/verify) are deliberate and stay.
+
+- (2026-08-02 regeneration, post notifications fold) The heaviest bridge-tax row on the
+  table resolved to **one bridge file with one export**: the registrar was a port as
+  always (5 tools + the in-app resource onto `notifications.mcp.ts`), the plugin host
+  was an injection, AdminController was an injection, and everything else — scheduler's
+  two `require()`s, legacy adminService/memories, and the six lazy Nest sends — shares
+  the single `send` re-export. Four shapes worth naming: (a) this is the first fold to
+  deliberately leave **in-container** consumers on a bridge — the six fire-and-forget
+  `import().then(({ send }) => …)` sends keep their call-time shape (path-only
+  repoints) so a notification can never block or cycle a domain module; the how-to-read
+  note's "lazy edges never block" rule now has a post-fold continuation clause. (b) The
+  fold consumed a whole infra cluster *without folding it* — prefs/transports/
+  channelRegistry (cycles and all) stay plain modules under the DI service, validating
+  the "helpers stay plain" classification at fan-in scale — while `inAppNotifications`
+  crossed the line the other way (the third helper to fold into its domain). (c) The
+  unblock cascade over-delivered: the graph predicted adminService; it did not predict
+  that repointing memories/{unified,synology} would erase the **memories cluster's**
+  last domain edge and put journeyService on the frontier in the same stroke. (d) Two
+  test-infrastructure risks the graph had never priced: the ~8 suites that warm the
+  lazy import in `beforeAll` (`await import('…/notificationService')`) are hard-coupled
+  to the module *path*, and the module e2e's DI conversion forced explicit
+  `DatabaseModule`/`RealtimeModule` imports the moment the wrapper gained constructor
+  deps — both now standing items for any fold with lazy consumers or a dep-free
+  wrapper. The trailing `fix(server)` commit then cleared the verified defects the
+  relocation had faithfully carried — see "Quirks fixed after the notifications fold"
+  below.
+
+## Quirks fixed after the notifications fold (the trailing `fix(server)` commit)
+
+The relocation itself was byte-identical; these were then fixed on top, each with a
+regression pin, so the parity diff and the behaviour change stayed in separate commits:
+
+1. **`toUtcIso` applied on only one of three `created_at` paths** — the #1149 fix
+   normalized `createNotificationForRecipient`'s broadcast, but `createNotification`'s
+   broadcast and `respond`'s post-update re-select/broadcast still emitted the raw
+   SQLite `YYYY-MM-DD HH:MM:SS` string, which `new Date(...)` parses as LOCAL time on
+   the client. All three paths now normalize (INOTIF-013, INOTIF-014).
+2. **`respond` ran the action handler BEFORE the response CAS** — a concurrent
+   double-submit passed the `response IS NULL` pre-check twice and executed the action
+   twice, with the loser still told `'Already responded'`. The CAS now claims the
+   response first; a handler failure releases the claim (response back to NULL,
+   `is_read` restored) so the legacy retry contract holds (INOTIF-011, INOTIF-012).
+3. **`synologyService`'s `synology_session_cleared` send was unawaited with no
+   `.catch()`** — the only fire-and-forget send in the repo without one; an in-app
+   insert failure became an unhandled rejection. It now carries the
+   `.catch(() => {})` its `unifiedService` sibling always had.
+4. **Per-recipient dispatch-failure log interpolated the raw rejection** — logging
+   `Error: gotify is down` where the admin-global path always unwrapped to the
+   message; both paths unwrap now (NSVC-021).
+5. **MCP resource description drift** — `notifications-in-app` claimed "most recent
+   50, unread first" but the query orders by `created_at DESC` only; the description
+   dropped the unread-first claim (the query is untouched — changing the order would
+   be a behaviour change, not a doc fix).
+
+**Quirks deliberately preserved** (parity, not oversights): `actorId: 0` is coerced to
+"no actor" by the truthiness check (no real user has id 0); the `limit` defaulting
+divergence across layers (REST `parseInt(...) || 20` vs service `?? 20` vs MCP zod
+default — `limit=0` means 20 over REST and errors on MCP's `positive()`); the
+error-string divergence REST `'Not found'` (404) vs MCP `'Notification not found.'`
+(trailing period) vs service `'Notification not found'`, and respond failures always
+answering 400 (never 404, even for a missing notification); `resolveRecipients` user
+scope returning `[target]` for a nonexistent user (the FK on the insert rejects it
+downstream into the per-recipient `allSettled`/log path — noisy, not incorrect) and
+the trip owner joining recipients without a guest check (guests cannot own trips, so
+the members-only `COALESCE(is_guest,0)=0` filter is the reachable chokepoint); and
+the dev-only unknown-event notification carrying no `title_params`/`event_type`.
 
 ## Quirks fixed after the passkey fold (the trailing `fix(server)` commit)
 
