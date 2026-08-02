@@ -271,7 +271,7 @@ function startVersionCheck(): void {
   const tz = readEnv().app.tz || 'UTC';
   versionCheckTask = cron.schedule('0 9 * * *', async () => {
     try {
-      const { checkAndNotifyVersion } = require('./services/adminService');
+      const { checkAndNotifyVersion } = require('./nest/admin/admin.bridge');
       await checkAndNotifyVersion();
     } catch (err: unknown) {
       logError(`Version check: ${err instanceof Error ? err.message : err}`);

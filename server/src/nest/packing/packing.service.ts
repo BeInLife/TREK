@@ -588,6 +588,127 @@ export class PackingService {
     });
   }
 
+  // ── Admin Template CRUD ────────────────────────────────────────────────────
+  // Relocated byte-identically from services/adminService.ts with the 2026-08
+  // admin fold. These back the admin-only /api/admin/packing-templates routes
+  // (AdminService delegates here) and the delete_packing_template MCP tool.
+  // They live in this service because it already owns all three template
+  // tables — saveAsTemplate above writes packing_templates,
+  // packing_template_categories and packing_template_items. Note the
+  // deliberate name split: listTemplates() above is the trip-member read;
+  // listPackingTemplates() below is the richer admin listing.
+  // Legacy quirks preserved on purpose: the `data.name?.trim()` truthiness
+  // guards (a blank name is a silent no-op, not a 400), the post-insert
+  // re-selects instead of RETURNING, `(max ?? -1) + 1` sort ordering, the
+  // exact error strings. The item routes originally ignored their :templateId
+  // path param entirely; since the 2026-08 quirk fix they scope through
+  // packing_template_categories like the sibling category routes do.
+
+  /** An item looked up through its category, so :templateId actually scopes it. */
+  private scopedTemplateItem(templateId: string, itemId: string) {
+    return this.db.get(`
+    SELECT ti.* FROM packing_template_items ti
+    JOIN packing_template_categories tc ON ti.category_id = tc.id
+    WHERE ti.id = ? AND tc.template_id = ?
+  `, itemId, templateId);
+  }
+
+  listPackingTemplates() {
+    return this.db.all(`
+    SELECT pt.*, u.username as created_by_name,
+      (SELECT COUNT(*) FROM packing_template_items ti JOIN packing_template_categories tc ON ti.category_id = tc.id WHERE tc.template_id = pt.id) as item_count,
+      (SELECT COUNT(*) FROM packing_template_categories WHERE template_id = pt.id) as category_count
+    FROM packing_templates pt
+    JOIN users u ON pt.created_by = u.id
+    ORDER BY pt.created_at DESC
+  `);
+  }
+
+  getPackingTemplate(id: string) {
+    const template = this.db.get('SELECT * FROM packing_templates WHERE id = ?', id);
+    if (!template) return { error: 'Template not found', status: 404 };
+    const categories = this.db.all('SELECT * FROM packing_template_categories WHERE template_id = ? ORDER BY sort_order, id', id);
+    const items = this.db.all(`
+    SELECT ti.* FROM packing_template_items ti
+    JOIN packing_template_categories tc ON ti.category_id = tc.id
+    WHERE tc.template_id = ? ORDER BY ti.sort_order, ti.id
+  `, id);
+    return { template, categories, items };
+  }
+
+  createPackingTemplate(name: string, createdBy: number) {
+    if (!name?.trim()) return { error: 'Name is required', status: 400 };
+    const result = this.db.run('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)', name.trim(), createdBy);
+    const template = this.db.get('SELECT * FROM packing_templates WHERE id = ?', result.lastInsertRowid);
+    return { template };
+  }
+
+  updatePackingTemplate(id: string, data: { name?: string }) {
+    const template = this.db.get('SELECT * FROM packing_templates WHERE id = ?', id);
+    if (!template) return { error: 'Template not found', status: 404 };
+    if (data.name?.trim()) this.db.run('UPDATE packing_templates SET name = ? WHERE id = ?', data.name.trim(), id);
+    return { template: this.db.get('SELECT * FROM packing_templates WHERE id = ?', id) };
+  }
+
+  deletePackingTemplate(id: string) {
+    const template = this.db.get<{ name?: string }>('SELECT * FROM packing_templates WHERE id = ?', id);
+    if (!template) return { error: 'Template not found', status: 404 };
+    this.db.run('DELETE FROM packing_templates WHERE id = ?', id);
+    return { name: template.name };
+  }
+
+  // Template categories
+
+  createTemplateCategory(templateId: string, name: string) {
+    if (!name?.trim()) return { error: 'Category name is required', status: 400 };
+    const template = this.db.get('SELECT * FROM packing_templates WHERE id = ?', templateId);
+    if (!template) return { error: 'Template not found', status: 404 };
+    const maxOrder = this.db.get<{ max: number | null }>('SELECT MAX(sort_order) as max FROM packing_template_categories WHERE template_id = ?', templateId)!;
+    const result = this.db.run('INSERT INTO packing_template_categories (template_id, name, sort_order) VALUES (?, ?, ?)', templateId, name.trim(), (maxOrder.max ?? -1) + 1);
+    return { category: this.db.get('SELECT * FROM packing_template_categories WHERE id = ?', result.lastInsertRowid) };
+  }
+
+  updateTemplateCategory(templateId: string, catId: string, data: { name?: string }) {
+    const cat = this.db.get('SELECT * FROM packing_template_categories WHERE id = ? AND template_id = ?', catId, templateId);
+    if (!cat) return { error: 'Category not found', status: 404 };
+    if (data.name?.trim())
+      this.db.run('UPDATE packing_template_categories SET name = ? WHERE id = ?', data.name.trim(), catId);
+    return { category: this.db.get('SELECT * FROM packing_template_categories WHERE id = ?', catId) };
+  }
+
+  deleteTemplateCategory(templateId: string, catId: string) {
+    const cat = this.db.get('SELECT * FROM packing_template_categories WHERE id = ? AND template_id = ?', catId, templateId);
+    if (!cat) return { error: 'Category not found', status: 404 };
+    this.db.run('DELETE FROM packing_template_categories WHERE id = ?', catId);
+    return {};
+  }
+
+  // Template items
+
+  createTemplateItem(templateId: string, catId: string, name: string) {
+    if (!name?.trim()) return { error: 'Item name is required', status: 400 };
+    const cat = this.db.get('SELECT * FROM packing_template_categories WHERE id = ? AND template_id = ?', catId, templateId);
+    if (!cat) return { error: 'Category not found', status: 404 };
+    const maxOrder = this.db.get<{ max: number | null }>('SELECT MAX(sort_order) as max FROM packing_template_items WHERE category_id = ?', catId)!;
+    const result = this.db.run('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)', catId, name.trim(), (maxOrder.max ?? -1) + 1);
+    return { item: this.db.get('SELECT * FROM packing_template_items WHERE id = ?', result.lastInsertRowid) };
+  }
+
+  updateTemplateItem(templateId: string, itemId: string, data: { name?: string }) {
+    const item = this.scopedTemplateItem(templateId, itemId);
+    if (!item) return { error: 'Item not found', status: 404 };
+    if (data.name?.trim())
+      this.db.run('UPDATE packing_template_items SET name = ? WHERE id = ?', data.name.trim(), itemId);
+    return { item: this.db.get('SELECT * FROM packing_template_items WHERE id = ?', itemId) };
+  }
+
+  deleteTemplateItem(templateId: string, itemId: string) {
+    const item = this.scopedTemplateItem(templateId, itemId);
+    if (!item) return { error: 'Item not found', status: 404 };
+    this.db.run('DELETE FROM packing_template_items WHERE id = ?', itemId);
+    return {};
+  }
+
   /** Fire-and-forget tag notification, mirroring the legacy dynamic import. */
   notifyTagged(tripId: string, actor: User, category: string, userIds: unknown): void {
     if (!Array.isArray(userIds) || userIds.length === 0) return;

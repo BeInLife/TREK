@@ -7,7 +7,6 @@ import {
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { isAddonEnabled } from '../addons/addons.bridge';
-import { deletePackingTemplate } from '../../services/adminService';
 import { ADDON_IDS } from '../../addons';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied, isAdminUser, adminRequired } from '../../mcp/tools/_shared';
 import { PackingService } from './packing.service';
@@ -371,7 +370,7 @@ export class PackingMcp {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     // Templates are global; the REST route restricts management to admins. Match it.
     if (!isAdminUser(ctx.userId)) return adminRequired();
-    const result = deletePackingTemplate(String(templateId));
+    const result = this.packing.deletePackingTemplate(String(templateId));
     if ('error' in result) return errorResult(result.error);
     return ok({ success: true, name: result.name });
   }

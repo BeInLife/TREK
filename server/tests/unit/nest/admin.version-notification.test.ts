@@ -1,10 +1,14 @@
 /**
- * Unit tests for checkAndNotifyVersion() in adminService.
- * Covers VNOTIF-001 to VNOTIF-007.
+ * Unit tests for AdminService.checkAndNotifyVersion() — VNOTIF-001 to
+ * VNOTIF-007, moved from tests/unit/services/versionNotification.test.ts with
+ * the 2026-08 admin fold, IDs preserved. Kept separate from admin.service.test.ts
+ * because it stubs global fetch and drives the module-scoped version cache per
+ * case, which would leak into the ADMIN-SVC-* suite. The notification path runs
+ * for real against the temp db's notifications table.
  */
 import { runMigrations } from '../../../src/db/migrations';
 import { createTables } from '../../../src/db/schema';
-import { checkAndNotifyVersion, __clearVersionCacheForTests } from '../../../src/services/adminService';
+import { __clearVersionCacheForTests } from '../../../src/nest/admin/admin.helpers';
 import { createAdmin } from '../../helpers/factories';
 import { resetTestDb } from '../../helpers/test-db';
 
@@ -34,7 +38,36 @@ vi.mock('../../../src/config', () => ({
 }));
 vi.mock('../../../src/websocket', () => ({ broadcastToUser: vi.fn() }));
 // Mock MCP to avoid session side-effects
-vi.mock('../../../src/mcp', () => ({ revokeUserSessions: vi.fn() }));
+vi.mock('../../../src/mcp', () => ({ revokeUserSessions: vi.fn(), invalidateMcpSessions: vi.fn() }));
+vi.mock('../../../src/mcp/sessionManager', () => ({ revokeUserSessions: vi.fn(), revokeUserSessionsForClient: vi.fn() }));
+
+import { DatabaseService } from '../../../src/nest/database/database.service';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
+import { AddonsService } from '../../../src/nest/addons/addons.service';
+import { SettingsService } from '../../../src/nest/settings/settings.service';
+import { AtlasService } from '../../../src/nest/atlas/atlas.service';
+import { AuthService } from '../../../src/nest/auth/auth.service';
+import { PasskeyService } from '../../../src/nest/auth/passkey.service';
+import { PackingService } from '../../../src/nest/packing/packing.service';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
+import { NotificationsService } from '../../../src/nest/notifications/notifications.service';
+import { AdminService } from '../../../src/nest/admin/admin.service';
+
+const dbs = new DatabaseService(testDb);
+const realtime = new RealtimeService();
+const permissions = new PermissionsService(dbs);
+const auth = new AuthService(dbs, permissions, new AtlasService(dbs));
+const svc = new AdminService(
+  dbs,
+  new SettingsService(dbs),
+  new AddonsService(dbs),
+  new PasskeyService(dbs, auth),
+  new PackingService(dbs, permissions, realtime),
+  auth,
+  permissions,
+  new NotificationsService(dbs, realtime),
+);
+const checkAndNotifyVersion = () => svc.checkAndNotifyVersion();
 
 // Helper: mock the GitHub releases/latest endpoint
 function mockGitHubLatest(tagName: string, ok = true): void {
@@ -42,6 +75,8 @@ function mockGitHubLatest(tagName: string, ok = true): void {
     'fetch',
     vi.fn().mockResolvedValue({
       ok,
+      // fetchGithub reads text() and parses it itself (size cap), so stub both.
+      text: async () => JSON.stringify({ tag_name: tagName, html_url: `https://github.com/liketrek/TREK/releases/tag/${tagName}` }),
       json: async () => ({ tag_name: tagName, html_url: `https://github.com/liketrek/TREK/releases/tag/${tagName}` }),
     }),
   );

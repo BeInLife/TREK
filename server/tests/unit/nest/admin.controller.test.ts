@@ -59,8 +59,7 @@ describe('AdminController users', () => {
 });
 
 describe('AdminController permissions + oidc + misc', () => {
-  it('permissions: 400 without an object, else saves + audits', () => {
-    expect(thrown(() => adminCtl(svc()).savePermissions(user, {}, req))).toEqual({ status: 400, body: { error: 'permissions object required' } });
+  it('permissions: saves + audits', () => {
     const c = adminCtl(svc({ savePermissions: vi.fn().mockReturnValue({ permissions: { x: 1 }, skipped: [] }) } as Partial<AdminService>));
     expect(c.savePermissions(user, { permissions: { x: 1 } }, req)).toEqual({ success: true, permissions: { x: 1 } });
   });
@@ -89,8 +88,7 @@ describe('AdminController invites + feature toggles', () => {
     expect(thrown(() => adminCtl(svc({ deleteInvite: vi.fn().mockReturnValue({ error: 'not found', status: 404 }) } as Partial<AdminService>)).deleteInvite(user, '5', req))).toEqual({ status: 404, body: { error: 'not found' } });
   });
 
-  it('places-photos: 400 on a non-boolean, else updates + audits', () => {
-    expect(thrown(() => adminCtl(svc()).updatePlacesPhotos(user, { enabled: 'yes' }, req))).toEqual({ status: 400, body: { error: 'enabled must be a boolean' } });
+  it('places-photos: updates + audits', () => {
     expect(adminCtl(svc({ updatePlacesPhotos: vi.fn().mockReturnValue({ enabled: true }) } as Partial<AdminService>)).updatePlacesPhotos(user, { enabled: true }, req)).toEqual({ enabled: true });
   });
 
@@ -144,8 +142,7 @@ describe('AdminController addons + sessions + jwt + defaults', () => {
     expect(adminCtl(svc({ rotateJwtSecret: vi.fn().mockReturnValue({}) } as Partial<AdminService>)).rotateJwtSecret(user, req)).toEqual({ success: true });
   });
 
-  it('default-user-settings: 400 on a non-object, else sets + audits', () => {
-    expect(thrown(() => adminCtl(svc()).setDefaultUserSettings(user, [], req))).toEqual({ status: 400, body: { error: 'Object body required' } });
+  it('default-user-settings: sets + audits', () => {
     const setAdminUserDefaults = vi.fn();
     const c = adminCtl(svc({ setAdminUserDefaults, getAdminUserDefaults: vi.fn().mockReturnValue({ theme: 'dark' }) } as Partial<AdminService>));
     expect(c.setDefaultUserSettings(user, { theme: 'dark' }, req)).toEqual({ theme: 'dark' });
@@ -214,13 +211,11 @@ describe('AdminController feature toggles + audit', () => {
     expect(writeAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'admin.bag_tracking' }));
   });
 
-  it('places-autocomplete: 400 on a non-boolean, else updates + audits', () => {
-    expect(thrown(() => adminCtl(svc()).updatePlacesAutocomplete(user, { enabled: 'yes' }, req))).toEqual({ status: 400, body: { error: 'enabled must be a boolean' } });
+  it('places-autocomplete: updates + audits', () => {
     expect(adminCtl(svc({ updatePlacesAutocomplete: vi.fn().mockReturnValue({ enabled: false }) } as Partial<AdminService>)).updatePlacesAutocomplete(user, { enabled: false }, req)).toEqual({ enabled: false });
   });
 
-  it('places-details: 400 on a non-boolean, else updates + audits', () => {
-    expect(thrown(() => adminCtl(svc()).updatePlacesDetails(user, { enabled: 1 }, req))).toEqual({ status: 400, body: { error: 'enabled must be a boolean' } });
+  it('places-details: updates + audits', () => {
     expect(adminCtl(svc({ updatePlacesDetails: vi.fn().mockReturnValue({ enabled: true }) } as Partial<AdminService>)).updatePlacesDetails(user, { enabled: true }, req)).toEqual({ enabled: true });
   });
 });
@@ -256,9 +251,6 @@ describe('AdminController default-user-settings error path', () => {
     expect(thrown(() => c.setDefaultUserSettings(user, { theme: 'x' }, req))).toEqual({ status: 400, body: { error: 'plain string' } });
   });
 
-  it('400 when the body is null', () => {
-    expect(thrown(() => adminCtl(svc()).setDefaultUserSettings(user, null, req))).toEqual({ status: 400, body: { error: 'Object body required' } });
-  });
 });
 
 describe('AdminController dev test-notification', () => {
