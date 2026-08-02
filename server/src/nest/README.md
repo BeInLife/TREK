@@ -29,8 +29,8 @@ mount to Nest and leaves the sibling trip routes (days, places, ...) on Express.
 - **DI-native services (legacy `src/services/*` deleted):** tags, categories,
   todo, packing, day-notes, trip-invite, assignments, share, settings, files,
   collab, vacay, reservations, day, permissions, audit, budget, trip, maps,
-  transit, place, transit-itinerary, collections, atlas, auth, oidc — see the
-  migration recipe below.
+  transit, place, transit-itinerary, collections, atlas, auth, oidc, passkey —
+  see the migration recipe below.
 
 ## Cross-cutting Foundation pieces
 
@@ -367,7 +367,7 @@ import AuthModule) — except `atlas.mcp.ts`, which keeps a bridge import
 because AuthService injects AtlasService and the reverse module edge would
 close a cycle (places.mcp precedent). The 8-export `auth.bridge.ts` serves
 `mcp/index.ts` token verification, the three legacy tool registrars'
-`isDemoUser`, and the un-migrated adminService/passkeyService.
+`isDemoUser`, and the un-migrated adminService.
 Tests moved with IDs preserved: authService.test.ts → auth.helpers.test.ts,
 authServiceDb.test.ts → auth.service.test.ts (+ AUTH-BR-001…007 bridge
 delegation); auth.e2e converted DI-native — the 30-method whole-module mock
@@ -394,6 +394,27 @@ cases); oidc.e2e swapped its whole-module path mock for
 `vi.spyOn(app.get(OidcService), …)` instance spies; the integration suite
 spies the four HTTP methods on the container instance while driving the real
 state maps on that same instance.)
+passkeyService followed (the last frontier member of the auth stack: the
+364-line WebAuthn module folded into a new `nest/auth/passkey.service.ts`
+`PasskeyService` over DatabaseService + injected AuthService — its three
+`auth.bridge` imports resolved to `this.auth.generateToken` plus plain
+`stripUserForClient`/`avatarUrl` helper imports, and `resolveWebauthnConfig`
+stays a plain `services/webauthnConfig` import (the helper also feeds
+auth.service's `isPasskeyConfigured`). No MCP registrar, no plugin-host
+import, and **no bridge at all** — both consumers were already in-container:
+`PasskeyController` swapped its `import *` shim for the injection, and
+`AdminService` swapped its `adminResetPasskeys` function import for the
+injected service (`AuthModule` now exports PasskeyService and `AdminModule`
+imports AuthModule — the todo→TripsService in-container precedent). No
+module-level mutable state existed to preserve: the challenge store is
+DB-backed (`webauthn_challenges`, single-use `DELETE … RETURNING` claim,
+5-min TTL), so the fold is a plain stateless injectable — every SQL string,
+error string and the counter/login-bookkeeping transaction relocated
+verbatim. Tests: the legacy module had **no service-level suite**, so
+PASSKEY-SVC-001…030 were written fresh with the fold (characterization over a
+real `:memory:` DB, `@simplewebauthn/server` mocked at the ceremony-verdict
+boundary — the repo's first such mock); auth-guard.test.ts's PasskeyController
+block swapped its path mock for a constructor stub.)
 Repeat these steps per
 service (next up: **the notifications fan-in** —
 per the dependency-honest order in

@@ -3,6 +3,7 @@ import { AuthPublicController } from './auth-public.controller';
 import { AuthController } from './auth.controller';
 import { PasskeyController } from './passkey.controller';
 import { AuthService } from './auth.service';
+import { PasskeyService } from './passkey.service';
 import { RateLimitService } from './rate-limit.service';
 import { AuditModule } from '../audit/audit.module';
 import { PermissionsModule } from '../permissions/permissions.module';
@@ -17,13 +18,13 @@ import { AtlasModule } from '../atlas/atlas.module';
  * PermissionsModule feeds getAppConfig's permissions block; AtlasModule feeds
  * getTravelStats' hidden-countries subtraction. AuthService is exported for
  * the in-container consumers (the domain *.mcp.ts demo guards, OidcService,
- * PasskeyEnabledGuard); everything outside the container goes through
- * auth.bridge.ts.
+ * PasskeyEnabledGuard); PasskeyService for AdminService's passkey reset;
+ * everything outside the container goes through auth.bridge.ts.
  */
 @Module({
   imports: [AuditModule, PermissionsModule, AtlasModule],
   controllers: [AuthPublicController, AuthController, PasskeyController],
-  providers: [AuthService, RateLimitService],
-  exports: [AuthService],
+  providers: [AuthService, PasskeyService, RateLimitService],
+  exports: [AuthService, PasskeyService],
 })
 export class AuthModule {}
