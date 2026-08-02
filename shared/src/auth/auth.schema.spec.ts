@@ -17,6 +17,7 @@ import {
   passkeyRegisterVerifyRequestSchema,
   passkeyLoginVerifyRequestSchema,
   passkeyRenameRequestSchema,
+  passkeyDeleteRequestSchema,
 } from './auth.schema';
 
 import { describe, it, expect } from 'vitest';
@@ -129,5 +130,11 @@ describe('passkey schemas', () => {
     expect(passkeyRenameRequestSchema.safeParse({ name: 'My Key' }).success).toBe(true);
     expect(passkeyRenameRequestSchema.safeParse({}).success).toBe(true);
     expect(passkeyRenameRequestSchema.safeParse({ name: 42 }).success).toBe(true); // service-side sanitize owns the 400
+  });
+
+  it('delete rejects a non-string password (used to 500 in bcrypt) but keeps omission a service rule', () => {
+    expect(passkeyDeleteRequestSchema.safeParse({ password: 'pw' }).success).toBe(true);
+    expect(passkeyDeleteRequestSchema.safeParse({}).success).toBe(true);
+    expect(passkeyDeleteRequestSchema.safeParse({ password: 123 }).success).toBe(false);
   });
 });

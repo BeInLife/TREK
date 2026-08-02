@@ -35,9 +35,11 @@ constructor stub, and the test helper's `RESET_TABLES` gained the two
 webauthn tables. A sibling DTO ratchet cleared the last four
 `PasskeyController` allow-list entries with deliberately permissive schemas
 (password optional, ceremony payloads `z.unknown()`) so the bespoke 401/400
-strings stay service rules; the DELETE route's `{ password }` body remains
-outside the POST/PUT/PATCH boot gate. No trailing quirk commit yet — the
-faithfully-carried quirks await their own `fix(server)` pass. The day
+strings stay service rules. The trailing `fix(server)` commit then cleared
+the two verified defects the relocation had faithfully carried — the DELETE
+route's untyped `{ password }` body (a non-string 500'd in bcrypt) and the
+un-transactioned dup-check→INSERT in registerVerify — see "Quirks fixed
+after the passkey fold" below. The day
 before, the oidcService fold — the first frontier cash-in of the auth fold,
 landed the same day as auth, while the notifications fan-in stayed the
 order's official next step: the 508-line SSO module folded whole into the existing thin wrapper
@@ -803,11 +805,45 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   DB with `@simplewebauthn/server` mocked at the ceremony-verdict boundary, the repo's
   first mock of that library — and `tests/helpers/test-db.ts` gained the two webauthn
   tables in `RESET_TABLES` (they were never reset before; the suites that touched them
-  did so via user-cascade only). No trailing quirk commit yet — the faithfully-carried
-  quirks (the redundant duplicate-credential pre-check beside the UNIQUE constraint,
-  the un-transactioned check→INSERT→re-select in registerVerify, the DELETE route's
-  `{ password }` body sitting outside the POST/PUT/PATCH body-contract gate) await
-  their own `fix(server)` pass.
+  did so via user-cascade only). The trailing `fix(server)` commit then cleared the two
+  faithfully-carried quirks that were verified defects — the DELETE route's untyped
+  `{ password }` body and the un-transactioned check→INSERT in registerVerify — see
+  "Quirks fixed after the passkey fold" below; the rest (cross-user challenge burn,
+  counter-0 clone exemption, unthrottled register/verify) are deliberate and stay.
+
+## Quirks fixed after the passkey fold (the trailing `fix(server)` commit)
+
+The relocation itself was byte-identical; these two were then fixed on top, each with a
+regression pin, so the parity diff and the behaviour change stayed in separate commits:
+
+- **The DELETE route's `{ password }` body could 500.** `remove` was the one passkey
+  handler left untyped — DELETE sits outside the POST/PUT/PATCH body-contract boot
+  gate, so the ratchet never forced it — and a non-string password
+  (`{"password": 123}`) sailed past the `body?.password` optional-chain into
+  `bcrypt.compareSync`, which throws `Illegal arguments` → a 500 envelope. The body is
+  now typed with `PasskeyDeleteDto` over the new shared `passkeyDeleteRequestSchema`
+  (`password: z.string().optional()`, same permissive doctrine as the other four
+  passkey schemas), so malformed input gets the pipe's 400 while a missing or wrong
+  password still reaches the service's bespoke `'Incorrect password'` 401.
+- **registerVerify's dup-check → INSERT pair is now one transaction.** The legacy code
+  pre-checked `credential_id` uniqueness and then inserted as two independent
+  statements, with a catch-all mapping every insert failure to the generic 400 — so
+  the bespoke 409 depended entirely on the pre-check statement winning, and the pair
+  violated the repo's multi-statement-write transaction rule. Both now run inside
+  `db.transaction()` with a reference-compared duplicate sentinel (the oidc
+  `invite_exhausted` precedent): duplicate → the exact legacy
+  `'This passkey is already registered.'` 409, any other insert failure → the exact
+  legacy `'Could not register this passkey.'` 400, and a failed insert rolls back with
+  no partial state (PASSKEY-SVC-031/032 pin the rollback and the untouched original
+  row; the spent challenge stays spent — single-use is not undone by a failed insert).
+
+Deliberately NOT changed (documented, spec-correct or contract): the cross-user
+registration-challenge claim burning the challenge (single-use semantics), the
+counter-0 clone-detection exemption (synced passkeys legitimately never increment),
+`sanitizeName`'s truncate-before-empty-check order, the management routes staying
+outside `PasskeyEnabledGuard`, the shared `login` rate-limit bucket, `register/verify`
+staying unthrottled (JWT + a single-use claimed challenge already gate it), and the
+`credential.counter ?? 0` nullish default (legacy-original).
 
 ## Quirks fixed after the oidc fold (the trailing `fix(server)` commit)
 

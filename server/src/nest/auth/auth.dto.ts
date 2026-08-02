@@ -18,6 +18,7 @@ import {
   passkeyRegisterVerifyRequestSchema,
   passkeyLoginVerifyRequestSchema,
   passkeyRenameRequestSchema,
+  passkeyDeleteRequestSchema,
 } from '@trek/shared';
 
 /**
@@ -46,3 +47,4 @@ export class PasskeyRegisterOptionsDto extends createZodDto(passkeyRegisterOptio
 export class PasskeyRegisterVerifyDto extends createZodDto(passkeyRegisterVerifyRequestSchema) {}
 export class PasskeyLoginVerifyDto extends createZodDto(passkeyLoginVerifyRequestSchema) {}
 export class PasskeyRenameDto extends createZodDto(passkeyRenameRequestSchema) {}
+export class PasskeyDeleteDto extends createZodDto(passkeyDeleteRequestSchema) {}

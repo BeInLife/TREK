@@ -8,7 +8,7 @@ import { setAuthCookie } from '../../services/cookie';
 import { getClientIp } from '../audit/client-ip';
 import { AuditService } from '../audit/audit.service';
 import { PasskeyService } from './passkey.service';
-import { PasskeyRegisterOptionsDto, PasskeyRegisterVerifyDto, PasskeyLoginVerifyDto, PasskeyRenameDto } from './auth.dto';
+import { PasskeyRegisterOptionsDto, PasskeyRegisterVerifyDto, PasskeyLoginVerifyDto, PasskeyRenameDto, PasskeyDeleteDto } from './auth.dto';
 import type { User } from '../../types';
 
 const WINDOW = 15 * 60 * 1000;
@@ -110,7 +110,7 @@ export class PasskeyController {
 
   @Delete('credentials/:id')
   @UseGuards(JwtAuthGuard)
-  remove(@CurrentUser() user: User, @Param('id') id: string, @Body() body: { password?: string }, @Req() req: Request) {
+  remove(@CurrentUser() user: User, @Param('id') id: string, @Body() body: PasskeyDeleteDto, @Req() req: Request) {
     this.limit('login', req, 5);
     const result = this.passkeys.deletePasskey(user.id, id, body?.password);
     if (result.error) throw new HttpException({ error: result.error }, result.status!);

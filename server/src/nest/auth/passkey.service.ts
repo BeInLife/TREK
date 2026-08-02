@@ -32,6 +32,11 @@ const NOT_CONFIGURED = { error: 'Passkey login is not configured for this server
 // used to tell "no such credential" apart from "bad signature" (CWE-203).
 const AUTH_FAILED = { error: 'Authentication failed', status: 401 } as const;
 
+// Reference-compared sentinel (oidc invite_exhausted precedent): thrown inside
+// the register transaction to keep the duplicate 409 distinct from the generic
+// insert-failure 400 without string-matching SQLite errors.
+const DUPLICATE_CREDENTIAL = new Error('duplicate credential');
+
 interface CredentialRow {
   id: number;
   user_id: number;
@@ -205,27 +210,34 @@ export class PasskeyService {
     // from the raw client payload.
     const { credential, credentialDeviceType, credentialBackedUp, aaguid } = verification.registrationInfo;
 
-    if (this.db.get('SELECT id FROM webauthn_credentials WHERE credential_id = ?', credential.id)) {
-      return { error: 'This passkey is already registered.', status: 409 };
-    }
-
     const name = sanitizeName(body?.name) || defaultCredentialName(credentialDeviceType);
+    // Duplicate check + INSERT in one transaction so the UNIQUE race can't slip
+    // between them; the sentinel keeps the legacy 409-vs-400 split intact.
     try {
-      this.db.run(
-        `INSERT INTO webauthn_credentials
-           (user_id, credential_id, public_key, counter, transports, device_type, backed_up, name, aaguid, last_used_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
-        userId,
-        credential.id,
-        Buffer.from(credential.publicKey),
-        credential.counter ?? 0,
-        credential.transports ? JSON.stringify(credential.transports) : null,
-        credentialDeviceType ?? null,
-        credentialBackedUp ? 1 : 0,
-        name,
-        aaguid ?? null,
-      );
-    } catch {
+      this.db.transaction((conn) => {
+        if (conn.prepare('SELECT id FROM webauthn_credentials WHERE credential_id = ?').get(credential.id)) {
+          throw DUPLICATE_CREDENTIAL;
+        }
+        conn.prepare(
+          `INSERT INTO webauthn_credentials
+             (user_id, credential_id, public_key, counter, transports, device_type, backed_up, name, aaguid, last_used_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)`,
+        ).run(
+          userId,
+          credential.id,
+          Buffer.from(credential.publicKey),
+          credential.counter ?? 0,
+          credential.transports ? JSON.stringify(credential.transports) : null,
+          credentialDeviceType ?? null,
+          credentialBackedUp ? 1 : 0,
+          name,
+          aaguid ?? null,
+        );
+      });
+    } catch (err) {
+      if (err === DUPLICATE_CREDENTIAL) {
+        return { error: 'This passkey is already registered.', status: 409 };
+      }
       return { error: 'Could not register this passkey.', status: 400 };
     }
 

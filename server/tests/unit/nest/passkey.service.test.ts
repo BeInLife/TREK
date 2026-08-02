@@ -1,9 +1,11 @@
 /**
  * Unit tests for the DI-native PasskeyService — PASSKEY-SVC-001 through
- * PASSKEY-SVC-030. Written fresh with the DI fold: the legacy
+ * PASSKEY-SVC-032. Written fresh with the DI fold: the legacy
  * services/passkeyService had no service-level suite, so these characterize
  * the relocated behavior (challenge store semantics, WebAuthn ceremony error
- * paths, clone detection, management CRUD) over a real in-memory SQLite DB.
+ * paths, clone detection, management CRUD) over a real in-memory SQLite DB;
+ * 031–032 pin the post-fold `fix(server)` quirk fix (the transactional
+ * dup-check → INSERT with its 409-vs-400 sentinel split).
  * The @simplewebauthn/server ceremony functions are mocked — the library's
  * crypto is not under test, the service's handling of its verdicts is.
  * Constructed directly (no TestingModule, repo convention).
@@ -319,6 +321,30 @@ describe('passkeyRegisterVerify', () => {
     testDb.exec('PRAGMA foreign_keys = ON');
     expect(await svc.passkeyRegisterVerify(999_999, { attestationResponse: ceremonyResponse('c7') }))
       .toEqual({ error: 'Could not register this passkey.', status: 400 });
+  });
+
+  // 031/032 pin the post-fold quirk fix: the dup check + INSERT run in one
+  // transaction, keeping the 409-vs-400 split and rolling back cleanly.
+  it('PASSKEY-SVC-031: a failed INSERT rolls back without partial credential state', async () => {
+    swMock.verifyRegistrationResponse.mockResolvedValue(registrationVerdict());
+    testDb.exec('PRAGMA foreign_keys = OFF');
+    seedChallenge('c8', 999_999, 'registration');
+    testDb.exec('PRAGMA foreign_keys = ON');
+    await svc.passkeyRegisterVerify(999_999, { attestationResponse: ceremonyResponse('c8') });
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM webauthn_credentials').get()).toEqual({ n: 0 });
+    expect(challengeCount()).toBe(0); // the claim stays spent — the challenge is not resurrected
+  });
+
+  it('PASSKEY-SVC-032: the in-transaction duplicate 409 leaves the original row untouched', async () => {
+    const { user } = createUser(testDb);
+    insertCredential(user.id, { credential_id: 'dup-cred-2', name: 'Original' });
+    seedChallenge('c9', user.id, 'registration');
+    swMock.verifyRegistrationResponse.mockResolvedValue(registrationVerdict({}, { id: 'dup-cred-2' }));
+    expect(await svc.passkeyRegisterVerify(user.id, { attestationResponse: ceremonyResponse('c9'), name: 'Impostor' }))
+      .toEqual({ error: 'This passkey is already registered.', status: 409 });
+    const row = testDb.prepare('SELECT name, user_id FROM webauthn_credentials WHERE credential_id = ?').get('dup-cred-2') as Record<string, unknown>;
+    expect(row).toEqual({ name: 'Original', user_id: user.id });
+    expect(testDb.prepare('SELECT COUNT(*) AS n FROM webauthn_credentials').get()).toEqual({ n: 1 });
   });
 });
 

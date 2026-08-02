@@ -139,3 +139,11 @@ export const passkeyRenameRequestSchema = z.object({
   name: z.unknown().optional(),
 });
 export type PasskeyRenameRequest = z.infer<typeof passkeyRenameRequestSchema>;
+
+// DELETE /credentials/:id — outside the POST/PUT/PATCH boot gate, but typed
+// anyway: a non-string password used to reach bcrypt.compareSync and 500.
+// Optional keeps the missing-password 401 a service rule.
+export const passkeyDeleteRequestSchema = z.object({
+  password: z.string().optional(),
+});
+export type PasskeyDeleteRequest = z.infer<typeof passkeyDeleteRequestSchema>;
