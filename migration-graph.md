@@ -1,13 +1,51 @@
 # Legacy `src/services/` dependency graph
 
-Generated from the actual imports in `server/src` on **2026-08-01** (after the
-oidcService fold — the first frontier cash-in of the auth fold, landed the same
-day, while the notifications fan-in stays the order's official next step: the
-508-line SSO module folded whole into the existing thin wrapper
+Generated from the actual imports in `server/src` on **2026-08-02** (after the
+passkeyService fold — the second frontier cash-in of the auth fold and the
+last member of the oidc/passkey pair, while the notifications fan-in stays
+the order's official next step: the 364-line WebAuthn module folded into a
+**new** `nest/auth/passkey.service.ts` (`PasskeyService`) over
+`DatabaseService` + injected `AuthService` — unlike every prior fold there
+was no wrapper service to fill: the delegation shim was `PasskeyController`
+itself (`import * as passkey`), which now injects the service. The frontier
+row's "bridge tax: none (a leaf)" held exactly: no MCP registrar ever
+existed, the plugin host never imported it, and both consumers were already
+in-container — the controller, and `AdminService.resetUserPasskeys`, which
+swapped its legacy function import for the injection (`exports:
+[PasskeyService]` + an AdminModule→AuthModule import, the todo→TripsService
+precedent) — so `auth.bridge`'s legacy customer list is down to adminService
+alone. The three `auth.bridge` imports resolved on schedule: `generateToken`
+became `this.auth.generateToken`, `stripUserForClient`/`avatarUrl` became
+plain helper imports (exactly what the bridge re-exports), and
+`resolveWebauthnConfig` stays a plain `services/webauthnConfig` import (the
+helper also feeds auth's `isPasskeyConfigured`). Where oidc converted module
+maps to instance state, passkey had **no state to convert at all** — the
+challenge store is DB-backed (`webauthn_challenges`: single-use
+`DELETE … RETURNING` claim before any await, 5-min TTL) — so the fold is a
+plain stateless injectable with every SQL string, error string (the uniform
+CWE-203 'Authentication failed' 401, the clone-detection audit path) and the
+counter/login-bookkeeping transaction relocated verbatim (reshaped one line
+for `DatabaseService.transaction`). Tests: the module had **no service-level
+suite** — the third fold in a row to hit that risk — so PASSKEY-SVC-001…030
+were written fresh (characterization over a real `:memory:` DB,
+`@simplewebauthn/server` mocked at the ceremony-verdict boundary — the
+repo's first such mock; the fold puts 364 previously ungated lines under the
+≥80% `src/nest/**` gate), the controller suite's path mock became a
+constructor stub, and the test helper's `RESET_TABLES` gained the two
+webauthn tables. A sibling DTO ratchet cleared the last four
+`PasskeyController` allow-list entries with deliberately permissive schemas
+(password optional, ceremony payloads `z.unknown()`) so the bespoke 401/400
+strings stay service rules; the DELETE route's `{ password }` body remains
+outside the POST/PUT/PATCH boot gate. No trailing quirk commit yet — the
+faithfully-carried quirks await their own `fix(server)` pass. The day
+before, the oidcService fold — the first frontier cash-in of the auth fold,
+landed the same day as auth, while the notifications fan-in stayed the
+order's official next step: the 508-line SSO module folded whole into the existing thin wrapper
 `nest/oidc/oidc.service.ts` (`OidcService`) over `DatabaseService` + injected
 `AuthService` — the `resolveAuthToggles` import off `auth.bridge` (exactly the
 repoint the auth fold predicted for this trio) became the injection, shrinking
-the bridge's legacy customer list to adminService/passkeyService. The frontier
+the bridge's legacy customer list to adminService/passkeyService (adminService
+alone since the passkey fold the next day). The frontier
 row's "bridge tax: none" held exactly: no MCP registrar ever existed, the
 plugin host never imported it, and nothing outside the container consumes the
 domain — the first fold since day-notes/trip-invite with **no bridge and no
@@ -69,7 +107,8 @@ predicted tax: `mcp/index.ts`'s token verification
 registrars (journey/notifications/transports), and
 `resolveAuthToggles`/`generateToken`/`stripUserForClient`/`avatarUrl` for the
 still-legacy consumers — adminService/oidcService/passkeyService then,
-adminService/passkeyService since the oidc fold later the same day. Tests moved with case
+adminService/passkeyService since the oidc fold later the same day, and
+adminService alone since the passkey fold (2026-08-02). Tests moved with case
 IDs preserved (authService.test.ts → auth.helpers.test.ts,
 authServiceDb.test.ts → auth.service.test.ts, which also gained
 AUTH-BR-001…007 bridge-delegation cases and AUTH-DB-050…088 — the fold put
@@ -81,7 +120,7 @@ land in a real audit_log), and `oidc.e2e.test.ts` swapped its silently-dead
 `services/authService` path mock for a `vi.spyOn(app.get(AuthService), …)`
 instance stub. A sibling DTO ratchet cleared all **14** auth allow-list
 entries (9 `AuthController` + 5 `AuthPublicController`; `PasskeyController`'s
-4 stay until passkeyService migrates), adding the six missing request schemas
+4 stayed until the passkey fold cleared them on 2026-08-02), adding the six missing request schemas
 (mapsKey/apiKeys/settings/appSettings/mfaDisable/resourceToken) to
 `shared/src/auth/auth.schema.ts`. No trailing quirk commit yet — the
 faithfully-carried defects are listed under "Quirks preserved" below,
@@ -298,8 +337,8 @@ How to read it:
   reset-throttle map (and its unref'd interval) stay module-scoped so the
   bridge and container instances share them; **one bridge**, the 8-export
   `auth.bridge.ts` — for `mcp/index.ts` token verification, the three legacy
-  registrars' `isDemoUser`, the still-legacy
-  adminService/oidcService/passkeyService, and the one in-container
+  registrars' `isDemoUser`, the still-legacy adminService (oidc and passkey
+  both folded 2026-08), and the one in-container
   cycle-break consumer `atlas.mcp.ts` (AuthService injects AtlasService, so
   AtlasModule cannot import AuthModule — assignments.bridge precedent); the
   other 15 domain `*.mcp.ts` demo guards inject `AuthService`),
@@ -310,17 +349,31 @@ How to read it:
   it, so the state/auth-code maps, sweep intervals and discovery/JWKS caches
   are **instance state** with `onModuleDestroy` clearing the timers, the first
   fold where that was viable; `apiKeyCrypto`/`tripMembership`/`cookie` stay
-  plain helper imports).
+  plain helper imports),
+  passkey (the 364-line WebAuthn module folded into a **new**
+  `nest/auth/passkey.service.ts` `PasskeyService` over `DatabaseService` +
+  injected `AuthService` — the first fold whose target service did not
+  pre-exist, because the delegation shim was `PasskeyController` itself; no
+  MCP surface, no plugin-host import, **no bridge**, and no state at all —
+  the challenge store is DB-backed (`webauthn_challenges`, single-use
+  `DELETE … RETURNING` claim), so it is a plain stateless injectable;
+  `AdminService` injects it for the passkey reset via `exports:
+  [PasskeyService]` + an AdminModule→AuthModule import;
+  `webauthnConfig`/`stripUserForClient`/`avatarUrl` stay plain helper
+  imports).
 - **Domain migration targets** (the wave material): adminService, airportService,
   backupService,
   journeyService, journeyShareService, notificationService, oauthService,
-  passkeyService, weatherService, wikiService.
+  weatherService, wikiService.
 - **Cross-cutting Wave-2 targets:** permissions and auditLog are done (2026-07) — see the
   DI-native list above; only tripAccess remains (delete, don't migrate).
 - **Helpers that stay as plain modules** (pure/infra, not wave material): avatarUrl,
   queryHelpers, conflictResult, cookie, demo, distanceService, ephemeralTokens, apiKeyCrypto,
   mfaCrypto, passwordPolicy, webauthnConfig, timezoneService, llmConfig, kmlImport, placeImage,
-  placePhotoCache, unsplashService, userCleanupService,
+  placePhotoCache, unsplashService, userCleanupService, tripMembership (the prose below
+  already treats it as one — consumed by nest/auth, nest/oidc, nest/trip-invite and the
+  plugin host; a candidate to fold into the trip-invite or trips domain some day, but
+  nothing blocks on it),
   inAppNotifications, inAppNotificationActions, notificationPreferencesService, notifications
   (+ `notifications/` registry), `memories/` cluster, `airtrail/` cluster. Several of these are
   themselves candidates to fold *into* a domain service when its domain migrates — and two
@@ -343,7 +396,6 @@ flowchart TD
     airport["airportService (boot special case)"]:::ready
     wiki[wikiService]:::ready
     oauth[oauthService]:::ready
-    passkey["passkeyService (frontier since the 2026-08 auth fold)"]:::ready
   end
 
   notifSvc[notificationService]:::blocked
@@ -375,7 +427,12 @@ webauthnConfig) — while `adminService` stays blocked on its hard
 injected `AuthService` inside the DI-native `OidcService`, its
 apiKeyCrypto/tripMembership edges stay plain helper imports (helpers never
 block), and no bridge replaced it (nothing outside the container consumes the
-domain), leaving `passkeyService` alone from that pair on the frontier. `userCleanupService` is infra, not a
+domain), leaving `passkeyService` alone from that pair on the frontier. The
+`passkeyService` node is gone since the 2026-08-02 fold — its `auth.bridge`
+repoint became the injected `AuthService` inside the new `PasskeyService`,
+its `webauthnConfig` edge stays a plain helper import, and no bridge replaced
+it either (both consumers were in-container; `AdminService` now injects the
+service), emptying that pair from the frontier. `userCleanupService` is infra, not a
 blocker (helpers never block). The `atlasService` node left the frontier
 earlier the same day as the first fold whose legacy dependent outlived it:
 its former `auth --> atlas` bridge edge died with the auth fold, and
@@ -416,7 +473,7 @@ never block).)
 | `adminService` | apiKeyCrypto, avatarUrl, llmConfig, memories/helpersService, notificationService, passwordPolicy, userCleanupService (+ `permissions.bridge`, `addons.bridge`, `auth.bridge`) | (none) | nest/admin/admin.service.ts, nest/packing/packing.mcp.ts (`deletePackingTemplate`, the `admin-2` residual) | scheduler.ts (lazy) |
 | `airportService` | (none) | (none) | nest/airports/airports.service.ts, nest/booking-import/kitinerary-mapper.ts | db/database.ts (lazy boot backfill), mcp/tools/mapsWeather.ts, mcp/tools/transports.ts |
 | `apiKeyCrypto` | (none) | adminService, airtrail/airtrailService, llmConfig, memories/helpersService, memories/immichService, memories/photoResolverService, memories/synologyService, memories/unifiedService, notifications, unsplashService | nest/auth/auth.helpers.ts, nest/auth/auth.service.ts, nest/maps/maps.service.ts, nest/oidc/oidc.service.ts, nest/plugins/plugin-oauth.service.ts, nest/plugins/plugin-runtime.service.ts, nest/plugins/plugins.service.ts, nest/settings/settings.service.ts | db/migrations.ts |
-| `avatarUrl` | (none) | adminService, inAppNotifications, journeyService | nest/auth/auth.bridge.ts, nest/auth/auth.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/files/files.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | (none) |
+| `avatarUrl` | (none) | adminService, inAppNotifications, journeyService | nest/auth/auth.bridge.ts, nest/auth/auth.service.ts, nest/auth/passkey.service.ts, nest/budget/budget.service.ts, nest/collab/collab.service.ts, nest/files/files.service.ts, nest/packing/packing.service.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts | (none) |
 | `backupService` | (none — `permissions.bridge`, plugin backup/paths infra only) | (none) | nest/backup/backup.controller.ts, nest/backup/backup.service.ts | scheduler.ts (lazy) |
 | `conflictResult` | (none) | (none) | nest/packing/packing.controller.ts, nest/packing/packing.service.ts, nest/places/places.controller.ts, nest/places/places.service.ts, nest/plugins/host/plugin-host-deps.factory.ts | (none) |
 | `cookie` | (none) | (none) | nest/auth/auth-public.controller.ts, nest/auth/auth.service.ts, nest/auth/passkey.controller.ts, nest/oidc/oidc.controller.ts, nest/oidc/oidc.service.ts | (none) |
@@ -434,7 +491,6 @@ never block).)
 | `notifications` | apiKeyCrypto, notificationPreferencesService (+ `audit-log.logger`) | notificationPreferencesService, notificationService, notifications/builtins | nest/auth/auth.service.ts, nest/notifications/notifications.service.ts | (none) |
 | `notificationService` | inAppNotifications, notificationPreferencesService, notifications, notifications/channelRegistry (+ `audit-log.logger`) | adminService, memories/synologyService, memories/unifiedService | nest/admin/admin.controller.ts, nest/collab/collab.service.ts, nest/collections/collections.service.ts (lazy), nest/packing/packing.service.ts, nest/plugins/host/plugin-host-deps.factory.ts, nest/reservations/reservations.service.ts, nest/trips/trips.service.ts, nest/vacay/vacay.service.ts | scheduler.ts (lazy) |
 | `oauthService` | (none — `addons.bridge` + `audit.bridge` only) | (none) | nest/oauth/oauth-api.controller.ts, nest/oauth/oauth.service.ts | mcp/index.ts, mcp/oauthProvider.ts |
-| `passkeyService` | webauthnConfig (+ `auth.bridge`) | (none) | nest/admin/admin.service.ts, nest/auth/passkey.controller.ts | (none) |
 | `passwordPolicy` | (none) | adminService | nest/auth/auth.service.ts | (none) |
 | `placeImage` | (none) | (none) | nest/collections/collections.controller.ts, nest/collections/collections.service.ts, nest/common/place-image-upload.ts, nest/places/places.controller.ts, nest/places/places.service.ts | (none) |
 | `placePhotoCache` | (none) | (none) | nest/maps/maps.service.ts, nest/places/places.helpers.ts, nest/share/share.service.ts | scheduler.ts (lazy) |
@@ -445,7 +501,7 @@ never block).)
 | `unsplashService` | apiKeyCrypto | (none) | nest/places/places.service.ts, nest/trips/trips.controller.ts, nest/trips/trips.service.ts | (none) |
 | `userCleanupService` | (none — `budget.bridge`, plugin paths infra only) | adminService | nest/auth/auth.service.ts, nest/trips/trips.service.ts | (none) |
 | `weatherService` | (none) | (none) | nest/plugins/host/plugin-host-deps.factory.ts, nest/weather/weather.controller.ts, nest/weather/weather.service.ts | mcp/tools/mapsWeather.ts |
-| `webauthnConfig` | (none) | passkeyService | nest/auth/auth.service.ts | (none) |
+| `webauthnConfig` | (none) | (none) | nest/auth/auth.service.ts, nest/auth/passkey.service.ts | (none) |
 | `wikiService` | (none) | (none) | nest/help/help.controller.ts | (none) |
 
 ## Subdirectory clusters
@@ -480,8 +536,7 @@ frontier candidates below can still go any time:
 
 | Candidate | Why now / why not | Bridge tax (legacy dependents + out-of-container) |
 |---|---|---|
-| **passkeyService** | Frontier since the 2026-08 auth fold — its `authService` edge became an `auth.bridge` repoint, leaving only the webauthnConfig helper; folds into the existing thin Nest surface (`PasskeyController` still `import *`s the legacy module). Its former row-mate **oidcService cashed in on 2026-08-01** — folded into the wrapper `OidcService` with the predicted zero bridge tax holding exactly. The coherence order rides passkey with the auth chain, before/with adminService | none (a leaf — nothing legacy imports it) |
-| **oauthService** | Dependency-free since the Phase 0 addons extraction (adminService edge was only `isAddonEnabled` → `addons.bridge`) — but the coherence order keeps it after admin so the `mcp/oauthProvider.ts` merge (`mcp-2`) lands with it | `mcp/index.ts`, `mcp/oauthProvider.ts` |
+| **oauthService** | Dependency-free since the Phase 0 addons extraction (adminService edge was only `isAddonEnabled` → `addons.bridge`) — but the coherence order keeps it after admin so the `mcp/oauthProvider.ts` merge (`mcp-2`) lands with it. Its former table-mate **passkeyService cashed in on 2026-08-02** — the predicted "none (a leaf)" bridge tax held exactly | `mcp/index.ts`, `mcp/oauthProvider.ts` |
 | **weatherService / wikiService / airportService** | Independent leaves; airport has the `db/database.ts` boot lazy-require special case | little / none |
 
 **Blocked, and by what (shortest unblock path):**
@@ -494,9 +549,8 @@ frontier candidates below can still go any time:
   helper — never blocks). `oauthService` is dependency-free since the
   Phase 0 addons extraction (its adminService edge was only `isAddonEnabled`, now
   `addons.bridge`), but the coherence order stays auth → admin → oauth so the
-  `mcp/oauthProvider.ts` merge (`mcp-2`) lands after admin (passkey is a
-  frontier-ready bridge consumer now; permissions done 2026-07, atlas + auth +
-  oidc done 2026-08).
+  `mcp/oauthProvider.ts` merge (`mcp-2`) lands after admin (permissions done
+  2026-07; atlas + auth + oidc + passkey done 2026-08).
 - `journeyService` ← `memories/` cluster (which itself touches admin + notificationService) →
   `journeyShareService` after. Note the place fold added two more in-container
   journeyService consumers (`places.service.ts`'s hooks and `places.mcp.ts`'s
@@ -553,7 +607,14 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
    discovery/JWKS caches became instance state with `onModuleDestroy`
    cleanup; tests moved with OIDC-SVC IDs preserved, the e2e/integration
    path mocks became container-instance spies)
-   → passkey → `adminService` → `oauthService`
+   → `passkeyService` (done 2026-08 — the pair's second cash-in: the 364-line
+   WebAuthn module into a **new** `PasskeyService` in `nest/auth/` over
+   DatabaseService + injected AuthService; no MCP surface, no plugin-host
+   import, **no bridge**, no state — the challenge store is DB-backed;
+   AdminService injects it for the passkey reset; a fresh
+   PASSKEY-SVC-001…030 suite characterizes the previously untested module,
+   and the DTO ratchet cleared the last four passkey allow-list entries)
+   → `adminService` → `oauthService`
 6. `memories/` cluster → `journeyService` → `journeyShareService`; `collectionsService`
    (done 2026-08-01 — taken off the frontier ahead of step 3: the 1024-line fold
    into `CollectionsService`, the 25-tool registrar onto `collections.mcp.ts`,
@@ -720,6 +781,33 @@ Wave-2 `permissions` + `auditLog` pair were the first frontier picks — all don
   didn't: its real `createState`/`createAuthCode` calls must run on the **container's**
   instance now that the state maps are per-instance, or the routes look in a different
   map than the test wrote to.
+
+- (2026-08-02 regeneration, post passkey fold) The frontier row's "bridge tax: none (a
+  leaf)" held **exactly** — no bridge, no repoints, the second consecutive zero-surface
+  fold — but the row's "folds into the existing thin Nest surface" mis-described the
+  shape: there was no wrapper service to fill. The delegation shim was the **controller
+  itself** (`PasskeyController` did `import * as passkey`), so the fold *created*
+  `nest/auth/passkey.service.ts` — the first fold whose target service did not
+  pre-exist. Three shapes worth naming: (a) the adjacency row's second nest consumer
+  (`admin.service.ts`) resolved to the chain's first **cross-module in-container
+  repoint** — `AdminService` swapped a legacy function import for the injected
+  `PasskeyService` (`exports: [PasskeyService]` + an AdminModule→AuthModule import, the
+  todo→TripsService precedent) — exactly the consumer class the bridge column correctly
+  prices at zero; (b) unlike oidc there was no module-scope-vs-instance-state decision
+  at all — the challenge store was DB-backed from the start (`webauthn_challenges`,
+  single-use `DELETE … RETURNING` claim before any await), so the fold is a plain
+  stateless injectable and the decision tree ended at "neither"; and (c) the no-test
+  risk repeated for the third fold in a row: the 364-line module had **no service-level
+  suite** (its behavior was pinned only through the controller's stub-based cases), so
+  the fold wrote PASSKEY-SVC-001…030 fresh — characterization over a real `:memory:`
+  DB with `@simplewebauthn/server` mocked at the ceremony-verdict boundary, the repo's
+  first mock of that library — and `tests/helpers/test-db.ts` gained the two webauthn
+  tables in `RESET_TABLES` (they were never reset before; the suites that touched them
+  did so via user-cascade only). No trailing quirk commit yet — the faithfully-carried
+  quirks (the redundant duplicate-credential pre-check beside the UNIQUE constraint,
+  the un-transactioned check→INSERT→re-select in registerVerify, the DELETE route's
+  `{ password }` body sitting outside the POST/PUT/PATCH body-contract gate) await
+  their own `fix(server)` pass.
 
 ## Quirks fixed after the oidc fold (the trailing `fix(server)` commit)
 
