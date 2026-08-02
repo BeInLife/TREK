@@ -108,3 +108,34 @@ export const resourceTokenRequestSchema = z.object({
   purpose: z.string().optional(),
 });
 export type ResourceTokenRequest = z.infer<typeof resourceTokenRequestSchema>;
+
+// ── Passkeys (/api/auth/passkey) ─────────────────────────────────────────────
+// The WebAuthn ceremony payloads are raw @simplewebauthn/browser outputs whose
+// real validation is the server-side ceremony verifier, and the bespoke 4xx
+// strings ('Incorrect password' 401, 'Invalid registration response',
+// 'Name is required', the uniform 'Authentication failed' 401) are service
+// rules — so every field stays permissive and the service owns the semantics.
+
+// Password re-auth: a missing password must reach the service (401), not 400.
+export const passkeyRegisterOptionsRequestSchema = z.object({
+  password: z.string().optional(),
+});
+export type PasskeyRegisterOptionsRequest = z.infer<typeof passkeyRegisterOptionsRequestSchema>;
+
+// `name` is omitted entirely when the user leaves it blank; the service
+// sanitizes non-strings itself.
+export const passkeyRegisterVerifyRequestSchema = z.object({
+  attestationResponse: z.unknown().optional(),
+  name: z.unknown().optional(),
+});
+export type PasskeyRegisterVerifyRequest = z.infer<typeof passkeyRegisterVerifyRequestSchema>;
+
+export const passkeyLoginVerifyRequestSchema = z.object({
+  assertionResponse: z.unknown().optional(),
+});
+export type PasskeyLoginVerifyRequest = z.infer<typeof passkeyLoginVerifyRequestSchema>;
+
+export const passkeyRenameRequestSchema = z.object({
+  name: z.unknown().optional(),
+});
+export type PasskeyRenameRequest = z.infer<typeof passkeyRenameRequestSchema>;

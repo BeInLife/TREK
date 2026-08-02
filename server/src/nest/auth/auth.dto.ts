@@ -14,6 +14,10 @@ import {
   settingsUpdateRequestSchema,
   appSettingsUpdateRequestSchema,
   resourceTokenRequestSchema,
+  passkeyRegisterOptionsRequestSchema,
+  passkeyRegisterVerifyRequestSchema,
+  passkeyLoginVerifyRequestSchema,
+  passkeyRenameRequestSchema,
 } from '@trek/shared';
 
 /**
@@ -38,3 +42,7 @@ export class ApiKeysUpdateDto extends createZodDto(apiKeysUpdateRequestSchema) {
 export class SettingsUpdateDto extends createZodDto(settingsUpdateRequestSchema) {}
 export class AppSettingsUpdateDto extends createZodDto(appSettingsUpdateRequestSchema) {}
 export class ResourceTokenDto extends createZodDto(resourceTokenRequestSchema) {}
+export class PasskeyRegisterOptionsDto extends createZodDto(passkeyRegisterOptionsRequestSchema) {}
+export class PasskeyRegisterVerifyDto extends createZodDto(passkeyRegisterVerifyRequestSchema) {}
+export class PasskeyLoginVerifyDto extends createZodDto(passkeyLoginVerifyRequestSchema) {}
+export class PasskeyRenameDto extends createZodDto(passkeyRenameRequestSchema) {}

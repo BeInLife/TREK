@@ -13,6 +13,10 @@ import {
   settingsUpdateRequestSchema,
   appSettingsUpdateRequestSchema,
   resourceTokenRequestSchema,
+  passkeyRegisterOptionsRequestSchema,
+  passkeyRegisterVerifyRequestSchema,
+  passkeyLoginVerifyRequestSchema,
+  passkeyRenameRequestSchema,
 } from './auth.schema';
 
 import { describe, it, expect } from 'vitest';
@@ -102,5 +106,28 @@ describe('api-key / settings schemas', () => {
     expect(resourceTokenRequestSchema.safeParse({ purpose: 'download' }).success).toBe(true);
     expect(resourceTokenRequestSchema.safeParse({}).success).toBe(true);
     expect(resourceTokenRequestSchema.safeParse({ purpose: 5 }).success).toBe(false);
+  });
+});
+
+describe('passkey schemas', () => {
+  it('registerOptions keeps password optional (the 401 is a service rule)', () => {
+    expect(passkeyRegisterOptionsRequestSchema.safeParse({ password: 'pw' }).success).toBe(true);
+    expect(passkeyRegisterOptionsRequestSchema.safeParse({}).success).toBe(true);
+    expect(passkeyRegisterOptionsRequestSchema.safeParse({ password: 5 }).success).toBe(false);
+  });
+
+  it('ceremony payloads stay permissive — the WebAuthn verifier owns validation', () => {
+    expect(
+      passkeyRegisterVerifyRequestSchema.safeParse({ attestationResponse: { id: 'x' }, name: 'Key' }).success,
+    ).toBe(true);
+    expect(passkeyRegisterVerifyRequestSchema.safeParse({}).success).toBe(true);
+    expect(passkeyLoginVerifyRequestSchema.safeParse({ assertionResponse: { id: 'x' } }).success).toBe(true);
+    expect(passkeyLoginVerifyRequestSchema.safeParse({}).success).toBe(true);
+  });
+
+  it("rename keeps name unknown (the 'Name is required' 400 is a service rule)", () => {
+    expect(passkeyRenameRequestSchema.safeParse({ name: 'My Key' }).success).toBe(true);
+    expect(passkeyRenameRequestSchema.safeParse({}).success).toBe(true);
+    expect(passkeyRenameRequestSchema.safeParse({ name: 42 }).success).toBe(true); // service-side sanitize owns the 400
   });
 });
