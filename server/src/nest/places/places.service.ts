@@ -3,12 +3,13 @@ import { XMLValidator } from 'fast-xml-parser';
 import { TRACK_COLORS } from '@trek/shared';
 import type { TrekWsPayload, TrekWsTripEventName } from '@trek/shared';
 import { RealtimeService } from '../realtime/realtime.service';
-import { DatabaseService } from '../database/database.service';
+import { DatabaseService, type TripAccess } from '../database/database.service';
 import type { PlaceWithTags } from '../database/database.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { MapsService } from '../maps/maps.service';
 import type { Place, User } from '../../types';
-import { loadTagsByPlaceIds, loadRatingsByPlaceIds, ratingAggregate } from '../../services/queryHelpers';
+import { QueryHelpersService } from '../query-helpers/query-helpers.service';
+import { ratingAggregate } from '../common/rowShape';
 import { checkSsrf, safeFetchFollow, SsrfBlockedError } from '../../utils/ssrfGuard';
 import {
   buildCategoryNameLookup,
@@ -50,7 +51,7 @@ import {
   type PlaceWithCategory,
 } from './places.helpers';
 
-type Trip = { user_id: number };
+type Trip = TripAccess;
 
 type ImportedPlace = { id: number; route_geometry?: string | null; route_color?: string | null };
 
@@ -89,7 +90,7 @@ export interface PlaceUpdateInput {
  * (a place on the equator lost its coordinates). Every other `x || null` is
  * string-valued, where empty-string-means-absent is the intended reading.
  *
- * Trip access mirrors the requireTripAccess middleware (canAccessTrip);
+ * Trip access rides DatabaseService.canAccessTrip;
  * mutations use 'place_edit'. Pure helpers and the frozen XML parsers live in
  * places.helpers.ts. Nothing outside the Nest container consumes this domain
  * any more, so there is no places.bridge.ts: the MCP surface is the
@@ -103,10 +104,11 @@ export class PlacesService {
     private readonly permissions: PermissionsService,
     private readonly realtime: RealtimeService,
     private readonly maps: MapsService,
+    private readonly queryHelpers: QueryHelpersService,
   ) {}
 
   verifyTripAccess(tripId: string, userId: number) {
-    return this.dbs.canAccessTrip(Number(tripId), userId) as Trip | null | undefined;
+    return this.dbs.canAccessTrip(Number(tripId), userId);
   }
 
   canEdit(trip: Trip, user: User): boolean {
@@ -164,8 +166,8 @@ export class PlacesService {
     const places = this.dbs.prepare(query).all(...params) as PlaceWithCategory[];
 
     const placeIds = places.map(p => p.id);
-    const tagsByPlaceId = loadTagsByPlaceIds(placeIds);
-    const ratingsByPlaceId = loadRatingsByPlaceIds(placeIds);
+    const tagsByPlaceId = this.queryHelpers.loadTagsByPlaceIds(placeIds);
+    const ratingsByPlaceId = this.queryHelpers.loadRatingsByPlaceIds(placeIds);
 
     return places.map(p => ({
       ...p,
