@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useMemo, useCallback, createElement, memo } from 'react'
 import DOM from 'react-dom'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { renderIconMarkup } from '../../utils/iconMarkup'
 import { MapContainer, TileLayer, Marker, Polyline, CircleMarker, Circle, useMap, Tooltip } from 'react-leaflet'
 import MarkerClusterGroup from 'react-leaflet-cluster'
 import L from 'leaflet'
@@ -13,6 +13,8 @@ import { PluginMapMarkers } from './MapPluginMarkers'
 import { PluginMapLayers } from './MapPluginLayers'
 import { useTransportRoutes } from '../../hooks/useTransportRoutes'
 import { visibleRouteReservations } from '../../utils/reservationRoutes'
+import { safeHexColor } from '../../utils/safeColor'
+import { escapeHtml } from '@trek/shared'
 import type { Reservation, RouteVia } from '../../types'
 import { POI_CATEGORY_BY_KEY, type Poi } from './poiCategories'
 import { resolveTrackColor, hasManualTrackColor } from './trackColors'
@@ -24,7 +26,7 @@ import { computeMapViewport, TILE_SIZE_RASTER, type ViewportPadding } from '../.
 function categoryIconSvg(iconName: string | null | undefined, size: number): string {
   const IconComponent = (iconName && CATEGORY_ICON_MAP[iconName]) || CATEGORY_ICON_MAP['MapPin']
   try {
-    return renderToStaticMarkup(createElement(IconComponent, { size, color: 'white', strokeWidth: 2.5 }))
+    return renderIconMarkup(createElement(IconComponent, { size, color: 'white', strokeWidth: 2.5 }))
   } catch { return '' }
 }
 import type { Place } from '../../types'
@@ -75,12 +77,14 @@ function createPlaceIcon(place, orderNumbers, isSelected) {
   const cached = iconCache.get(cacheKey)
   if (cached) return cached
   const size = isSelected ? 44 : 36
-  const borderColor = isSelected ? '#111827' : (place.category_color || 'white')
+  // Allow-listed, not escaped: the value lands in style="…" of a divIcon, where
+  // escaping stops the attribute breakout but still permits a CSS url().
+  const borderColor = isSelected ? '#111827' : safeHexColor(place.category_color, 'white')
   const borderWidth = isSelected ? 3 : 2.5
   const shadow = isSelected
     ? '0 0 0 3px rgba(17,24,39,0.25), 0 4px 14px rgba(0,0,0,0.3)'
     : '0 2px 8px rgba(0,0,0,0.22)'
-  const bgColor = place.category_color || '#6b7280'
+  const bgColor = safeHexColor(place.category_color, '#6b7280')
 
   // Number badges (bottom-right)
   let badgeHtml = ''
@@ -115,7 +119,7 @@ function createPlaceIcon(place, orderNumbers, isSelected) {
           box-shadow:${shadow};
           overflow:hidden;background:${bgColor};
         ">
-          <img src="${place.image_url}" width="${size}" height="${size}" style="display:block;border-radius:50%;object-fit:cover;" />
+          <img src="${escapeHtml(place.image_url)}" width="${size}" height="${size}" style="display:block;border-radius:50%;object-fit:cover;" />
         </div>
         ${badgeHtml}
       </div>`,
@@ -157,7 +161,7 @@ function createPoiIcon(category: string) {
   if (cached) return cached
   const cat = POI_CATEGORY_BY_KEY[category]
   const color = cat?.color || '#6b7280'
-  const svg = cat ? renderToStaticMarkup(createElement(cat.Icon, { size: 13, color: 'white', strokeWidth: 2.5 })) : ''
+  const svg = cat ? renderIconMarkup(createElement(cat.Icon, { size: 13, color: 'white', strokeWidth: 2.5 })) : ''
   const icon = L.divIcon({
     className: '',
     html: `<div style="width:26px;height:26px;border-radius:50%;background:${color};border:2px solid white;box-shadow:0 1px 5px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;cursor:pointer;">${svg}</div>`,
