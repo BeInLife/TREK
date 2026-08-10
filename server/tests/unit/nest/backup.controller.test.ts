@@ -14,8 +14,6 @@ vi.mock('../../../src/nest/backup/backup.impl', () => ({
   listBackups: vi.fn().mockReturnValue([{ filename: 'svc.zip' }]),
   createBackup: vi.fn().mockResolvedValue({ filename: 'svc.zip', size: 5 }),
   restoreFromZip: vi.fn().mockResolvedValue({ success: true }),
-  getAutoSettings: vi.fn().mockReturnValue({ settings: { enabled: false }, timezone: 'UTC' }),
-  updateAutoSettings: vi.fn().mockReturnValue({ enabled: true, interval: 'daily', keep_days: 7 }),
   deleteBackup: vi.fn(),
   isValidBackupFilename: vi.fn().mockReturnValue(true),
   backupFilePath: vi.fn().mockReturnValue('/data/backups/svc.zip'),
@@ -27,6 +25,7 @@ import { BackupController } from '../../../src/nest/backup/backup.controller';
 import { BackupService as RealBackupService } from '../../../src/nest/backup/backup.service';
 import { AdminGuard } from '../../../src/nest/auth/admin.guard';
 import type { BackupService } from '../../../src/nest/backup/backup.service';
+import type { AutoBackupJob } from '../../../src/nest/backup/auto-backup.job';
 import type { AuditService } from '../../../src/nest/audit/audit.service';
 import * as backupSvc from '../../../src/nest/backup/backup.impl';
 import type { User } from '../../../src/types';
@@ -38,7 +37,12 @@ const req = { ip: '1.2.3.4', headers: {} } as Request;
 // wrapper keeps the historical construction sites positional.
 const writeAudit = vi.fn();
 const audit = { writeAudit } as unknown as AuditService;
-const bc = (s: BackupService) => new BackupController(s, audit);
+// The auto-settings routes live on AutoBackupJob since the cron moved into the
+// backup domain; every other route still goes through BackupService.
+function job(o: Partial<AutoBackupJob> = {}): AutoBackupJob {
+  return { getAutoSettings: vi.fn(), updateAutoSettings: vi.fn(), start: vi.fn(), ...o } as unknown as AutoBackupJob;
+}
+const bc = (s: BackupService, j: AutoBackupJob = job()) => new BackupController(s, audit, j);
 
 function svc(o: Partial<BackupService> = {}): BackupService {
   return {
@@ -150,13 +154,13 @@ describe('BackupController', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await thrownAsync(() => bc(svc({ createBackup: vi.fn().mockRejectedValue(new Error('disk')) } as Partial<BackupService>)).create(user, req))).toEqual({ status: 500, body: { error: 'Error creating backup' } });
     expect(await thrownAsync(() => bc(svc({ restoreFromZip: vi.fn().mockRejectedValue(new Error('boom')) } as Partial<BackupService>)).restore(user, 'x.zip', req))).toEqual({ status: 500, body: { error: 'Error restoring backup' } });
-    expect(thrown(() => bc(svc({ getAutoSettings: vi.fn(() => { throw new Error('io'); }) } as Partial<BackupService>)).autoSettings())).toEqual({ status: 500, body: { error: 'Could not load backup settings' } });
+    expect(thrown(() => bc(svc(), job({ getAutoSettings: vi.fn(() => { throw new Error('io'); }) })).autoSettings())).toEqual({ status: 500, body: { error: 'Could not load backup settings' } });
   });
 
   it('PUT /auto-settings maps errors to 500 (with a dev-only detail)', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     process.env.NODE_ENV = 'development';
-    const r = thrown(() => bc(svc({ updateAutoSettings: vi.fn(() => { throw new Error('parse fail'); }) } as Partial<BackupService>)).updateAutoSettings(user, {}, req));
+    const r = thrown(() => bc(svc(), job({ updateAutoSettings: vi.fn(() => { throw new Error('parse fail'); }) })).updateAutoSettings(user, {}, req));
     expect(r.status).toBe(500);
     expect(r.body).toEqual({ error: 'Could not save auto-backup settings', detail: 'parse fail' });
   });
@@ -164,20 +168,20 @@ describe('BackupController', () => {
   it('PUT /auto-settings hides the detail in production and stringifies non-Error throws', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     process.env.NODE_ENV = 'production';
-    const r = thrown(() => bc(svc({ updateAutoSettings: vi.fn(() => { throw 'plain string'; }) } as Partial<BackupService>)).updateAutoSettings(user, {}, req));
+    const r = thrown(() => bc(svc(), job({ updateAutoSettings: vi.fn(() => { throw 'plain string'; }) })).updateAutoSettings(user, {}, req));
     expect(r.status).toBe(500);
     expect(r.body).toEqual({ error: 'Could not save auto-backup settings', detail: undefined });
   });
 
   it('PUT /auto-settings tolerates a missing body', () => {
     const updateAutoSettings = vi.fn().mockReturnValue({ enabled: false, interval: 'weekly', keep_days: 30 });
-    bc(svc({ updateAutoSettings } as Partial<BackupService>)).updateAutoSettings(user, undefined as unknown as Record<string, unknown>, req);
+    bc(svc(), job({ updateAutoSettings })).updateAutoSettings(user, undefined as unknown as Record<string, unknown>, req);
     expect(updateAutoSettings).toHaveBeenCalledWith({});
   });
 
   it('GET/PUT /auto-settings', () => {
-    expect(bc(svc({ getAutoSettings: vi.fn().mockReturnValue({ settings: { enabled: true }, timezone: 'UTC' }) } as Partial<BackupService>)).autoSettings()).toEqual({ settings: { enabled: true }, timezone: 'UTC' });
-    const res = bc(svc({ updateAutoSettings: vi.fn().mockReturnValue({ enabled: true, interval: 'daily', keep_days: 7 }) } as Partial<BackupService>)).updateAutoSettings(user, { enabled: true }, req);
+    expect(bc(svc(), job({ getAutoSettings: vi.fn().mockReturnValue({ settings: { enabled: true }, timezone: 'UTC' }) as never })).autoSettings()).toEqual({ settings: { enabled: true }, timezone: 'UTC' });
+    const res = bc(svc(), job({ updateAutoSettings: vi.fn().mockReturnValue({ enabled: true, interval: 'daily', keep_days: 7 }) as never })).updateAutoSettings(user, { enabled: true }, req);
     expect(res).toEqual({ settings: { enabled: true, interval: 'daily', keep_days: 7 } });
     expect(writeAudit).toHaveBeenCalledWith(expect.objectContaining({ action: 'backup.auto_settings' }));
   });
@@ -203,12 +207,6 @@ describe('BackupService (wrapper)', () => {
 
     await expect(wrapper.restoreFromZip('/tmp/a.zip')).resolves.toEqual({ success: true });
     expect(backupSvc.restoreFromZip).toHaveBeenCalledWith('/tmp/a.zip');
-
-    expect(wrapper.getAutoSettings()).toEqual({ settings: { enabled: false }, timezone: 'UTC' });
-    expect(backupSvc.getAutoSettings).toHaveBeenCalled();
-
-    expect(wrapper.updateAutoSettings({ enabled: true })).toEqual({ enabled: true, interval: 'daily', keep_days: 7 });
-    expect(backupSvc.updateAutoSettings).toHaveBeenCalledWith({ enabled: true });
 
     wrapper.deleteBackup('svc.zip');
     expect(backupSvc.deleteBackup).toHaveBeenCalledWith('svc.zip');

@@ -58,20 +58,23 @@ vi.mock('../../src/nest/backup/backup.impl', async () => {
       sizeText: '1.0 KB',
       created_at: new Date().toISOString(),
     }),
-    updateAutoSettings: vi.fn().mockReturnValue({
-      enabled: false,
-      interval: 'daily',
-      keep_days: 7,
-      hour: 2,
-      day_of_week: 0,
-      day_of_month: 1,
-    }),
     restoreFromZip: vi.fn().mockResolvedValue({ success: true }),
     deleteBackup: vi.fn().mockReturnValue(undefined),
     backupFileExists: vi.fn().mockReturnValue(false),
     backupFilePath: vi.fn().mockReturnValue('/tmp/test-backup.zip'),
     // Keep checkRateLimit from actual so rate-limit tests work correctly
     checkRateLimit: vi.fn().mockReturnValue(true),
+  };
+});
+
+// The auto-settings routes live on AutoBackupJob now; keep its settings-file
+// I/O off the real data/ dir (the scheduling itself is off under the test gate).
+vi.mock('../../src/nest/backup/auto-backup.settings', async () => {
+  const actual = await vi.importActual<typeof import('../../src/nest/backup/auto-backup.settings')>('../../src/nest/backup/auto-backup.settings');
+  return {
+    ...actual,
+    loadSettings: vi.fn(() => ({ enabled: false, interval: 'daily', keep_days: 7, hour: 2, day_of_week: 0, day_of_month: 1 })),
+    saveSettings: vi.fn(),
   };
 });
 

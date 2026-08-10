@@ -5,7 +5,7 @@ import { readEnv } from '../../app-config';
 import fs from 'fs';
 import Database from 'better-sqlite3';
 import { db, closeDb, reinitialize } from '../../db/database';
-import * as scheduler from '../../scheduler';
+import { VALID_INTERVALS } from './auto-backup.settings';
 import { invalidatePermissionsCache } from '../permissions/permissions.bridge';
 import { pluginsCodeRoot, pluginsDataRoot } from '../plugins/paths';
 import { stageExtractedPluginTrees, applyStagedRestoreNow } from '../plugins/plugin-backup';
@@ -66,7 +66,7 @@ export function parseAutoBackupBody(body: Record<string, unknown>): {
   const enabled = body.enabled === true || body.enabled === 'true' || body.enabled === 1;
   const rawInterval = body.interval;
   const interval =
-    typeof rawInterval === 'string' && scheduler.VALID_INTERVALS.includes(rawInterval)
+    typeof rawInterval === 'string' && VALID_INTERVALS.includes(rawInterval)
       ? rawInterval
       : 'daily';
   const keep_days = Math.max(0, parseIntField(body.keep_days, 7));
@@ -146,7 +146,7 @@ export function listBackups(): BackupInfo[] {
 /**
  * Writes a full backup zip and returns its BackupInfo.
  *
- * `prefix` picks the filename scheme. The scheduler passes 'auto-backup' because
+ * `prefix` picks the filename scheme. AutoBackupJob passes 'auto-backup' because
  * everything downstream tells the two apart by name: cleanupOldBackups() prunes
  * only auto-backup-*.zip, and the admin panel badges them as automatic. Manual
  * backups keep the default.
@@ -476,22 +476,6 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
     try { invalidatePermissionsCache(); } catch { /* best-effort */ }
     throw err;
   }
-}
-
-// ---------------------------------------------------------------------------
-// Auto-backup settings
-// ---------------------------------------------------------------------------
-
-export function getAutoSettings(): { settings: ReturnType<typeof scheduler.loadSettings>; timezone: string } {
-  const tz = readEnv().app.tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-  return { settings: scheduler.loadSettings(), timezone: tz };
-}
-
-export function updateAutoSettings(body: Record<string, unknown>): ReturnType<typeof parseAutoBackupBody> {
-  const settings = parseAutoBackupBody(body);
-  scheduler.saveSettings(settings);
-  scheduler.start();
-  return settings;
 }
 
 // ---------------------------------------------------------------------------

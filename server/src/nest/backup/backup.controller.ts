@@ -20,6 +20,7 @@ import fs from 'fs';
 import { readEnv } from '../../app-config';
 import type { User } from '../../types';
 import { BackupService } from './backup.service';
+import { AutoBackupJob } from './auto-backup.job';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -49,7 +50,11 @@ const UPLOAD = {
 @Controller('api/backup')
 @UseGuards(JwtAuthGuard, AdminGuard)
 export class BackupController {
-  constructor(private readonly backup: BackupService, private readonly audit: AuditService) {}
+  constructor(
+    private readonly backup: BackupService,
+    private readonly audit: AuditService,
+    private readonly autoBackup: AutoBackupJob,
+  ) {}
 
   @Get('list')
   list() {
@@ -135,7 +140,7 @@ export class BackupController {
   @Get('auto-settings')
   autoSettings() {
     try {
-      return this.backup.getAutoSettings();
+      return this.autoBackup.getAutoSettings();
     } catch (err) {
       console.error('[backup] GET auto-settings:', err);
       throw new HttpException({ error: 'Could not load backup settings' }, 500);
@@ -145,7 +150,7 @@ export class BackupController {
   @Put('auto-settings')
   updateAutoSettings(@CurrentUser() user: User, @Body() body: AutoBackupSettingsDto, @Req() req: Request) {
     try {
-      const settings = this.backup.updateAutoSettings(body || {});
+      const settings = this.autoBackup.updateAutoSettings(body || {});
       this.audit.writeAudit({ userId: user.id, action: 'backup.auto_settings', ip: getClientIp(req), details: { enabled: settings.enabled, interval: settings.interval, keep_days: settings.keep_days } });
       return { settings };
     } catch (err) {

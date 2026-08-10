@@ -1,78 +1,20 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { readEnv } from './app-config';
-import path from 'node:path';
-import fs from 'node:fs';
 import { logInfo, logError } from './nest/audit/audit-log.logger';
-
-const dataDir = path.join(__dirname, '../data');
-const backupsDir = path.join(dataDir, 'backups');
-const settingsFile = path.join(dataDir, 'backup-settings.json');
-
-const VALID_INTERVALS = ['hourly', 'daily', 'weekly', 'monthly'];
-const VALID_DAYS_OF_WEEK = new Set([0, 1, 2, 3, 4, 5, 6]); // 0=Sunday
-const VALID_HOURS = new Set(Array.from({length: 24}, (_, i) => i));
-
-interface BackupSettings {
-  enabled: boolean;
-  interval: string;
-  keep_days: number;
-  hour: number;
-  day_of_week: number;
-  day_of_month: number;
-}
-
-export function buildCronExpression(settings: BackupSettings): string {
-  const hour = VALID_HOURS.has(settings.hour) ? settings.hour : 2;
-  const dow = VALID_DAYS_OF_WEEK.has(settings.day_of_week) ? settings.day_of_week : 0;
-  const dom = settings.day_of_month >= 1 && settings.day_of_month <= 28 ? settings.day_of_month : 1;
-
-  switch (settings.interval) {
-    case 'hourly':  return '0 * * * *';
-    case 'daily':   return `0 ${hour} * * *`;
-    case 'weekly':  return `0 ${hour} * * ${dow}`;
-    case 'monthly': return `0 ${hour} ${dom} * *`;
-    default:        return `0 ${hour} * * *`;
-  }
-}
-
-let currentTask: ScheduledTask | null = null;
-
-function getDefaults(): BackupSettings {
-  return { enabled: false, interval: 'daily', keep_days: 7, hour: 2, day_of_week: 0, day_of_month: 1 };
-}
-
-function loadSettings(): BackupSettings {
-  let settings = getDefaults();
-  try {
-    if (fs.existsSync(settingsFile)) {
-      const saved = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-      settings = { ...settings, ...saved };
-    }
-  } catch (e) {}
-  return settings;
-}
-
-function saveSettings(settings: BackupSettings): void {
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
-}
 
 /**
  * What the scheduler needs from the Nest container.
  *
  * The shapes are structural on purpose: the scheduler names the capability it
- * wants, never the provider class. Importing BackupService here would drag in
- * src/nest/backup → src/nest/backup/backup.impl → src/scheduler and put the
- * cycle straight back — the same cycle the lazy `await import()` in runBackup
- * existed to dodge.
+ * wants, never the provider class — importing a provider class here would pull
+ * its module graph into a file that must stay loadable without a container
+ * (which is what the unit tests rely on).
  *
  * index.ts fills this in from the container after buildApp(), the way
  * bootstrap.ts hands the /mcp handler its registry. Nothing here is resolved at
- * import time, so the scheduler stays loadable without a container (which is
- * what its unit tests rely on).
+ * import time.
  */
 export interface SchedulerDeps {
-  backups: { createBackup(prefix?: 'backup' | 'auto-backup'): Promise<{ filename: string }> };
   placePhotos: { sweepOrphans(): number };
   airtrail: { runAirtrailSync(): Promise<void> };
 }
@@ -82,75 +24,6 @@ let deps: SchedulerDeps | undefined;
 /** Hand the scheduler its container-resolved dependencies. Call after app.init(). */
 export function setSchedulerDeps(next: SchedulerDeps): void {
   deps = next;
-}
-
-async function runBackup(): Promise<void> {
-  try {
-    // Same archive the admin panel builds, only under the auto-backup name: it
-    // snapshots travel.db with VACUUM INTO instead of archiving the live file
-    // (the archiver reads its entries during finalize, so a WAL auto-checkpoint
-    // landing in between tears the copy), and it carries .encryption_key and the
-    // plugin trees — without the key a scheduled backup cannot be decrypted on
-    // another install.
-    if (!deps) {
-      logError('Auto-Backup: skipped, the scheduler was started without its container dependencies');
-      return;
-    }
-    const { filename } = await deps.backups.createBackup('auto-backup');
-    logInfo(`Auto-Backup created: ${filename}`);
-  } catch (err: unknown) {
-    // createBackup removes its own half-written zip before rethrowing.
-    logError(`Auto-Backup: ${err instanceof Error ? err.message : err}`);
-    return;
-  }
-
-  const settings = loadSettings();
-  if (settings.keep_days > 0) {
-    cleanupOldBackups(settings.keep_days);
-  }
-}
-
-function autoBackupTimestampMs(filename: string): number | null {
-  // auto-backup-2026-04-27T00-00-00.zip → 2026-04-27T00:00:00
-  const stamp = filename.slice('auto-backup-'.length, -'.zip'.length);
-  const iso = stamp.replace(/T(\d{2})-(\d{2})-(\d{2})$/, 'T$1:$2:$3');
-  const ms = Date.parse(iso);
-  return Number.isNaN(ms) ? null : ms;
-}
-
-export function cleanupOldBackups(keepDays: number, now: number = Date.now()): void {
-  try {
-    const cutoff = now - keepDays * 24 * 60 * 60 * 1000;
-    const files = fs.readdirSync(backupsDir).filter(f => f.startsWith('auto-backup-') && f.endsWith('.zip'));
-    for (const file of files) {
-      const filePath = path.join(backupsDir, file);
-      const ageMs = autoBackupTimestampMs(file) ?? fs.statSync(filePath).mtimeMs;
-      if (ageMs < cutoff) {
-        fs.unlinkSync(filePath);
-        logInfo(`Auto-Backup old backup deleted: ${file}`);
-      }
-    }
-  } catch (err: unknown) {
-    logError(`Auto-Backup cleanup: ${err instanceof Error ? err.message : err}`);
-  }
-}
-
-function start(): void {
-  if (currentTask) {
-    currentTask.stop();
-    currentTask = null;
-  }
-
-  const settings = loadSettings();
-  if (!settings.enabled) {
-    logInfo('Auto-Backup disabled');
-    return;
-  }
-
-  const expression = buildCronExpression(settings);
-  const tz = readEnv().app.tz || 'UTC';
-  currentTask = cron.schedule(expression, runBackup, { timezone: tz });
-  logInfo(`Auto-Backup scheduled: ${settings.interval} (${expression}), tz: ${tz}, retention: ${settings.keep_days === 0 ? 'forever' : settings.keep_days + ' days'}`);
 }
 
 // Demo mode: hourly reset of demo user data
@@ -447,7 +320,6 @@ function startAirTrailSync(): void {
 }
 
 function stop(): void {
-  if (currentTask) { currentTask.stop(); currentTask = null; }
   if (demoTask) { demoTask.stop(); demoTask = null; }
   if (reminderTask) { reminderTask.stop(); reminderTask = null; }
   if (versionCheckTask) { versionCheckTask.stop(); versionCheckTask = null; }
@@ -457,4 +329,4 @@ function stop(): void {
   if (airtrailSyncTask) { airtrailSyncTask.stop(); airtrailSyncTask = null; }
 }
 
-export { start, stop, startDemoReset, startTripReminders, startTodoReminders, startVersionCheck, startIdempotencyCleanup, purgeExpiredIdempotencyKeys, startTrekPhotoCacheCleanup, startPlacePhotoCacheCleanup, startAirTrailSync, loadSettings, saveSettings, VALID_INTERVALS };
+export { stop, startDemoReset, startTripReminders, startTodoReminders, startVersionCheck, startIdempotencyCleanup, purgeExpiredIdempotencyKeys, startTrekPhotoCacheCleanup, startPlacePhotoCacheCleanup, startAirTrailSync };

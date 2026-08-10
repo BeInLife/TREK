@@ -1,13 +1,9 @@
+/**
+ * Auto-backup settings + retention (moved from tests/unit/scheduler.test.ts
+ * when the code moved from src/scheduler.ts into the backup domain).
+ */
 import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest';
 
-// Prevent node-cron from scheduling anything at import time
-vi.mock('node-cron', () => ({
-  default: { schedule: vi.fn(), validate: vi.fn(() => true) },
-  schedule: vi.fn(),
-  validate: vi.fn(() => true),
-}));
-// Prevent archiver from causing side effects
-vi.mock('archiver', () => ({ default: vi.fn() }));
 // Prevent fs side effects (creating directories, reading files)
 vi.mock('node:fs', () => ({
   default: {
@@ -29,22 +25,28 @@ vi.mock('node:fs', () => ({
   unlinkSync: vi.fn(),
   createWriteStream: vi.fn(() => ({ on: vi.fn(), pipe: vi.fn() })),
 }));
-vi.mock('../../../src/db/database', () => ({
-  db: { prepare: () => ({ all: vi.fn(() => []), get: vi.fn(), run: vi.fn() }) },
-}));
-vi.mock('../../../src/config', () => ({ JWT_SECRET: 'test-secret', ENCRYPTION_KEY: '0'.repeat(64) }));
-vi.mock('../../src/nest/audit/audit-log.logger', () => ({
+vi.mock('../../../src/nest/audit/audit-log.logger', () => ({
   logInfo: vi.fn(),
   logError: vi.fn(),
 }));
 
 import fs from 'node:fs';
-import { buildCronExpression, cleanupOldBackups } from '../../src/scheduler';
+import {
+  buildCronExpression,
+  cleanupOldBackups,
+  loadSettings,
+  saveSettings,
+  type BackupSettings,
+} from '../../../src/nest/backup/auto-backup.settings';
 
 // readdirSync and statSync are overloaded in node:fs, and vi.mocked() picks the last
-// overload (Dirent[] / BigIntStats) rather than the one the scheduler calls. These handles
+// overload (Dirent[] / BigIntStats) rather than the one the cleanup calls. These handles
 // point at the very same mock functions from the factory above, pinned to the plain
 // string[] / Stats signatures that cleanupOldBackups actually uses.
+const existsSyncMock = fs.existsSync as unknown as Mock<(path: string) => boolean>;
+const readFileSyncMock = fs.readFileSync as unknown as Mock<(path: string, enc: string) => string>;
+const writeFileSyncMock = fs.writeFileSync as unknown as Mock<(path: string, data: string) => void>;
+const mkdirSyncMock = fs.mkdirSync as unknown as Mock<(path: string, opts?: unknown) => void>;
 const readdirSyncMock = fs.readdirSync as unknown as Mock<(path: string) => string[]>;
 const statSyncMock = fs.statSync as unknown as Mock<(path: string) => fs.Stats>;
 const unlinkSyncMock = fs.unlinkSync as unknown as Mock<(path: string) => void>;
@@ -53,15 +55,6 @@ const unlinkSyncMock = fs.unlinkSync as unknown as Mock<(path: string) => void>;
 // deliberately partial instead of faking a whole fs.Stats.
 function statStub(partial: Partial<fs.Stats>): fs.Stats {
   return partial as fs.Stats;
-}
-
-interface BackupSettings {
-  enabled: boolean;
-  interval: string;
-  keep_days: number;
-  hour: number;
-  day_of_week: number;
-  day_of_month: number;
 }
 
 function settings(overrides: Partial<BackupSettings> = {}): BackupSettings {
@@ -149,6 +142,47 @@ describe('buildCronExpression', () => {
     it('defaults to daily pattern', () => {
       expect(buildCronExpression(settings({ interval: 'unknown', hour: 4 }))).toBe('0 4 * * *');
     });
+  });
+});
+
+describe('loadSettings / saveSettings', () => {
+  beforeEach(() => {
+    existsSyncMock.mockReset().mockReturnValue(false);
+    readFileSyncMock.mockReset().mockReturnValue('{}');
+    writeFileSyncMock.mockReset();
+    mkdirSyncMock.mockReset();
+  });
+
+  it('returns the defaults when no settings file exists', () => {
+    expect(loadSettings()).toEqual({ enabled: false, interval: 'daily', keep_days: 7, hour: 2, day_of_week: 0, day_of_month: 1 });
+  });
+
+  it('merges the saved file over the defaults', () => {
+    existsSyncMock.mockReturnValue(true);
+    readFileSyncMock.mockReturnValue(JSON.stringify({ enabled: true, interval: 'weekly', hour: 6 }));
+    expect(loadSettings()).toEqual({ enabled: true, interval: 'weekly', keep_days: 7, hour: 6, day_of_week: 0, day_of_month: 1 });
+  });
+
+  it('falls back to the defaults on a corrupt settings file', () => {
+    existsSyncMock.mockReturnValue(true);
+    readFileSyncMock.mockReturnValue('{not json');
+    expect(loadSettings()).toEqual({ enabled: false, interval: 'daily', keep_days: 7, hour: 2, day_of_week: 0, day_of_month: 1 });
+  });
+
+  it('saveSettings creates the data dir when missing and writes pretty JSON', () => {
+    const s = settings({ enabled: true, interval: 'weekly' });
+    saveSettings(s);
+    expect(mkdirSyncMock).toHaveBeenCalledWith(expect.stringContaining('data'), { recursive: true });
+    expect(writeFileSyncMock).toHaveBeenCalledWith(
+      expect.stringContaining('backup-settings.json'),
+      JSON.stringify(s, null, 2),
+    );
+  });
+
+  it('saveSettings skips the mkdir when the data dir already exists', () => {
+    existsSyncMock.mockReturnValue(true);
+    saveSettings(settings());
+    expect(mkdirSyncMock).not.toHaveBeenCalled();
   });
 });
 

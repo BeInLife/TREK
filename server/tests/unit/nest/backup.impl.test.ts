@@ -64,20 +64,6 @@ vi.mock('../../../src/config', () => ({
 vi.mock('fs', () => ({ default: fsMock, ...fsMock }));
 vi.mock('archiver', () => ({ default: archiverMock }));
 vi.mock('unzipper', () => ({ default: unzipperMock }));
-vi.mock('../../../src/scheduler', () => ({
-  VALID_INTERVALS: ['hourly', 'daily', 'weekly', 'monthly'],
-  loadSettings: vi.fn(() => ({
-    enabled: false,
-    interval: 'daily',
-    keep_days: 7,
-    hour: 2,
-    day_of_week: 0,
-    day_of_month: 1,
-  })),
-  saveSettings: vi.fn(),
-  start: vi.fn(),
-}));
-
 import {
   formatSize,
   parseIntField,
@@ -91,7 +77,6 @@ import {
   backupFilePath,
   backupFileExists,
   listBackups,
-  updateAutoSettings,
 } from '../../../src/nest/backup/backup.impl';
 
 // ---------------------------------------------------------------------------
@@ -1353,58 +1338,5 @@ describe('BACKUP-046 restoreFromZip — with uploads directory', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// updateAutoSettings
-// ---------------------------------------------------------------------------
-
-describe('BACKUP-047 updateAutoSettings', () => {
-  let schedulerMock: typeof import('../../../src/scheduler');
-
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    schedulerMock = await import('../../../src/scheduler');
-  });
-
-  it('BACKUP-047a — calls scheduler.saveSettings with the parsed settings', () => {
-    updateAutoSettings({ enabled: true, interval: 'weekly', hour: 6 });
-
-    expect(schedulerMock.saveSettings).toHaveBeenCalledOnce();
-    expect(schedulerMock.saveSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: true, interval: 'weekly', hour: 6 })
-    );
-  });
-
-  it('BACKUP-047b — calls scheduler.start() after saving', () => {
-    const saveOrder: string[] = [];
-    (schedulerMock.saveSettings as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      saveOrder.push('saveSettings');
-    });
-    (schedulerMock.start as ReturnType<typeof vi.fn>).mockImplementation(() => {
-      saveOrder.push('start');
-    });
-
-    updateAutoSettings({ enabled: false });
-
-    expect(saveOrder).toEqual(['saveSettings', 'start']);
-  });
-
-  it('BACKUP-047c — returns the parsed settings object', () => {
-    const result = updateAutoSettings({
-      enabled: true,
-      interval: 'monthly',
-      keep_days: 30,
-      hour: 3,
-      day_of_week: 2,
-      day_of_month: 15,
-    });
-
-    expect(result).toEqual({
-      enabled: true,
-      interval: 'monthly',
-      keep_days: 30,
-      hour: 3,
-      day_of_week: 2,
-      day_of_month: 15,
-    });
-  });
-});
+// BACKUP-047 (updateAutoSettings) moved to tests/unit/auto-backup.test.ts with
+// the function — it lives on AutoBackupJob now.

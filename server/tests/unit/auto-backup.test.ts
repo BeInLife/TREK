@@ -1,5 +1,5 @@
 /**
- * Scheduled backup run.
+ * Scheduled backup run (AutoBackupJob).
  *
  * The auto-backup used to archive the live travel.db: the archiver reads its
  * entries while streaming, so a WAL auto-checkpoint writing pages back mid-run
@@ -49,9 +49,6 @@ const dbMock = vi.hoisted(() => ({
 
 const logMock = vi.hoisted(() => ({ logInfo: vi.fn(), logError: vi.fn() }));
 
-const cronMock = vi.hoisted(() => ({ schedule: vi.fn(), validate: vi.fn(() => true) }));
-
-vi.mock('node-cron', () => ({ default: cronMock, ...cronMock }));
 vi.mock('fs', () => ({ default: fsMock, ...fsMock }));
 vi.mock('node:fs', () => ({ default: fsMock, ...fsMock }));
 vi.mock('archiver', () => ({ default: archiverMock }));
@@ -65,10 +62,38 @@ vi.mock('../../src/config', () => ({
 }));
 
 import path from 'node:path';
-import { start, setSchedulerDeps } from '../../src/scheduler';
+import { AutoBackupJob } from '../../src/nest/backup/auto-backup.job';
 import { createBackup } from '../../src/nest/backup/backup.impl';
+import type { BackupService } from '../../src/nest/backup/backup.service';
+import type { CronRegistrarService } from '../../src/nest/scheduling/cron-registrar.service';
 
 const liveDb = path.join(__dirname, '../../data', 'travel.db');
+
+interface Registered {
+  name: string;
+  expr: string;
+  onTick: () => Promise<void> | void;
+}
+
+/** An AutoBackupJob wired to the real createBackup and a capturing registrar double. */
+function makeJob() {
+  const registered: Registered[] = [];
+  const registrar = {
+    isEnabled: vi.fn(() => true),
+    register: vi.fn((name: string, expr: string, onTick: Registered['onTick']) => {
+      registered.push({ name, expr, onTick });
+      return true;
+    }),
+    unregister: vi.fn(),
+  };
+  const job = new AutoBackupJob(
+    // The same wiring the container does, with the real service function behind
+    // it — the run below is still the production code path.
+    { createBackup } as unknown as BackupService,
+    registrar as unknown as CronRegistrarService,
+  );
+  return { job, registered, registrar };
+}
 
 /** Wires up the archiver so finalize() resolves the run, and returns its events. */
 function stubArchiver(): Record<string, (arg?: unknown) => void> {
@@ -83,21 +108,12 @@ function stubArchiver(): Record<string, (arg?: unknown) => void> {
   return archiveEvents;
 }
 
-/** Starts the scheduler with auto-backup enabled and hands back the cron callback. */
+/** Arms the job with auto-backup enabled and hands back the cron tick. */
 function scheduledRun(): () => Promise<void> {
   fsMock.readFileSync.mockReturnValue(JSON.stringify({ enabled: true, interval: 'daily', keep_days: 7 }));
-  // The same wiring index.ts does from the container, with the real service
-  // function behind it — the run below is still the production code path.
-  // Only the backup tick is started here; the scheduler's other two container
-  // collaborators are stubbed so the deps object is complete, and neither the
-  // place-photo sweep nor the AirTrail tick is scheduled by start().
-  setSchedulerDeps({
-    backups: { createBackup },
-    placePhotos: { sweepOrphans: vi.fn(() => 0) },
-    airtrail: { runAirtrailSync: vi.fn(async () => {}) },
-  });
-  start();
-  return cronMock.schedule.mock.calls.at(-1)?.[1] as () => Promise<void>;
+  const { job, registered } = makeJob();
+  job.start();
+  return registered.at(-1)?.onTick as () => Promise<void>;
 }
 
 describe('auto-backup run', () => {
@@ -169,21 +185,102 @@ describe('auto-backup run', () => {
   });
 });
 
-describe('auto-backup without container dependencies', () => {
-  it('logs and skips instead of throwing when setSchedulerDeps was never called', async () => {
-    // A fresh module registry, so the deps this file's other cases install are
-    // not still sitting in the scheduler's module state.
-    vi.resetModules();
-    const { start: freshStart } = await import('../../src/scheduler');
-
+describe('auto-backup scheduling (AutoBackupJob.start)', () => {
+  beforeEach(() => {
     vi.clearAllMocks();
-    fsMock.readFileSync.mockReturnValue(JSON.stringify({ enabled: true, interval: 'daily', keep_days: 7 }));
-    freshStart();
-    await (cronMock.schedule.mock.calls.at(-1)?.[1] as () => Promise<void>)();
+    fsMock.existsSync.mockImplementation(() => false);
+    fsMock.readFileSync.mockReturnValue('{}');
+  });
 
-    expect(logMock.logError).toHaveBeenCalledWith(
-      'Auto-Backup: skipped, the scheduler was started without its container dependencies',
+  it('disabled settings unregister the job and log Auto-Backup disabled', () => {
+    const { job, registrar } = makeJob();
+    job.start();
+    expect(registrar.unregister).toHaveBeenCalledWith('auto-backup');
+    expect(registrar.register).not.toHaveBeenCalled();
+    expect(logMock.logInfo).toHaveBeenCalledWith('Auto-Backup disabled');
+  });
+
+  it('enabled settings register the built expression under the auto-backup name and log the banner', () => {
+    fsMock.existsSync.mockImplementation((p: PathLike) => String(p).endsWith('backup-settings.json'));
+    fsMock.readFileSync.mockReturnValue(JSON.stringify({ enabled: true, interval: 'daily', keep_days: 7, hour: 2 }));
+    const { job, registered } = makeJob();
+    job.start();
+    expect(registered.at(-1)?.name).toBe('auto-backup');
+    expect(registered.at(-1)?.expr).toBe('0 2 * * *');
+    expect(logMock.logInfo).toHaveBeenCalledWith(
+      expect.stringMatching(/^Auto-Backup scheduled: daily \(0 2 \* \* \*\), tz: .+, retention: 7 days$/),
     );
-    expect(archiverMock).not.toHaveBeenCalled();
+  });
+
+  it('skips the banner when the registrar refuses to arm (test gate)', () => {
+    fsMock.existsSync.mockImplementation((p: PathLike) => String(p).endsWith('backup-settings.json'));
+    fsMock.readFileSync.mockReturnValue(JSON.stringify({ enabled: true, interval: 'daily', keep_days: 7 }));
+    const { job, registrar } = makeJob();
+    registrar.register.mockImplementation(() => false);
+    job.start();
+    expect(logMock.logInfo).not.toHaveBeenCalledWith(expect.stringContaining('Auto-Backup scheduled'));
+  });
+
+  it('onApplicationBootstrap does nothing when the registrar is disabled', () => {
+    const { job, registrar } = makeJob();
+    registrar.isEnabled.mockReturnValue(false);
+    job.onApplicationBootstrap();
+    expect(registrar.register).not.toHaveBeenCalled();
+    expect(registrar.unregister).not.toHaveBeenCalled();
+    expect(logMock.logInfo).not.toHaveBeenCalled();
+  });
+});
+
+// Moved from backup.impl.test.ts when updateAutoSettings moved onto the job
+// (the impl used to call scheduler.saveSettings + scheduler.start()).
+describe('BACKUP-047 updateAutoSettings', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fsMock.existsSync.mockImplementation(() => false);
+    fsMock.readFileSync.mockReturnValue('{}');
+  });
+
+  it('BACKUP-047a — persists the parsed settings to backup-settings.json', () => {
+    const { job } = makeJob();
+    job.updateAutoSettings({ enabled: true, interval: 'weekly', hour: 6 });
+
+    expect(fsMock.writeFileSync).toHaveBeenCalledOnce();
+    const [file, payload] = fsMock.writeFileSync.mock.calls[0] as [string, string];
+    expect(file).toContain('backup-settings.json');
+    expect(JSON.parse(payload)).toMatchObject({ enabled: true, interval: 'weekly', hour: 6 });
+  });
+
+  it('BACKUP-047b — re-arms the job only after saving', () => {
+    const order: string[] = [];
+    fsMock.writeFileSync.mockImplementation(() => { order.push('save'); });
+    const { job, registrar } = makeJob();
+    // Saving {enabled:false} sends start() down the disabled path — unregister
+    // is its scheduling action, so it stands in for the old scheduler.start().
+    registrar.unregister.mockImplementation(() => { order.push('start'); });
+
+    job.updateAutoSettings({ enabled: false });
+
+    expect(order).toEqual(['save', 'start']);
+  });
+
+  it('BACKUP-047c — returns the parsed settings object', () => {
+    const { job } = makeJob();
+    const result = job.updateAutoSettings({
+      enabled: true,
+      interval: 'monthly',
+      keep_days: 30,
+      hour: 3,
+      day_of_week: 2,
+      day_of_month: 15,
+    });
+
+    expect(result).toEqual({
+      enabled: true,
+      interval: 'monthly',
+      keep_days: 30,
+      hour: 3,
+      day_of_week: 2,
+      day_of_month: 15,
+    });
   });
 });

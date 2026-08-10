@@ -16,8 +16,6 @@ export class BackupService {
   listBackups() { return svc.listBackups(); }
   createBackup(prefix?: 'backup' | 'auto-backup') { return svc.createBackup(prefix); }
   restoreFromZip(zipPath: string) { return svc.restoreFromZip(zipPath); }
-  getAutoSettings() { return svc.getAutoSettings(); }
-  updateAutoSettings(body: Record<string, unknown>) { return svc.updateAutoSettings(body); }
   deleteBackup(filename: string) { return svc.deleteBackup(filename); }
 
   isValidBackupFilename(filename: string) { return svc.isValidBackupFilename(filename); }

@@ -9,7 +9,6 @@ import fs from 'node:fs';
 import http from 'node:http';
 import type { INestApplication } from '@nestjs/common';
 import { buildApp } from './bootstrap';
-import { BackupService } from './nest/backup/backup.service';
 import { PlacePhotoCacheService } from './nest/place-photos/place-photo-cache.service';
 import { AirtrailSyncService } from './nest/integrations/airtrail-sync.service';
 
@@ -94,7 +93,6 @@ const onListen = () => {
   // handed them here, from the app buildApp() already initialised, rather than
   // reaching for src/services at call time.
   scheduler.setSchedulerDeps({
-    backups: nestApp.get(BackupService),
     // The container singleton, not a fresh instance: the in-flight dedup and the
     // known-on-disk set only work if the whole process shares one.
     placePhotos: nestApp.get(PlacePhotoCacheService),
@@ -103,7 +101,6 @@ const onListen = () => {
     // belongs at boot.
     airtrail: nestApp.get(AirtrailSyncService),
   });
-  scheduler.start();
   scheduler.startTripReminders();
   scheduler.startTodoReminders();
   scheduler.startVersionCheck();
