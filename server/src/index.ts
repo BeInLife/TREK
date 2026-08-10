@@ -33,7 +33,6 @@ const tmpDir = path.join(__dirname, '../data/tmp');
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
-import * as scheduler from './scheduler';
 import { getAppUrl, getMcpSafeUrl, readEnv } from './app-config';
 
 const PORT = readEnv().app.port;
@@ -117,8 +116,8 @@ function shutdown(signal: string): void {
   const { logInfo: sLogInfo, logError: sLogError } = require('./nest/audit/audit-log.logger');
   const { closeMcpSessions } = require('./mcp');
   sLogInfo(`${signal} received — shutting down gracefully...`);
-  scheduler.stop();
   closeMcpSessions();
+  // nestApp.close() stops every cron via the scheduling registrar's shutdown hook.
   void nestApp?.close();
   server.close(() => {
     sLogInfo('HTTP server closed');
