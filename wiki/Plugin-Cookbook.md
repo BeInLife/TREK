@@ -354,7 +354,7 @@ Two flavours: a fixed **cron job** declared in the manifest, or a **dynamic time
 
 ```js
 module.exports = {
-  // fixed cron — runs on node-cron
+  // fixed cron — standard 5-field (or 6-field with seconds) expressions
   jobs: [
     { id: 'nightly', schedule: '0 3 * * *', async handler(ctx) { /* … */ } },
   ],

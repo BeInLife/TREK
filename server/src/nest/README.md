@@ -36,8 +36,9 @@ remains as the platform underneath `@nestjs/platform-express`.
 - **Foundation (BE-Phase 1, complete):** the eight stateless helpers moved to
   `common/`; every trip-access check routes through `DatabaseService`
   (`services/tripAccess.ts` and the dead `middleware/tripAccess.ts` are gone);
-  `queryHelpers` and `tripMembership` are providers; the scheduler takes its
-  dependencies from the container.
+  `queryHelpers` and `tripMembership` are providers; every cron is a domain
+  `*.job.ts` provider on `scheduling/CronRegistrarService` (`src/scheduler.ts`
+  is deleted).
 - **Plugin RPC surface (BE-7, complete):** all 113 wire methods are
   `@PluginMethod` / `@PluginOpenMethod` handlers on `@PluginController()` providers
   in their own domains (`<domain>/<domain>.rpc.ts`; the three that belong to no
@@ -179,13 +180,13 @@ tools, which never pass through an HTTP guard. In the five domains piloted for
 
 Two shapes, and the choice is settled:
 
-**Prefer handing the dependency in.** `src/scheduler.ts` declares a
-`SchedulerDeps` interface of the capabilities it needs, and `index.ts` fills it
-from the app after `buildApp()` — the way `bootstrap.ts` hands the `/mcp`
-handler its registry. The declaration is **structural** (`{ backups: {
-createBackup } }`), never the provider class: importing `BackupService` would
-pull in `src/nest/backup` → `nest/backup/backup.impl` → `src/scheduler` and
-close a cycle.
+**Prefer handing the dependency in.** `bootstrap.ts` hands the `/mcp` handler
+its registry via `setMcpRegistry(app.get(...))` after `buildApp()` — the
+outside code names the capability it needs, structurally, never the provider
+class, so no module cycle can close through it. (The retired `src/scheduler.ts`
+was the fullest example — a structural `SchedulerDeps` interface filled by
+`index.ts` — until every cron became an in-container `*.job.ts` provider and
+the seam disappeared entirely, which is the real endgame for this shape.)
 
 **`<domain>.bridge.ts` is the older shape** and still correct for the MCP
 registrars that reach a domain at import time. Its cost is real, though: a
@@ -204,7 +205,8 @@ through. `@trek/nest-mcp` hands the gate its declaring instance now, and
 `AddonsService`. `reservations.mcp.ts` (assignments) and `atlas.mcp.ts` /
 `journey.mcp.ts` (auth) went the same way.
 
-Four in-container uses are left, each for a reason that injection does not fix:
+Three in-container uses are left, each a real module cycle that injection does
+not fix:
 
 - `places.mcp.ts` → `assignments.bridge`: a real cycle, `DaysModule →
   PlacesModule → AssignmentsModule → DaysModule`.
@@ -212,9 +214,11 @@ Four in-container uses are left, each for a reason that injection does not fix:
   `TripsModule` imports both, so importing it back closes the loop.
 - `auth/user-cleanup.service.ts` → `budget.bridge`: `BudgetModule` imports
   `AuthModule`, same shape.
-- `files.controller.ts` / `journey.controller.ts` → `files.bridge`: multer's
-  interceptor options are module-scope literals evaluated before any container
-  exists. The fix is `MulterModule.registerAsync`, not a different import.
+
+(A fourth — `files.controller.ts` / `journey.controller.ts` → `files.bridge` for
+multer's module-scope interceptor options — was resolved 2026-08-10 exactly as
+predicted: `MulterModule.registerAsync` over an `AllowedFileTypesService` leaf,
+and `files.bridge.ts` is deleted.)
 
 The nine fire-and-forget notification senders inject too. They were lazy
 `import('../notifications/notifications.bridge').then(({ send }) => …)` calls
@@ -232,10 +236,11 @@ harnesses (`new AuthService(db, permissions, atlas)` where the class takes six).
 That is why `tests/` is not in the build's `include`, and cleaning it up is its
 own piece of work.
 
-`notifications.instance.ts` holds the out-of-container instance, deliberately
-apart from `notifications.bridge.ts`: several suites replace the bridge wholesale
-with `vi.mock(…, () => ({ send }))`, and a sibling bridge importing the instance
-from there would break under those mocks.
+`notifications.instance.ts` holds the out-of-container `NotificationsService`
+for the surviving cycle-dodge bridges (trips/reservations/airtrail/packing).
+The `notifications.bridge.ts` send shim it used to back died with the
+scheduler migration — the reminder crons inject the container singleton now
+(`ReminderJobsService`).
 - `app-config/` — the `@nestjs/config` binding (`AppConfigModule`, global). Never
   read `process.env` in a module (ESLint enforces this): inject a boot-stable
   namespace via its `registerAs` token (`@Inject(mcpConfig.KEY) … ConfigType<…>`)
@@ -266,10 +271,10 @@ from there would break under those mocks.
 - **A module-scoped registry that outside code writes into must stay a module,
   not a provider.** The notification channel registry is the live example:
   `PluginRuntimeService` pushes its channel getter in at `onModuleInit`, and
-  `notifications.bridge.ts` builds its own `NotificationsService` for the
-  scheduler crons. As a provider the bridge would get a second, empty registry
-  and every plugin channel would go quiet — with no error anywhere.
-  `CHOVR-015` is the regression test. Same reasoning as
+  `notifications.instance.ts` builds its own `NotificationsService` for the
+  surviving cycle-dodge bridges. As a provider that instance would get a second,
+  empty registry and every plugin channel would go quiet — with no error
+  anywhere. `CHOVR-015` is the regression test. Same reasoning as
   `oauth/oauth.pending-codes.ts`.
 - **Self-registration by side-effect import is a trap.** The built-in channels
   used to register because `notificationPreferencesService` happened to `import
@@ -710,8 +715,10 @@ in-app delegation became the real SQL, while the prefs matrix, the smtp/
 webhook/ntfy transports, the channel registry and `inAppNotificationActions`
 stay plain-module imports (graph-classified infra helpers, complete with
 their registry⇄prefs cycle). A one-export `notifications.bridge.ts` (`send`)
-covers the outside-container consumers — scheduler's two cron `require`s,
-legacy adminService and memories/{unified,synology} — **and** the six
+covered the outside-container consumers — scheduler's two cron `require`s,
+legacy adminService and memories/{unified,synology} (that bridge died
+2026-08-10 with the scheduler migration; `notifications.instance.ts` carries
+the surviving cycle-dodge bridges) — **and** the six
 deliberately-lazy fire-and-forget `import().then(({ send }) => …)` sends in
 migrated Nest services (collab/collections/packing/reservations/trips/vacay,
 path-only repoints; kept lazy so a send can never block or cycle a domain
@@ -749,8 +756,10 @@ Ahead of the fold the 11 packing-template functions relocated to
 (`saveAsTemplate` writes every one of them) — that also resolved the `admin-2`
 residual without a bridge, since `packing.mcp.ts` already injects the service;
 `AdminModule` gained PackingModule and PermissionsModule, both cycle-free.
-A 1-export `admin.bridge.ts` (`checkAndNotifyVersion`) serves the only
-out-of-container consumer, `scheduler.ts`'s daily cron. Four lines are
+A 1-export `admin.bridge.ts` (`checkAndNotifyVersion`) served the only
+out-of-container consumer, `scheduler.ts`'s daily cron (both died 2026-08-10
+with the scheduler migration — `VersionCheckJob` injects `AdminService`).
+Four lines are
 non-verbatim, all path re-anchoring one directory deeper for `nest/admin/`
 (`rotateJwtSecret`'s data dir, the `package.json` version require, the
 websocket/demo-reset lazy requires) — both resolved paths verified against the
@@ -774,8 +783,8 @@ SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it
 injects domain services via `PluginHostDepsFactory`, so a migrated domain adds
 `exports: [XService]` + a `PluginsModule` import instead of a bridge entry.
-Only legacy `src/mcp` registrars (and scheduler/websocket code) still need
-bridges.
+Only legacy `src/mcp` registrars (and websocket code) still need bridges — the
+crons all inject now (`*.job.ts` providers on `scheduling/CronRegistrarService`).
 
 1. **Move the SQL** into `<domain>.service.ts` as methods over an injected
    `DatabaseService` (`this.db.all<T>/get<T>/run/prepare/transaction`; strict
@@ -785,8 +794,8 @@ bridges.
    functions, do not change the service's method surface. The module needs no
    `imports: [DatabaseModule]` — it's `@Global`.
 2. **Add `<domain>.bridge.ts`** next to the service **only if non-Nest consumers
-   exist** (legacy MCP tool registrars, scheduler, websocket — the plugin RPC
-   host now injects instead, see above). It builds a module-level instance over
+   exist** (legacy MCP tool registrars, websocket — the plugin RPC host and the
+   crons now inject instead, see above). It builds a module-level instance over
    the shared connection Proxy — `new XService(new DatabaseService(db))`,
    reinitialize-proof, same pattern as `nest/todo/todo.bridge.ts` — and exports
    the legacy function names 1:1.
