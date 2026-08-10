@@ -53,7 +53,7 @@ interface Supervised {
   lastRss: number; // last reported resident set size (bytes)
   routes: PluginRouteInfo[];
   jobs: ScheduledJob[]; // declared background jobs (id + cron schedule)
-  jobTasks?: ReturnType<typeof scheduleJobs>; // live node-cron tasks (only when jobs:run granted)
+  jobTasks?: ReturnType<typeof scheduleJobs>; // live cron jobs (only when jobs:run granted)
   hooks: string[]; // provider hooks the plugin implements (e.g. 'placeDetailProvider')
   events: string[]; // core events the plugin subscribes to (names or '*')
   exports: string[]; // functions the plugin exposes to dependents (ctx.plugins.call)
@@ -638,7 +638,7 @@ export class PluginSupervisor {
     sup.child = null;
     // In-flight host→child invokes can never complete now.
     this.rejectPending(sup, 'plugin exited');
-    // The dead child's node-cron tasks keep ticking (node-cron holds them, not the
+    // The dead child's cron jobs keep ticking (the host holds them, not the
     // child). Stop them here — otherwise every crash-restart cycle leaks a task-set
     // AND re-schedules a fresh one, so the job fires N+1 times per tick after N
     // crashes (duplicate egress/db side effects). kill() already does this for the

@@ -229,6 +229,56 @@ describe('auto-backup scheduling (AutoBackupJob.start)', () => {
     expect(registrar.unregister).not.toHaveBeenCalled();
     expect(logMock.logInfo).not.toHaveBeenCalled();
   });
+
+  it('onApplicationBootstrap arms the cron when the registrar is enabled', () => {
+    fsMock.existsSync.mockImplementation((p: PathLike) => String(p).endsWith('backup-settings.json'));
+    fsMock.readFileSync.mockReturnValue(JSON.stringify({ enabled: true, interval: 'hourly' }));
+    const { job, registered } = makeJob();
+    job.onApplicationBootstrap();
+    expect(registered.at(-1)?.name).toBe('auto-backup');
+    expect(registered.at(-1)?.expr).toBe('0 * * * *');
+  });
+
+  it('keep_days 0 banners "retention: forever" and skips retention after a run', async () => {
+    fsMock.existsSync.mockImplementation((p: PathLike) => String(p).endsWith('backup-settings.json'));
+    fsMock.readFileSync.mockReturnValue(JSON.stringify({ enabled: true, interval: 'daily', keep_days: 0 }));
+    stubArchiver();
+    const { job, registered } = makeJob();
+    job.start();
+    expect(logMock.logInfo).toHaveBeenCalledWith(expect.stringContaining('retention: forever'));
+
+    await (registered.at(-1)?.onTick as () => Promise<void>)();
+    expect(logMock.logInfo).toHaveBeenCalledWith(expect.stringContaining('Auto-Backup created'));
+    expect(fsMock.readdirSync).not.toHaveBeenCalled(); // cleanupOldBackups never ran
+  });
+
+  it('a non-Error rejection from createBackup is stringified into the failure log', async () => {
+    const broken = { createBackup: vi.fn().mockRejectedValue('plain string') } as unknown as BackupService;
+    const registrar = { isEnabled: vi.fn(() => true), register: vi.fn(() => true), unregister: vi.fn() };
+    const job = new AutoBackupJob(broken, registrar as unknown as CronRegistrarService);
+    await job.runBackup();
+    expect(logMock.logError).toHaveBeenCalledWith('Auto-Backup: plain string');
+  });
+
+  it('getAutoSettings returns the loaded settings with a resolved timezone', () => {
+    const prevTz = process.env.TZ;
+    try {
+      process.env.TZ = 'Europe/Zurich';
+      const { job } = makeJob();
+      expect(job.getAutoSettings()).toEqual({
+        settings: { enabled: false, interval: 'daily', keep_days: 7, hour: 2, day_of_week: 0, day_of_month: 1 },
+        timezone: 'Europe/Zurich',
+      });
+
+      delete process.env.TZ;
+      // Falls back to the host zone (or UTC when the host reports none).
+      expect(typeof job.getAutoSettings().timezone).toBe('string');
+      expect(job.getAutoSettings().timezone.length).toBeGreaterThan(0);
+    } finally {
+      if (prevTz === undefined) delete process.env.TZ;
+      else process.env.TZ = prevTz;
+    }
+  });
 });
 
 // Moved from backup.impl.test.ts when updateAutoSettings moved onto the job

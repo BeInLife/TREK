@@ -263,4 +263,9 @@ describe('cleanupOldBackups', () => {
     readdirSyncMock.mockImplementation(() => { throw new Error('ENOENT'); });
     expect(() => cleanupOldBackups(7, NOW)).not.toThrow();
   });
+
+  it('swallows non-Error throws without throwing (string rejection path)', () => {
+    readdirSyncMock.mockImplementation(() => { throw 'nope'; });
+    expect(() => cleanupOldBackups(7, NOW)).not.toThrow();
+  });
 });

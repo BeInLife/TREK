@@ -76,6 +76,11 @@ describe('IdempotencyCleanupJob', () => {
     on.job.onApplicationBootstrap();
     expect(on.registrar.register).toHaveBeenCalledWith('idempotency-cleanup', '0 3 * * *', expect.any(Function));
 
+    // The registered callback IS the tick — drive it once over an empty table
+    // (nothing to purge → no log, no throw).
+    const onTick = on.registrar.register.mock.calls[0][2] as () => void;
+    expect(() => onTick()).not.toThrow();
+
     const off = makeJob(false);
     off.job.onApplicationBootstrap();
     expect(off.registrar.register).not.toHaveBeenCalled();
@@ -103,5 +108,10 @@ describe('IdempotencyCleanupJob', () => {
     const broken = { prepare: () => { throw new Error('db gone'); } } as unknown as DatabaseService;
     const job = new IdempotencyCleanupJob(broken, { isEnabled: () => true } as unknown as CronRegistrarService);
     expect(() => job.tick()).not.toThrow();
+
+    // Non-Error throws are stringified rather than crashing the catch itself.
+    const brokenString = { prepare: () => { throw 'db string'; } } as unknown as DatabaseService;
+    const job2 = new IdempotencyCleanupJob(brokenString, { isEnabled: () => true } as unknown as CronRegistrarService);
+    expect(() => job2.tick()).not.toThrow();
   });
 });
