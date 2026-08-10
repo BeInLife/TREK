@@ -55,12 +55,6 @@ vi.mock('../../../src/nest/common/crypto/apiKeyCrypto', () => ({
 }));
 vi.mock('../../../src/nest/auth/ephemeral-tokens', () => ({ createEphemeralToken: vi.fn() }));
 vi.mock('../../../src/mcp/sessionManager', () => ({ revokeUserSessions: vi.fn() }));
-vi.mock('../../../src/scheduler', () => ({
-  startTripReminders: vi.fn(),
-  buildCronExpression: vi.fn(),
-  loadSettings: vi.fn(() => ({ enabled: false })),
-  VALID_INTERVALS: ['daily', 'weekly', 'monthly'],
-}));
 
 // The WebAuthn ceremony verdicts are the mock boundary — the service must
 // persist ONLY what the verifier vouches for, so the tests hand it verdicts.

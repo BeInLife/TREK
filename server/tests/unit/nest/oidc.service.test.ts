@@ -63,12 +63,6 @@ vi.mock('../../../src/nest/common/crypto/apiKeyCrypto', () => ({
 }));
 vi.mock('../../../src/nest/auth/ephemeral-tokens', () => ({ createEphemeralToken: vi.fn() }));
 vi.mock('../../../src/mcp/sessionManager', () => ({ revokeUserSessions: vi.fn() }));
-vi.mock('../../../src/scheduler', () => ({
-  startTripReminders: vi.fn(),
-  buildCronExpression: vi.fn(),
-  loadSettings: vi.fn(() => ({ enabled: false })),
-  VALID_INTERVALS: ['daily', 'weekly', 'monthly'],
-}));
 
 const { getAppUrlMock } = vi.hoisted(() => ({ getAppUrlMock: vi.fn() }));
 vi.mock('../../../src/app-config', async (importOriginal) => {

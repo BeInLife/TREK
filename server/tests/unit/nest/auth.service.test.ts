@@ -55,12 +55,6 @@ vi.mock('../../../src/nest/common/crypto/apiKeyCrypto', () => ({
 }));
 vi.mock('../../../src/nest/auth/ephemeral-tokens', () => ({ createEphemeralToken: vi.fn() }));
 vi.mock('../../../src/mcp/sessionManager', () => ({ revokeUserSessions: vi.fn() }));
-vi.mock('../../../src/scheduler', () => ({
-  startTripReminders: vi.fn(),
-  buildCronExpression: vi.fn(),
-  loadSettings: vi.fn(() => ({ enabled: false })),
-  VALID_INTERVALS: ['daily', 'weekly', 'monthly'],
-}));
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
@@ -736,12 +730,13 @@ describe('updateAppSettings', () => {
     expect(result).toEqual({ error: 'Cannot disable all login methods. At least one must remain enabled.', status: 400 });
   });
 
-  it('AUTH-DB-075: the smtp_pass masking sentinel is skipped, notification changes flag a scheduler restart', () => {
+  it('AUTH-DB-075: the smtp_pass masking sentinel is skipped on a notification-settings change', () => {
+    // The reminder crons read their gates per tick now, so a settings change no
+    // longer flags (or needs) a scheduler restart.
     const { user } = createAdmin(testDb);
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('smtp_pass', 'stored')").run();
     const result = svc.updateAppSettings(user.id, { smtp_pass: '••••••••', notification_channels: 'email' });
     expect(result.success).toBe(true);
-    expect(result.shouldRestartScheduler).toBe(true);
     const { value } = testDb.prepare("SELECT value FROM app_settings WHERE key = 'smtp_pass'").get() as { value: string };
     expect(value).toBe('stored'); // sentinel never overwrites the secret
     expect(result.auditDebugDetails).not.toHaveProperty('smtp_pass', 'stored');

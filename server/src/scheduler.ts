@@ -50,6 +50,9 @@ let reminderTask: ScheduledTask | null = null;
 function startTripReminders(): void {
   if (reminderTask) { reminderTask.stop(); reminderTask = null; }
 
+  // Boot banner only — the enable gate is read per tick below (airtrail-style),
+  // so toggling notify_trip_reminder takes effect at the next 9 AM run without
+  // a restart. The banner reflects the state at boot.
   try {
     const { db } = require('./db/database');
     const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
@@ -58,19 +61,20 @@ function startTripReminders(): void {
     const activeChannels = channelsRaw === 'none' ? [] : channelsRaw.split(',').map((c: string) => c.trim());
     if (!reminderEnabled) {
       logInfo('Trip reminders: disabled in settings');
-      return;
+    } else {
+      const tripCount = (db.prepare('SELECT COUNT(*) as c FROM trips WHERE reminder_days > 0 AND start_date IS NOT NULL').get() as { c: number }).c;
+      logInfo(`Trip reminders: enabled via [${activeChannels.join(',')}]${tripCount > 0 ? `, ${tripCount} trip(s) with active reminders` : ''}`);
     }
-
-    const tripCount = (db.prepare('SELECT COUNT(*) as c FROM trips WHERE reminder_days > 0 AND start_date IS NOT NULL').get() as { c: number }).c;
-    logInfo(`Trip reminders: enabled via [${activeChannels.join(',')}]${tripCount > 0 ? `, ${tripCount} trip(s) with active reminders` : ''}`);
   } catch {
-    return;
+    /* banner is best-effort */
   }
 
   const tz = readEnv().app.tz || 'UTC';
   reminderTask = cron.schedule('0 9 * * *', async () => {
     try {
       const { db } = require('./db/database');
+      const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+      if (getSetting('notify_trip_reminder') === 'false') return;
       const { send } = require('./nest/notifications/notifications.bridge');
 
       const trips = db.prepare(`
@@ -104,18 +108,27 @@ let todoReminderTask: ScheduledTask | null = null;
 function startTodoReminders(): void {
   if (todoReminderTask) { todoReminderTask.stop(); todoReminderTask = null; }
 
-  const { db } = require('./db/database');
-  const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
-  const enabled = getSetting('notify_todo_due') !== 'false';
-  if (!enabled) {
-    logInfo('Todo due reminders: disabled in settings');
-    return;
+  // Boot banner only — the enable gate is read per tick below (airtrail-style),
+  // so toggling notify_todo_due takes effect at the next 9 AM run without a
+  // restart. The banner reflects the state at boot.
+  try {
+    const { db } = require('./db/database');
+    const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+    if (getSetting('notify_todo_due') !== 'false') {
+      logInfo(`Todo due reminders: enabled (lead ${TODO_REMINDER_LEAD_DAYS}d)`);
+    } else {
+      logInfo('Todo due reminders: disabled in settings');
+    }
+  } catch {
+    /* banner is best-effort */
   }
-  logInfo(`Todo due reminders: enabled (lead ${TODO_REMINDER_LEAD_DAYS}d)`);
 
   const tz = readEnv().app.tz || 'UTC';
   todoReminderTask = cron.schedule('0 9 * * *', async () => {
     try {
+      const { db } = require('./db/database');
+      const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
+      if (getSetting('notify_todo_due') === 'false') return;
       const { send } = require('./nest/notifications/notifications.bridge');
 
       // Select unchecked todos with a due date inside the lead window

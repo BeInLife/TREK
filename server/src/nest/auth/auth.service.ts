@@ -19,7 +19,6 @@ import { EphemeralTokenService } from './ephemeral-token.service';
 // the whole tools fan-out (and via the domain bridges, the Nest services) into
 // every consumer of this module — a nest→mcp→nest module cycle.
 import { revokeUserSessions } from '../../mcp/sessionManager';
-import { startTripReminders } from '../../scheduler';
 import { UserCleanupService } from './user-cleanup.service';
 import { emitUserDeleted } from '../../plugin-user-lifecycle';
 import { verifyJwtAndLoadUser } from './jwt-verify';
@@ -598,7 +597,6 @@ export class AuthService {
     success?: boolean;
     auditSummary?: Record<string, unknown>;
     auditDebugDetails?: Record<string, unknown>;
-    shouldRestartScheduler?: boolean;
   } {
     const body = rawBody as Record<string, unknown>;
     const user = this.db.get<{ role: string }>('SELECT role FROM users WHERE id = ?', userId);
@@ -665,13 +663,9 @@ export class AuthService {
       debugDetails[k] = k === 'smtp_pass' ? '***' : body[k];
     }
 
-    const notifRelated = ['notification_channels', 'smtp_host'];
-    const shouldRestartScheduler = changedKeys.some(k => notifRelated.includes(k));
-    if (shouldRestartScheduler) {
-      startTripReminders();
-    }
-
-    return { success: true, auditSummary: summary, auditDebugDetails: debugDetails, shouldRestartScheduler };
+    // The reminder crons read their enable gates and channels per tick, so a
+    // notification-settings change takes effect at the next run — no restart.
+    return { success: true, auditSummary: summary, auditDebugDetails: debugDetails };
   }
 
   // -------------------------------------------------------------------------
