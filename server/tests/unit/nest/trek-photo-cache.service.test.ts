@@ -147,9 +147,10 @@ describe('the stampede guard', () => {
     expect(svc.getInFlight(key)).toBeUndefined();
   });
 
-  it('CACHE-010: the map is shared across instances — the scheduler builds its own', () => {
-    // Load-bearing: a per-instance map would give the cron and the container
-    // separate guards and the dedup would be silently gone.
+  it('CACHE-010: the map is shared across instances (module-scoped stampede guard)', () => {
+    // Load-bearing: a per-instance map would hand any second instance a private
+    // guard and the dedup would be silently gone. The sweep cron injects the
+    // container singleton now, but the invariant stays pinned.
     const other = new TrekPhotoCacheService(new DatabaseService(testDb));
     const promise = Promise.resolve<Buffer | null>(null);
     svc.setInFlight('shared-key', promise);

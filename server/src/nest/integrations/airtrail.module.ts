@@ -3,7 +3,9 @@ import { AirtrailController } from './airtrail.controller';
 import { AirtrailClient } from './airtrail.client';
 import { AirtrailService } from './airtrail.service';
 import { AirtrailSyncService } from './airtrail-sync.service';
+import { AirtrailSyncJob } from './airtrail-sync.job';
 import { AirtrailImportService } from './airtrail-import.service';
+import { SchedulingModule } from '../scheduling/scheduling.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { AddonsModule } from '../addons/addons.module';
 import { AuditModule } from '../audit/audit.module';
@@ -24,9 +26,9 @@ import { ReservationsModule } from '../reservations/reservations.module';
  * seam on purpose - see airtrail.bridge.ts.
  */
 @Module({
-  imports: [PermissionsModule, AddonsModule, AuditModule, ReservationsModule],
+  imports: [PermissionsModule, AddonsModule, AuditModule, ReservationsModule, SchedulingModule],
   controllers: [AirtrailController],
-  providers: [AirtrailClient, AirtrailService, AirtrailSyncService, AirtrailImportService],
+  providers: [AirtrailClient, AirtrailService, AirtrailSyncService, AirtrailSyncJob, AirtrailImportService],
   exports: [AirtrailSyncService, AirtrailImportService],
 })
 export class AirtrailModule {}

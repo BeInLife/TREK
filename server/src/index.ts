@@ -9,8 +9,6 @@ import fs from 'node:fs';
 import http from 'node:http';
 import type { INestApplication } from '@nestjs/common';
 import { buildApp } from './bootstrap';
-import { PlacePhotoCacheService } from './nest/place-photos/place-photo-cache.service';
-import { AirtrailSyncService } from './nest/integrations/airtrail-sync.service';
 
 // Create upload and data directories on startup.
 // Every uploads subdir the app writes to must be listed here (#1762): a dir
@@ -89,22 +87,6 @@ const onListen = () => {
   if (env.demo.enabled && env.app.isProduction) {
     sLogWarn('SECURITY WARNING: DEMO_MODE is enabled in production!');
   }
-  // The scheduler runs outside the container but needs things inside it. It is
-  // handed them here, from the app buildApp() already initialised, rather than
-  // reaching for src/services at call time.
-  scheduler.setSchedulerDeps({
-    // The container singleton, not a fresh instance: the in-flight dedup and the
-    // known-on-disk set only work if the whole process shares one.
-    placePhotos: nestApp.get(PlacePhotoCacheService),
-    // The last lazy require() in the cron path. It used to fail inside the tick,
-    // logged as "AirTrail sync tick failed", where a boot-time wiring mistake
-    // belongs at boot.
-    airtrail: nestApp.get(AirtrailSyncService),
-  });
-  scheduler.startIdempotencyCleanup();
-  scheduler.startTrekPhotoCacheCleanup();
-  scheduler.startPlacePhotoCacheCleanup();
-  scheduler.startAirTrailSync();
   import('./websocket').then(({ setupWebSocket }) => {
     setupWebSocket(server);
   });

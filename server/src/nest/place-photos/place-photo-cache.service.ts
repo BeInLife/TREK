@@ -42,8 +42,8 @@ interface CachedPhoto {
  * three in-memory structures only do their job if there is exactly ONE of them.
  * A second instance would give the stampede guard its own inFlight map, so two
  * simultaneous requests for the same uncached place would both call the
- * provider. That is the reason the scheduler takes this from the container
- * rather than constructing it: see SchedulerDeps.
+ * provider. That is the reason the nightly sweep (PlacePhotoCacheJob) injects
+ * this container singleton rather than constructing its own.
  */
 @Injectable()
 export class PlacePhotoCacheService implements OnModuleInit {

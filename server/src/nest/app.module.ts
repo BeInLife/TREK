@@ -60,6 +60,7 @@ import { trekMcpAccessPolicy, trekMcpValidateAccess } from '../mcp/nest-mcp-poli
 import { TrekExceptionFilter } from './common/trek-exception.filter';
 import { SpaFallbackFilter } from './platform/spa-fallback.filter';
 import { IdempotencyInterceptor } from './common/idempotency.interceptor';
+import { IdempotencyCleanupJob } from './common/idempotency-cleanup.job';
 
 /**
  * Root NestJS module for the incremental migration. Domain modules
@@ -87,6 +88,8 @@ import { IdempotencyInterceptor } from './common/idempotency.interceptor';
     // Replays the X-Idempotency-Key the client sends on every write, so retried
     // mutations don't double-apply.
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+    // Its nightly TTL purge — a provider here because common/ has no module.
+    IdempotencyCleanupJob,
     // Global Zod validation: any parameter typed with a createZodDto class
     // (the <domain>.dto.ts wrappers over @trek/shared schemas) is validated;
     // everything else passes through untouched. Paired with the boot gate in

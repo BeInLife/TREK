@@ -14,11 +14,12 @@ export const CACHE_TTL = 60 * 60 * 1000; // 1 hour
  * In-flight fetches, module-scoped on purpose.
  *
  * This is the stampede guard: ten tiles asking for the same uncached asset must
- * share one upstream fetch. The scheduler drives sweepExpired through a lazy
- * require outside the container, so a second instance of this service exists by
- * design - a per-instance Map would hand each of them a private one and the
- * guard would be silently gone. Same reasoning as oauth/oauth.pending-codes.ts
- * and the notification channel registry.
+ * share one upstream fetch. The sweep cron injects the container singleton now
+ * (TrekPhotoCacheJob), but the module scope keeps the guard whole even if a
+ * second instance of this service ever exists again — a per-instance Map would
+ * hand each of them a private one and the guard would be silently gone. Same
+ * reasoning as oauth/oauth.pending-codes.ts and the notification channel
+ * registry.
  */
 const inFlight = new Map<string, Promise<Buffer | null>>();
 
