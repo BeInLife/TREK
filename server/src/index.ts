@@ -8,7 +8,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import http from 'node:http';
 import type { INestApplication } from '@nestjs/common';
-import { buildApp } from './bootstrap';
+import { buildApp, getHttpServer } from './bootstrap';
 
 // Create upload and data directories on startup.
 // Every uploads subdir the app writes to must be listed here (#1762): a dir
@@ -86,9 +86,8 @@ const onListen = () => {
   if (env.demo.enabled && env.app.isProduction) {
     sLogWarn('SECURITY WARNING: DEMO_MODE is enabled in production!');
   }
-  import('./websocket').then(({ setupWebSocket }) => {
-    setupWebSocket(server);
-  });
+  // Nothing else to boot by hand: the crons are domain providers on the
+  // scheduling registrar, and /ws is the Nest gateway buildApp already bound.
 };
 
 let server: http.Server;
@@ -101,7 +100,10 @@ async function bootstrap(): Promise<void> {
   // (/mcp, /.well-known, OAuth SDK, SPA catch-all). buildApp() owns the composition
   // order; it is shared with the integration-test harness so they can't drift.
   nestApp = await buildApp();
-  server = http.createServer(nestApp.getHttpAdapter().getInstance());
+  // The server buildApp created and bound /ws to. Creating a second one here
+  // would serve the REST API fine and leave the gateway attached to a socket
+  // nobody listens on.
+  server = getHttpServer();
   if (HOST) server.listen(PORT, HOST, onListen);
   else server.listen(PORT, onListen);
 }
