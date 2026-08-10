@@ -21,6 +21,11 @@ export class RuntimeEnvService {
     return readEnv().demo.enabled;
   }
 
+  /** True only under exactly NODE_ENV='test' (case-sensitive, like the :memory: DB pick). */
+  isTest(): boolean {
+    return readEnv().app.isTest;
+  }
+
   nodeEnv(): string | undefined {
     return readEnv().app.nodeEnv;
   }
