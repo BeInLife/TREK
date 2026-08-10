@@ -58,7 +58,6 @@ vi.mock('../../src/db/database', () => ({
   db, canAccessTrip, isOwner: vi.fn(() => true), getPlaceWithTags: vi.fn(), closeDb: () => {}, reinitialize: () => {},
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
-vi.mock('../../src/nest/notifications/notifications.bridge', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 

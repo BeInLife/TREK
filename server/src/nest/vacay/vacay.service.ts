@@ -639,7 +639,7 @@ export class VacayService {
     } catch { /* websocket not available */ }
 
     // Notify invited user
-    // Injected, not a lazy import of notifications.bridge. The laziness bought
+    // Injected, not a lazy import of the old notifications bridge. The laziness bought
     // nothing the module graph does not already give — NotificationsModule
     // reaches nothing in this direction — and it hid the edge while handing the
     // send a second NotificationsService built outside the container.

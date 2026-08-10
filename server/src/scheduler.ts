@@ -44,139 +44,6 @@ function startDemoReset(): void {
   logInfo('Demo hourly reset scheduled');
 }
 
-// Trip reminders: daily check at 9 AM local time for trips starting tomorrow
-let reminderTask: ScheduledTask | null = null;
-
-function startTripReminders(): void {
-  if (reminderTask) { reminderTask.stop(); reminderTask = null; }
-
-  // Boot banner only — the enable gate is read per tick below (airtrail-style),
-  // so toggling notify_trip_reminder takes effect at the next 9 AM run without
-  // a restart. The banner reflects the state at boot.
-  try {
-    const { db } = require('./db/database');
-    const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
-    const reminderEnabled = getSetting('notify_trip_reminder') !== 'false';
-    const channelsRaw = getSetting('notification_channels') || getSetting('notification_channel') || 'none';
-    const activeChannels = channelsRaw === 'none' ? [] : channelsRaw.split(',').map((c: string) => c.trim());
-    if (!reminderEnabled) {
-      logInfo('Trip reminders: disabled in settings');
-    } else {
-      const tripCount = (db.prepare('SELECT COUNT(*) as c FROM trips WHERE reminder_days > 0 AND start_date IS NOT NULL').get() as { c: number }).c;
-      logInfo(`Trip reminders: enabled via [${activeChannels.join(',')}]${tripCount > 0 ? `, ${tripCount} trip(s) with active reminders` : ''}`);
-    }
-  } catch {
-    /* banner is best-effort */
-  }
-
-  const tz = readEnv().app.tz || 'UTC';
-  reminderTask = cron.schedule('0 9 * * *', async () => {
-    try {
-      const { db } = require('./db/database');
-      const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
-      if (getSetting('notify_trip_reminder') === 'false') return;
-      const { send } = require('./nest/notifications/notifications.bridge');
-
-      const trips = db.prepare(`
-        SELECT t.id, t.title, t.user_id, t.reminder_days FROM trips t
-        WHERE t.reminder_days > 0
-          AND t.start_date IS NOT NULL
-          AND t.start_date = date('now', '+' || t.reminder_days || ' days')
-      `).all() as { id: number; title: string; user_id: number; reminder_days: number }[];
-
-      for (const trip of trips) {
-        await send({ event: 'trip_reminder', actorId: null, scope: 'trip', targetId: trip.id, params: { trip: trip.title, tripId: String(trip.id) } }).catch(() => {});
-      }
-
-      if (trips.length > 0) {
-        logInfo(`Trip reminders sent for ${trips.length} trip(s): ${trips.map(t => `"${t.title}" (${t.reminder_days}d)`).join(', ')}`);
-      }
-    } catch (err: unknown) {
-      logError(`Trip reminder check failed: ${err instanceof Error ? err.message : err}`);
-    }
-  }, { timezone: tz });
-}
-
-// Todo due-date reminders: daily check at 9 AM for unchecked todos
-// whose due_date falls within the next TODO_REMINDER_LEAD_DAYS days.
-// Each todo gets reminded at most once per 24 h (tracked via
-// todo_items.reminded_at) so the scheduler doesn't spam the user every
-// morning leading up to the deadline.
-const TODO_REMINDER_LEAD_DAYS = 3;
-let todoReminderTask: ScheduledTask | null = null;
-
-function startTodoReminders(): void {
-  if (todoReminderTask) { todoReminderTask.stop(); todoReminderTask = null; }
-
-  // Boot banner only — the enable gate is read per tick below (airtrail-style),
-  // so toggling notify_todo_due takes effect at the next 9 AM run without a
-  // restart. The banner reflects the state at boot.
-  try {
-    const { db } = require('./db/database');
-    const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
-    if (getSetting('notify_todo_due') !== 'false') {
-      logInfo(`Todo due reminders: enabled (lead ${TODO_REMINDER_LEAD_DAYS}d)`);
-    } else {
-      logInfo('Todo due reminders: disabled in settings');
-    }
-  } catch {
-    /* banner is best-effort */
-  }
-
-  const tz = readEnv().app.tz || 'UTC';
-  todoReminderTask = cron.schedule('0 9 * * *', async () => {
-    try {
-      const { db } = require('./db/database');
-      const getSetting = (key: string) => (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value;
-      if (getSetting('notify_todo_due') === 'false') return;
-      const { send } = require('./nest/notifications/notifications.bridge');
-
-      // Select unchecked todos with a due date inside the lead window
-      // that haven't been reminded in the last 24 hours. `due_date` is
-      // stored as a YYYY-MM-DD text; SQLite date() handles it directly.
-      const todos = db.prepare(`
-        SELECT ti.id, ti.trip_id, ti.name, ti.due_date, ti.assigned_user_id,
-               t.title AS trip_title, t.user_id AS trip_owner_id
-        FROM todo_items ti
-        JOIN trips t ON t.id = ti.trip_id
-        WHERE ti.checked = 0
-          AND ti.due_date IS NOT NULL
-          AND ti.due_date <> ''
-          AND date(ti.due_date) <= date('now', '+' || ? || ' days')
-          AND date(ti.due_date) >= date('now')
-          AND (ti.reminded_at IS NULL OR ti.reminded_at <= datetime('now', '-20 hours'))
-      `).all(TODO_REMINDER_LEAD_DAYS) as {
-        id: number; trip_id: number; name: string; due_date: string;
-        assigned_user_id: number | null; trip_title: string; trip_owner_id: number;
-      }[];
-
-      for (const todo of todos) {
-        const targetScope: 'user' | 'trip' = todo.assigned_user_id ? 'user' : 'trip';
-        const targetId = todo.assigned_user_id ?? todo.trip_id;
-        await send({
-          event: 'todo_due',
-          actorId: null,
-          scope: targetScope,
-          targetId,
-          params: {
-            todo: todo.name,
-            trip: todo.trip_title,
-            tripId: String(todo.trip_id),
-            due: todo.due_date,
-          },
-        }).catch(() => {});
-        db.prepare('UPDATE todo_items SET reminded_at = CURRENT_TIMESTAMP WHERE id = ?').run(todo.id);
-      }
-
-      if (todos.length > 0) {
-        logInfo(`Todo reminders sent for ${todos.length} item(s)`);
-      }
-    } catch (err: unknown) {
-      logError(`Todo reminder check failed: ${err instanceof Error ? err.message : err}`);
-    }
-  }, { timezone: tz });
-}
-
 // Version check: daily at 9 AM — notify admins if a new TREK release is available
 let versionCheckTask: ScheduledTask | null = null;
 
@@ -334,7 +201,6 @@ function startAirTrailSync(): void {
 
 function stop(): void {
   if (demoTask) { demoTask.stop(); demoTask = null; }
-  if (reminderTask) { reminderTask.stop(); reminderTask = null; }
   if (versionCheckTask) { versionCheckTask.stop(); versionCheckTask = null; }
   if (idempotencyCleanupTask) { idempotencyCleanupTask.stop(); idempotencyCleanupTask = null; }
   if (trekPhotoCacheTask) { trekPhotoCacheTask.stop(); trekPhotoCacheTask = null; }
@@ -342,4 +208,4 @@ function stop(): void {
   if (airtrailSyncTask) { airtrailSyncTask.stop(); airtrailSyncTask = null; }
 }
 
-export { stop, startDemoReset, startTripReminders, startTodoReminders, startVersionCheck, startIdempotencyCleanup, purgeExpiredIdempotencyKeys, startTrekPhotoCacheCleanup, startPlacePhotoCacheCleanup, startAirTrailSync };
+export { stop, startDemoReset, startVersionCheck, startIdempotencyCleanup, purgeExpiredIdempotencyKeys, startTrekPhotoCacheCleanup, startPlacePhotoCacheCleanup, startAirTrailSync };

@@ -41,7 +41,6 @@ vi.mock('../../src/db/database', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 const { notificationSend } = vi.hoisted(() => ({ notificationSend: vi.fn().mockResolvedValue(undefined) }));
-vi.mock('../../src/nest/notifications/notifications.bridge', () => ({ send: notificationSend }));
 // ReservationsService injects NotificationsService now instead of reaching the
 // bridge through a lazy import, so the e2e app resolves the real provider out of
 // its own container — the module mock above never sees the send. The override

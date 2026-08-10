@@ -42,7 +42,6 @@ vi.mock('../../../src/config', () => ({
 }));
 vi.mock('../../../src/websocket', () => ({ broadcastToUser, broadcast: vi.fn() }));
 const notifSend = vi.fn().mockResolvedValue(undefined);
-vi.mock('../../../src/nest/notifications/notifications.bridge', () => ({ send: notifSend }));
 
 import fs from 'fs';
 import path from 'path';
@@ -84,10 +83,6 @@ function clearCollections() {
 beforeAll(async () => {
   createTables(testDb);
   runMigrations(testDb);
-  // Warm the notifications bridge module: sendInvite does a fire-and-forget
-  // dynamic import of it, and a cold load can otherwise race the mock registry
-  // under slow (coverage) runs — same precaution as tests/integration/vacay.test.ts.
-  await import('../../../src/nest/notifications/notifications.bridge');
 });
 
 beforeEach(() => {

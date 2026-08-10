@@ -127,6 +127,16 @@ describe('CronRegistrarService', () => {
     expect(registrar.jobCount).toBe(0);
   });
 
+  it("CRONREG-009 — shutdown tolerates the orchestrator having already cleared the registry", () => {
+    // @nestjs/schedule v6 deletes every registry cron job in its own
+    // beforeApplicationShutdown, which runs before our onApplicationShutdown.
+    const { registrar, registry } = makeRegistrar(false);
+    registrar.register('job', '0 2 * * *', () => {});
+    registry.deleteCronJob('job'); // the orchestrator's pass
+    expect(() => registrar.onApplicationShutdown()).not.toThrow();
+    expect(registrar.jobCount).toBe(0);
+  });
+
   it('CRONREG-008 — the disabled path still clears an already-registered name (restart parity)', () => {
     // A dynamic job (auto-backup) restarts by re-registering; if settings turn
     // it off the register call must still drop the old schedule.

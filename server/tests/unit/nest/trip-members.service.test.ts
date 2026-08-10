@@ -50,7 +50,6 @@ vi.mock('../../../src/config', () => ({
 vi.mock('../../../src/websocket', () => ({ broadcast }));
 // notifyInvite reaches the bridge through a dynamic import — keep the send in scope
 // but out of the transports.
-vi.mock('../../../src/nest/notifications/notifications.bridge', () => ({ send: notifySend }));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';

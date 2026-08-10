@@ -9,13 +9,10 @@ import { NotificationsService } from './notifications.service';
 
 /**
  * The out-of-container NotificationsService, for the bridges that hand-build
- * their collaborators.
- *
- * Separate from notifications.bridge.ts on purpose. That file is the *send*
- * entry point for non-Nest callers and several suites replace it wholesale with
- * `vi.mock(..., () => ({ send }))`; a sibling bridge importing its instance from
- * there would break the moment one of those mocks ran. This module only hands
- * out the object.
+ * their collaborators (trips/reservations/airtrail/packing — the permanent
+ * cycle-dodges). The reminder crons that used to reach it through a dedicated
+ * send bridge inject the container singleton now (ReminderJobsService); that
+ * bridge is gone.
  *
  * One instance, module-scoped, because the channel registry is: the built-ins
  * registered in the constructor and the channels the plugin runtime pushes in

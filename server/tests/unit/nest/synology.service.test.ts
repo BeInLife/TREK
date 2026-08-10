@@ -43,7 +43,6 @@ vi.mock('../../../src/utils/ssrfGuard', () => ({
 }));
 // The service fires the session-cleared notice and .catch()es it, so the stub
 // has to be a promise.
-vi.mock('../../../src/nest/notifications/notifications.bridge', () => ({ send: vi.fn(async () => undefined) }));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';

@@ -28,8 +28,12 @@ import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin, setAppSetting, setNotificationChannels } from '../../helpers/factories';
 // The send dispatcher is DI-native since the notifications fold; drive it
-// through the same outside-container entry point the scheduler uses.
-import { send } from '../../../src/nest/notifications/notifications.bridge';
+// through the same outside-container entry point the surviving cycle-dodge
+// bridges (trips/reservations/airtrail/packing) use.
+import { notificationsInstance } from '../../../src/nest/notifications/notifications.instance';
+import type { NotificationPayload } from '../../../src/nest/notifications/notifications.service';
+
+const send = (payload: NotificationPayload) => notificationsInstance().send(payload);
 import { NtfyService } from '../../../src/nest/notifications/transports/ntfy.service';
 import { WebhookService } from '../../../src/nest/notifications/transports/webhook.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
@@ -210,15 +214,16 @@ describe('a live plugin channel needs no second opt-in', () => {
  * The seam itself, end to end.
  *
  * PluginRuntimeService pushes its channel getter into the registry at
- * onModuleInit; notifications.bridge.ts constructs its own NotificationsService
- * for the scheduler crons and the memories senders. Both only meet because the
- * registry is a module singleton. Make it a provider and the bridge gets an
- * empty one — plugin channels then go quiet with no error anywhere, which is
- * exactly the kind of failure nothing else here would catch. Every case above
- * sets the source by hand; this one goes through the runtime.
+ * onModuleInit; notifications.instance.ts constructs its own
+ * NotificationsService for the surviving cycle-dodge bridges
+ * (trips/reservations/airtrail/packing). Both only meet because the registry is
+ * a module singleton. Make it a provider and that instance gets an empty one —
+ * plugin channels then go quiet with no error anywhere, which is exactly the
+ * kind of failure nothing else here would catch. Every case above sets the
+ * source by hand; this one goes through the runtime.
  */
-describe('the plugin channel source reaches the bridge instance', () => {
-  it('CHOVR-015 — a channel the runtime publishes is delivered by notifications.bridge.send', async () => {
+describe('the plugin channel source reaches the outside-container instance', () => {
+  it('CHOVR-015 — a channel the runtime publishes is delivered by notificationsInstance().send', async () => {
     const { user } = createUser(testDb, { username: 'recipient' });
     setNotificationChannels(testDb, 'none');
     const delivered: Array<{ userId: number; title: string }> = [];

@@ -92,7 +92,7 @@ export class TripMembersService {
 
   /** Fire-and-forget trip-invite notification (mirrors the route's dynamic import). */
   notifyInvite(tripId: string, actor: User, targetUserId: number, tripTitle: string, inviteeEmail: string): void {
-    // Injected, not a lazy import of notifications.bridge. The laziness bought
+    // Injected, not a lazy import of the old notifications bridge. The laziness bought
     // nothing the module graph does not already give — NotificationsModule
     // reaches nothing in this direction — and it hid the edge while handing the
     // send a second NotificationsService built outside the container.

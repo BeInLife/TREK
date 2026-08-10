@@ -82,7 +82,6 @@ vi.mock('../../src/nest/notifications/notification-preferences.service', async (
   actual.NotificationPreferencesService.prototype.setAdminPreferences = vi.fn();
   return actual;
 });
-vi.mock('../../src/nest/notifications/notifications.bridge', () => ({ send: vi.fn().mockResolvedValue(undefined) }));
 
 import { AdminModule } from '../../src/nest/admin/admin.module';
 // The admin surface is no longer one module: oidc, the account defaults and the admin

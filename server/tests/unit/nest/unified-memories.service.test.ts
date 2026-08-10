@@ -37,9 +37,6 @@ vi.mock('../../../src/config', () => ({
   updateJwtSecret: () => {},
 }));
 vi.mock('../../../src/websocket', () => ({ broadcast: vi.fn() }));
-vi.mock('../../../src/nest/notifications/notifications.bridge', () => ({
-  send: vi.fn().mockResolvedValue(undefined),
-}));
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';

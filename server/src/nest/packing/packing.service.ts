@@ -782,7 +782,7 @@ export class PackingService {
   /** Fire-and-forget tag notification, mirroring the legacy dynamic import. */
   notifyTagged(tripId: string, actor: User, category: string, userIds: unknown): void {
     if (!Array.isArray(userIds) || userIds.length === 0) return;
-    // Injected, not a lazy import of notifications.bridge. The laziness bought
+    // Injected, not a lazy import of the old notifications bridge. The laziness bought
     // nothing the module graph does not already give — NotificationsModule
     // reaches nothing in this direction — and it hid the edge while handing the
     // send a second NotificationsService built outside the container.

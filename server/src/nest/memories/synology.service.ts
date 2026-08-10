@@ -389,7 +389,7 @@ export class SynologyService {
           this._clearSynologySession(userId);
           // Fire-and-forget like unifiedService's photos_shared send — without the
           // .catch an in-app insert failure became an unhandled rejection.
-          // Injected, not imported from notifications.bridge — that module builds
+          // Injected, not imported from the old notifications bridge — that module built
           // its own NotificationsService outside the container.
           this.notifications.send({
               event: 'synology_session_cleared',

@@ -76,7 +76,7 @@ import { createUser, createAdmin, setAppSetting, setNotificationChannels, disabl
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { NotificationsService, type NotificationPayload } from '../../../src/nest/notifications/notifications.service';
-import { send as bridgeSend } from '../../../src/nest/notifications/notifications.bridge';
+import { notificationsInstance } from '../../../src/nest/notifications/notifications.instance';
 import { setPluginChannelSource } from '../../../src/nest/notifications/channel-registry';
 // The channel interface lives in notification-events; channel-registry only imports
 // it for its own signatures and never re-exported it.
@@ -719,15 +719,17 @@ describe('send() — plugin notification channels', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bridge delegation (notifications.bridge.ts — outside-container entry point)
+// Outside-container delegation (notifications.instance.ts — the entry point the
+// surviving cycle-dodge bridges use; its old send bridge died with the
+// reminder-cron migration)
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('notifications.bridge', () => {
+describe('notifications.instance', () => {
   it('NSVC-020 — send delegates to the DI service over the shared db proxy', async () => {
     const { user } = createUser(testDb);
     setNotificationChannels(testDb, 'none');
 
-    await bridgeSend({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Lisbon', actor: 'Alice', invitee: 'Bob', tripId: '7' } });
+    await notificationsInstance().send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Lisbon', actor: 'Alice', invitee: 'Bob', tripId: '7' } });
 
     expect(countAllNotifications()).toBe(1);
     expect(broadcastMock).toHaveBeenCalledTimes(1);

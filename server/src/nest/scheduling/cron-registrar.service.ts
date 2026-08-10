@@ -15,10 +15,11 @@ import { RuntimeEnvService } from '../app-config/runtime-env.service';
  *    time — tests/setup.ts pins NODE_ENV='test' before any app boots).
  *    Providers gate their boot sweeps and banner logs behind isEnabled() for
  *    the same reason.
- *  - Shutdown stops everything. @nestjs/schedule's orchestrator only closes
- *    jobs declared via @Cron decorators, never registry-added ones, so this
- *    service stops its own in onApplicationShutdown — fired by nestApp.close()
- *    in prod and by the suites' afterAll close() alike.
+ *  - Shutdown stops everything. @nestjs/schedule v6's orchestrator deletes
+ *    every registry cron job in beforeApplicationShutdown; this service keeps
+ *    its own onApplicationShutdown pass anyway (tolerant of jobs already
+ *    removed) so a library that stops covering registry-added jobs — v5 did
+ *    not — can never leak a timer past nestApp.close().
  *
  * The timezone is resolved per register() call (readEnv().app.tz || 'UTC'),
  * keeping the retired scheduler's read-at-schedule-time behavior: a dynamic
@@ -64,7 +65,11 @@ export class CronRegistrarService implements OnApplicationShutdown {
   /** Stop and drop a job by name. A name that was never registered is a no-op. */
   unregister(name: string): void {
     if (!this.names.has(name)) return;
-    this.registry.deleteCronJob(name); // deleteCronJob stops the job before dropping it
+    // The orchestrator may have already cleared the registry (its
+    // beforeApplicationShutdown runs before our onApplicationShutdown).
+    if (this.registry.doesExist('cron', name)) {
+      this.registry.deleteCronJob(name); // deleteCronJob stops the job before dropping it
+    }
     this.names.delete(name);
   }
 
