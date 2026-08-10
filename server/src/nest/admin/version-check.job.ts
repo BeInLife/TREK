@@ -1,0 +1,32 @@
+import { Injectable, type OnApplicationBootstrap } from '@nestjs/common';
+import { logError } from '../audit/audit-log.logger';
+import { AdminService } from './admin.service';
+import { CronRegistrarService } from '../scheduling/cron-registrar.service';
+
+/**
+ * Daily version check (moved from src/scheduler.ts — it was the only consumer
+ * of the old admin bridge, which died with the move). checkAndNotifyVersion
+ * shares the module-scoped 5-minute cache in admin.helpers.ts with
+ * GET /api/admin/version-check, so the cron and the route hit GitHub once
+ * between them. No boot log — parity with the old starter.
+ */
+@Injectable()
+export class VersionCheckJob implements OnApplicationBootstrap {
+  constructor(
+    private readonly admin: AdminService,
+    private readonly registrar: CronRegistrarService,
+  ) {}
+
+  onApplicationBootstrap(): void {
+    if (!this.registrar.isEnabled()) return;
+    this.registrar.register('version-check', '0 9 * * *', () => this.tick());
+  }
+
+  async tick(): Promise<void> {
+    try {
+      await this.admin.checkAndNotifyVersion();
+    } catch (err: unknown) {
+      logError(`Version check: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+}

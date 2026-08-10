@@ -26,41 +26,6 @@ export function setSchedulerDeps(next: SchedulerDeps): void {
   deps = next;
 }
 
-// Demo mode: hourly reset of demo user data
-let demoTask: ScheduledTask | null = null;
-
-function startDemoReset(): void {
-  if (demoTask) { demoTask.stop(); demoTask = null; }
-  if (!readEnv().demo.enabled) return;
-
-  demoTask = cron.schedule('0 * * * *', () => {
-    try {
-      const { resetDemoUser } = require('./demo/demo-reset');
-      resetDemoUser();
-    } catch (err: unknown) {
-      logError(`Demo reset: ${err instanceof Error ? err.message : err}`);
-    }
-  });
-  logInfo('Demo hourly reset scheduled');
-}
-
-// Version check: daily at 9 AM — notify admins if a new TREK release is available
-let versionCheckTask: ScheduledTask | null = null;
-
-function startVersionCheck(): void {
-  if (versionCheckTask) { versionCheckTask.stop(); versionCheckTask = null; }
-
-  const tz = readEnv().app.tz || 'UTC';
-  versionCheckTask = cron.schedule('0 9 * * *', async () => {
-    try {
-      const { checkAndNotifyVersion } = require('./nest/admin/admin.bridge');
-      await checkAndNotifyVersion();
-    } catch (err: unknown) {
-      logError(`Version check: ${err instanceof Error ? err.message : err}`);
-    }
-  }, { timezone: tz });
-}
-
 // Idempotency key cleanup: nightly at 3 AM — delete keys past their TTL.
 // The TTL must exceed any realistic offline window: the TREK client replays
 // queued mutations with their X-Idempotency-Key when it reconnects, so a key
@@ -200,12 +165,10 @@ function startAirTrailSync(): void {
 }
 
 function stop(): void {
-  if (demoTask) { demoTask.stop(); demoTask = null; }
-  if (versionCheckTask) { versionCheckTask.stop(); versionCheckTask = null; }
   if (idempotencyCleanupTask) { idempotencyCleanupTask.stop(); idempotencyCleanupTask = null; }
   if (trekPhotoCacheTask) { trekPhotoCacheTask.stop(); trekPhotoCacheTask = null; }
   if (placePhotoCacheTask) { placePhotoCacheTask.stop(); placePhotoCacheTask = null; }
   if (airtrailSyncTask) { airtrailSyncTask.stop(); airtrailSyncTask = null; }
 }
 
-export { stop, startDemoReset, startVersionCheck, startIdempotencyCleanup, purgeExpiredIdempotencyKeys, startTrekPhotoCacheCleanup, startPlacePhotoCacheCleanup, startAirTrailSync };
+export { stop, startIdempotencyCleanup, purgeExpiredIdempotencyKeys, startTrekPhotoCacheCleanup, startPlacePhotoCacheCleanup, startAirTrailSync };

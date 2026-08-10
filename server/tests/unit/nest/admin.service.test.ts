@@ -6,7 +6,8 @@
  * their functions to tests/unit/nest/packing.service.test.ts.
  * Constructs the service directly over a real in-memory SQLite DB (repo
  * convention — no TestingModule). Focuses on validation/error branches that the
- * integration tests don't exercise. ADMIN-BR-001 pins the admin.bridge export.
+ * integration tests don't exercise. VCJOB-001 pins the version-check cron path
+ * (it replaced ADMIN-BR-001 when the old admin bridge died with the cron move).
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 
@@ -71,7 +72,8 @@ import { PackingService } from '../../../src/nest/packing/packing.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { NotificationsService } from '../../../src/nest/notifications/notifications.service';
 import { AdminService } from '../../../src/nest/admin/admin.service';
-import { checkAndNotifyVersion as bridgeCheckAndNotifyVersion } from '../../../src/nest/admin/admin.bridge';
+import { VersionCheckJob } from '../../../src/nest/admin/version-check.job';
+import type { CronRegistrarService } from '../../../src/nest/scheduling/cron-registrar.service';
 import { __clearVersionCacheForTests } from '../../../src/nest/admin/admin.helpers';
 import { makeNotificationsService, makeNotificationPreferencesService } from '../../helpers/notifications';
 import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.service';
@@ -477,10 +479,12 @@ describe('updateAddon', () => {
   });
 });
 
-// ── admin.bridge ──────────────────────────────────────────────────────────────
+// ── version-check cron ────────────────────────────────────────────────────────
 
-describe('admin.bridge', () => {
-  it('ADMIN-BR-001 — checkAndNotifyVersion delegates to AdminService over the shared db Proxy', async () => {
+describe('version-check job', () => {
+  const registrarStub = { isEnabled: () => true, register: vi.fn(() => true), unregister: vi.fn() } as unknown as CronRegistrarService;
+
+  it('VCJOB-001 — the cron tick notifies and shares the module-scoped version cache with the route', async () => {
     createAdmin(testDb);
     __clearVersionCacheForTests();
     const fetchMock = vi.fn().mockResolvedValue({
@@ -490,15 +494,15 @@ describe('admin.bridge', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    await bridgeCheckAndNotifyVersion();
+    await new VersionCheckJob(svc, registrarStub).tick();
 
     const notified = testDb
       .prepare('SELECT value FROM app_settings WHERE key = ?')
       .get('last_notified_version') as { value: string } | undefined;
     expect(notified?.value).toBe('99.9.9');
 
-    // The version cache is module-scoped in admin.helpers, so the bridge instance
-    // and the container singleton share it — the second read must not re-fetch.
+    // The version cache is module-scoped in admin.helpers, so the cron and
+    // GET /api/admin/version-check hit GitHub once between them.
     expect(await svc.checkVersion()).toMatchObject({ latest: '99.9.9' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
     vi.unstubAllGlobals();

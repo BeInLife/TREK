@@ -10,7 +10,7 @@ import { updateJwtSecret } from '../../config';
 // the whole tools fan-out (and via the domain bridges, the Nest services) into
 // every consumer of this module — a nest→mcp→nest module cycle. The
 // invalidateMcpSessions barrel import below predates the fold and is deliberately
-// separate: it is only reached from the controller, never from admin.bridge.
+// separate: it is only reached from the controller, never from the cron path.
 import { revokeUserSessions, revokeUserSessionsForClient } from '../../mcp/sessionManager';
 import { invalidateMcpSessions } from '../../mcp';
 import { emitUserDeleted } from '../../plugin-user-lifecycle';

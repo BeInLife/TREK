@@ -101,8 +101,6 @@ const onListen = () => {
     // belongs at boot.
     airtrail: nestApp.get(AirtrailSyncService),
   });
-  scheduler.startVersionCheck();
-  scheduler.startDemoReset();
   scheduler.startIdempotencyCleanup();
   scheduler.startTrekPhotoCacheCleanup();
   scheduler.startPlacePhotoCacheCleanup();

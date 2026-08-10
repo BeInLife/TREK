@@ -6,11 +6,13 @@ import fs from 'fs';
  * atlas-geo precedent).
  *
  * The version cache is module-scoped **on purpose** (the permissions-cache
- * precedent, permissions.bridge.ts): scheduler.ts reaches checkAndNotifyVersion
- * through admin.bridge's instance while GET /api/admin/version-check runs on the
- * container singleton, and the legacy module shared one 5-minute cache between
- * them. Instance state would double the GitHub traffic and let the scheduler
- * notify on a version the UI has not seen yet.
+ * precedent, permissions.bridge.ts): the daily version-check cron
+ * (VersionCheckJob) and GET /api/admin/version-check both run on the container
+ * singleton now, but the module scope keeps the one-5-minute-cache guarantee
+ * independent of how many AdminService instances exist (the legacy module and
+ * the retired admin bridge relied on exactly that). Instance state would double
+ * the GitHub traffic and let the cron notify on a version the UI has not seen
+ * yet.
  */
 
 /** bcrypt cost factor for user passwords — kept in sync with authService. */

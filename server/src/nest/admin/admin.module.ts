@@ -3,6 +3,9 @@ import { TokensModule } from '../tokens/tokens.module';
 import { OauthModule } from '../oauth/oauth.module';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { VersionCheckJob } from './version-check.job';
+import { DemoResetJob } from './demo-reset.job';
+import { SchedulingModule } from '../scheduling/scheduling.module';
 import { PluginsRuntimeModule } from '../plugins/plugins-runtime.module';
 import { SettingsModule } from '../settings/settings.module';
 import { AuditModule } from '../audit/audit.module';
@@ -20,8 +23,8 @@ import { PackingModule } from '../packing/packing.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 
 @Module({
-  imports: [PluginsRuntimeModule, SettingsModule, AuditModule, AddonsModule, AuthModule, NotificationsModule, PackingModule, PermissionsModule, TokensModule, OauthModule],
+  imports: [PluginsRuntimeModule, SettingsModule, AuditModule, AddonsModule, AuthModule, NotificationsModule, PackingModule, PermissionsModule, TokensModule, OauthModule, SchedulingModule],
   controllers: [AdminController],
-  providers: [AdminService],
+  providers: [AdminService, VersionCheckJob, DemoResetJob],
 })
 export class AdminModule {}
