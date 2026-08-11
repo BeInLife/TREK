@@ -1,13 +1,14 @@
 /**
  * The short-lived authorization-code store.
  *
- * Module-scoped + import-time interval on purpose (legacy parity, shared
- * between bridge and container instances — atlas-geo interval precedent).
- * This is not a stylistic choice: the SDK-mounted /oauth/authorize path reads
- * a code through oauth.bridge (mcp/oauthProvider.ts) that the Nest consent
- * controller wrote through the container singleton. Two instances would mean
- * two maps, and the authorization-code flow would fail *silently* — the SDK
- * only ever answers "Authorization grant is invalid."
+ * Module-scoped + import-time interval on purpose (legacy parity — atlas-geo
+ * interval precedent). This is not a stylistic choice: the consent controller
+ * writes a code through the container OauthService and the SDK exchange path
+ * (oauth-sdk.provider.ts) reads it back — through the same injected singleton
+ * in production, but the integration harness and any second OauthService
+ * instance must keep seeing the same map. Two maps would make the
+ * authorization-code flow fail *silently* — the SDK only ever answers
+ * "Authorization grant is invalid."
  *
  * No DB persistence: codes live two minutes and a restart invalidating them
  * is the correct behaviour.

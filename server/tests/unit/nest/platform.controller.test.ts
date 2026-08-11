@@ -4,30 +4,15 @@ import { NotFoundException } from '@nestjs/common';
 // --- hoisted mock fns so the vi.mock factories can reference them -----------------
 const h = vi.hoisted(() => ({
   verifyJwtAndLoadUser: vi.fn(),
-  isAddonEnabled: vi.fn(),
   dbPrepare: vi.fn(),
   existsSync: vi.fn(),
-  // SDK middleware spies — each returns a tagged handler so we can identify which
-  // app.use call received it.
-  authorizeHandler: vi.fn(),
-  registerHandler: vi.fn(),
+  // Tagged handler so we can identify which route registration received it.
   mcpHandler: vi.fn(),
 }));
 
 vi.mock('../../../src/nest/auth/jwt-verify', () => ({ verifyJwtAndLoadUser: h.verifyJwtAndLoadUser }));
 vi.mock('../../../src/db/database', () => ({ db: { prepare: h.dbPrepare } }));
 vi.mock('../../../src/mcp', () => ({ mcpHandler: h.mcpHandler }));
-vi.mock('../../../src/mcp/oauthProvider', () => ({ trekOAuthProvider: {}, trekClientsStore: {} }));
-vi.mock('../../../src/nest/addons/addons.bridge', () => ({ isAddonEnabled: h.isAddonEnabled }));
-
-// SDK handler factories return distinct tagged middleware so we never hit real
-// wiring during registration.
-vi.mock('@modelcontextprotocol/sdk/server/auth/handlers/authorize', () => ({
-  authorizationHandler: vi.fn(() => h.authorizeHandler),
-}));
-vi.mock('@modelcontextprotocol/sdk/server/auth/handlers/register', () => ({
-  clientRegistrationHandler: vi.fn(() => h.registerHandler),
-}));
 
 vi.mock('node:fs', async (orig) => {
   const real = (await orig()) as Record<string, unknown>;
@@ -223,38 +208,6 @@ describe('applyPlatformTransport', () => {
     applyPlatformTransport(app);
     return calls;
   }
-
-  describe('mcpAddonGate (used on /oauth/authorize + /oauth/register)', () => {
-    function gate() {
-      // The gate is the first handler on the /oauth/authorize use registration.
-      return build().find((c) => c.method === 'use' && c.path === '/oauth/authorize')!.handlers[0];
-    }
-
-    it('404 when MCP is disabled', () => {
-      h.isAddonEnabled.mockReturnValue(false);
-      const res = makeRes();
-      const next = vi.fn();
-      gate()({}, res, next);
-      expect(res.statusCode).toBe(404);
-      expect(next).not.toHaveBeenCalled();
-    });
-
-    it('calls next() when MCP is enabled', () => {
-      h.isAddonEnabled.mockReturnValue(true);
-      const res = makeRes();
-      const next = vi.fn();
-      gate()({}, res, next);
-      expect(next).toHaveBeenCalled();
-    });
-  });
-
-  it('wires the SDK authorize + register handlers behind the gate', () => {
-    const calls = build();
-    const authorize = calls.find((c) => c.path === '/oauth/authorize')!;
-    const register = calls.find((c) => c.path === '/oauth/register')!;
-    expect(authorize.handlers).toContain(h.authorizeHandler);
-    expect(register.handlers).toContain(h.registerHandler);
-  });
 
   it('mounts the MCP handler on POST/GET/DELETE /mcp', () => {
     const calls = build();

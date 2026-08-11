@@ -1111,22 +1111,24 @@ describe('branches the legacy suite could not reach', () => {
 });
 
 describe('oauth.bridge delegation', () => {
-  // The bridge is what the SDK-mounted /oauth/authorize path and the MCP
-  // transport reach, both outside the container.
-  it('issues and verifies a token through the bridge instance', () => {
+  // The bridge is down to its one surviving export — what the MCP transport's
+  // token verification reaches outside the container. The SDK provider paths
+  // that used to be bridged live behind the container now (oauth-sdk.provider).
+  it('verifies a container-issued token through the bridge instance', () => {
     const { user } = createUser(testDb);
     const created = makeClient(user.id);
     const clientId = (created.client as { client_id: string }).client_id;
 
-    const tokens = bridge.issueTokens(clientId, user.id, ['trips:read']);
+    const tokens = issueTokens(clientId, user.id, ['trips:read']);
 
     expect(bridge.getUserByAccessToken(tokens.access_token)?.user.id).toBe(user.id);
   });
 
-  it('shares the pending-code map with the container instance', () => {
+  it('shares the pending-code map across service instances', () => {
     // The load-bearing invariant: the consent controller writes the code through
-    // the DI singleton, the SDK provider reads it back through the bridge. Two
-    // maps here would kill the authorization-code flow silently.
+    // the DI singleton, the SDK exchange path reads it back. The map is module-
+    // scoped, so even a second hand-built instance must see it — two maps would
+    // kill the authorization-code flow silently.
     const code = createAuthCode({
       clientId: 'c',
       userId: 42,
@@ -1137,32 +1139,8 @@ describe('oauth.bridge delegation', () => {
       codeChallengeMethod: 'S256',
     })!;
 
-    expect(bridge.consumeAuthCode(code)?.userId).toBe(42);
-  });
-
-  it('verifyPKCE and revokeToken reach the same rows', () => {
-    const { verifier, challenge } = makePkce();
-    expect(bridge.verifyPKCE(verifier, challenge)).toBe(true);
-
-    const { user } = createUser(testDb);
-    const created = makeClient(user.id);
-    const clientId = (created.client as { client_id: string }).client_id;
-    const tokens = issueTokens(clientId, user.id, ['trips:read']);
-
-    bridge.revokeToken(tokens.access_token, clientId, user.id);
-
-    expect(getUserByAccessToken(tokens.access_token)).toBeNull();
-  });
-
-  it('registers a client and refreshes a token pair through the bridge', () => {
-    const { user } = createUser(testDb);
-    const created = bridge.createOAuthClient(user.id, 'Via bridge', ['https://example.com/callback'], ['trips:read']);
-    const client = created.client as { client_id: string; client_secret: string };
-    const tokens = issueTokens(client.client_id, user.id, ['trips:read']);
-
-    const refreshed = bridge.refreshTokens(tokens.refresh_token, client.client_id, client.client_secret);
-
-    expect(refreshed.tokens?.refresh_token).toMatch(/^trekrf_/);
+    const secondInstance = new OauthService(dbs, addonsStub, new AuditService(dbs));
+    expect(secondInstance.consumeAuthCode(code)?.userId).toBe(42);
   });
 });
 
@@ -1173,12 +1151,14 @@ describe('OauthModule', () => {
     const { OauthApiController } = await import('../../../src/nest/oauth/oauth-api.controller');
     const { OauthService: Svc } = await import('../../../src/nest/oauth/oauth.service');
 
+    const { TrekClientsStore, TrekOAuthProvider } = await import('../../../src/nest/oauth/oauth-sdk.provider');
+
     const controllers = Reflect.getMetadata('controllers', OauthModule);
     const providers = Reflect.getMetadata('providers', OauthModule);
     expect(controllers).toEqual([OauthPublicController, OauthApiController]);
     // RateLimitService is deliberately absent: it comes from the global
     // RateLimitModule so all consumers share one set of counters.
-    expect(providers).toEqual([Svc]);
+    expect(providers).toEqual([Svc, TrekClientsStore, TrekOAuthProvider]);
   });
 });
 

@@ -349,6 +349,22 @@ export class OauthService {
   // Token verification (used by MCP handler on every request)
   // -------------------------------------------------------------------------
 
+  /** SDK clients-store read: the exact row shape the MCP SDK adapter
+   *  (oauth-sdk.provider.ts) maps to OAuthClientInformationFull. */
+  getSdkClient(clientId: string): {
+    client_id: string;
+    name: string;
+    redirect_uris: string;
+    allowed_scopes: string;
+    is_public: number;
+    created_via: string;
+  } | undefined {
+    return this.db.get(
+      'SELECT client_id, name, redirect_uris, allowed_scopes, is_public, created_via FROM oauth_clients WHERE client_id = ?',
+      clientId,
+    );
+  }
+
   getUserByAccessToken(rawToken: string): OAuthTokenInfo | null {
     const hash = hashToken(rawToken);
     const row = this.db.get<OAuthTokenRow & { username: string; email: string; role: string }>(`

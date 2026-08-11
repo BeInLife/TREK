@@ -6,11 +6,6 @@ import { readEnv } from '../../app-config';
 import { verifyJwtAndLoadUser } from '../auth/jwt-verify';
 import { db } from '../../db/database';
 import { mcpHandler } from '../../mcp';
-import { trekOAuthProvider, trekClientsStore } from '../../mcp/oauthProvider';
-import { isAddonEnabled } from '../addons/addons.bridge';
-import { ADDON_IDS } from '../../addons';
-import { authorizationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/authorize';
-import { clientRegistrationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/register';
 
 // Platform / transport routes extracted verbatim from createApp() (app.ts) so they can be
 // mounted on either the legacy Express app or the NestJS Express instance (strangler A6/A8).
@@ -100,27 +95,14 @@ export function applyPlatformUploads(app: express.Application): void {
 }
 
 /**
- * The OAuth SDK + /mcp transport mounts still living on the pre-init Express
- * layer. The rest of the former transport surface is behind the container now:
- * /api/health (FeaturesController), OAuth discovery (DiscoveryController + the
- * McpMetadataMiddleware bootstrap applies pre-init), and the /oauth/consent
- * COOP override (ConsentCoopMiddleware via PlatformModule.configure).
+ * The /mcp transport mounts — the last pre-init platform routes. Everything
+ * else that used to live here is behind the container now: /api/health
+ * (FeaturesController), OAuth discovery (DiscoveryController + the metadata
+ * middleware bootstrap applies pre-init), /oauth/authorize + /oauth/register
+ * (OauthModule.configure over the injected SDK adapters), and the
+ * /oauth/consent COOP override (ConsentCoopMiddleware).
  */
 export function applyPlatformTransport(app: express.Application): void {
-  // OAuth 2.1 — public endpoints
-  // Gate: 404 when MCP addon is disabled (M2 — prevents feature fingerprinting)
-  const mcpAddonGate = (_req: Request, res: Response, next: NextFunction) => {
-    if (!isAddonEnabled(ADDON_IDS.MCP)) return res.status(404).end();
-    next();
-  };
-
-  // SDK authorize handler: validates OAuth params, calls provider.authorize() which redirects
-  // to the SPA consent page at /oauth/consent
-  app.use('/oauth/authorize', mcpAddonGate, authorizationHandler({ provider: trekOAuthProvider }));
-
-  // SDK DCR handler: accepts registrations without scope (fixes issue #959 bug 2)
-  app.use('/oauth/register', mcpAddonGate, clientRegistrationHandler({ clientsStore: trekClientsStore }));
-
   // MCP endpoint
   app.post('/mcp', mcpHandler);
   app.get('/mcp', mcpHandler);
