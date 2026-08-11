@@ -59,6 +59,7 @@ import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { createOAuthClient, getUserByAccessToken } from '../../src/nest/oauth/oauth.bridge';
+import { ALL_SCOPES } from '../../src/mcp/scopes';
 import { OauthService } from '../../src/nest/oauth/oauth.service';
 import { DatabaseService } from '../../src/nest/database/database.service';
 import { AddonsService } from '../../src/nest/addons/addons.service';
@@ -161,6 +162,87 @@ describe('DCR scope optional — ChatGPT compatibility (issue #959 bug 2)', () =
             .send({ redirect_uris: ['https://example.com/cb'], token_endpoint_auth_method: 'none', scope: 'trips:read' });
         expect(res.status).toBe(201);
         expect(res.body.scope).toBe('trips:read');
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Platform/discovery parity pins — byte-level oracles for the MCP/OAuth mount
+// migration (these must pass identically before AND after the routes move
+// behind the Nest container).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('platform/discovery parity pins', () => {
+    it('PLAT-PIN-001 — GET /api/health returns the exact probe body + Cache-Control', async () => {
+        const res = await request(app).get('/api/health');
+        expect(res.status).toBe(200);
+        expect(res.headers['cache-control']).toBe('no-store, must-revalidate');
+        expect(res.body).toEqual({ status: 'ok' });
+    });
+
+    it('PLAT-PIN-002 — openid-configuration is the AS metadata plus userinfo_endpoint, exactly', async () => {
+        const res = await request(app).get('/.well-known/openid-configuration');
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({
+            issuer:                                'https://trek.example.com',
+            authorization_endpoint:                'https://trek.example.com/oauth/authorize',
+            token_endpoint:                        'https://trek.example.com/oauth/token',
+            revocation_endpoint:                   'https://trek.example.com/oauth/revoke',
+            registration_endpoint:                 'https://trek.example.com/oauth/register',
+            response_types_supported:              ['code'],
+            grant_types_supported:                 ['authorization_code', 'refresh_token', 'client_credentials'],
+            code_challenge_methods_supported:      ['S256'],
+            token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
+            scopes_supported:                      ALL_SCOPES,
+            userinfo_endpoint:                     'https://trek.example.com/oauth/userinfo',
+        });
+    });
+
+    it('PLAT-PIN-003 — flat oauth-protected-resource is the exact 5-key RFC 9728 document', async () => {
+        const res = await request(app).get('/.well-known/oauth-protected-resource');
+        expect(res.status).toBe(200);
+        expect(res.body).toEqual({
+            resource:                 'https://trek.example.com/mcp',
+            authorization_servers:    ['https://trek.example.com'],
+            bearer_methods_supported: ['header'],
+            scopes_supported:         ALL_SCOPES,
+            resource_name:            'TREK MCP',
+        });
+    });
+
+    it('PLAT-PIN-004 — every /.well-known/* path 404s with an EMPTY body when MCP is disabled', async () => {
+        setMcpEnabled(false);
+        for (const path of [
+            '/.well-known/openid-configuration',
+            '/.well-known/oauth-protected-resource',
+            '/.well-known/oauth-authorization-server',
+        ]) {
+            const res = await request(app).get(path);
+            expect(res.status, path).toBe(404);
+            expect(res.text, path).toBe('');
+        }
+    });
+
+    it('PLAT-PIN-005 — an unhandled /.well-known path gets the JSON 404, never SPA HTML', async () => {
+        const res = await request(app).get('/.well-known/does-not-exist');
+        expect(res.status).toBe(404);
+        expect(res.body).toEqual({ error: 'not_found' });
+    });
+
+    it('PLAT-PIN-006 — /.well-known/ (trailing slash) also gets the JSON 404', async () => {
+        const res = await request(app).get('/.well-known/');
+        expect(res.status).toBe(404);
+        expect(res.body).toEqual({ error: 'not_found' });
+    });
+
+    it('PLAT-PIN-007 — bare /.well-known falls through to the router 404 envelope', async () => {
+        const res = await request(app).get('/.well-known');
+        expect(res.status).toBe(404);
+        expect(res.body).toEqual({ error: 'Cannot GET /.well-known' });
+    });
+
+    it('PLAT-PIN-008 — /oauth/consent responses carry the relaxed COOP header', async () => {
+        const res = await request(app).get('/oauth/consent');
+        expect(res.headers['cross-origin-opener-policy']).toBe('unsafe-none');
     });
 });
 

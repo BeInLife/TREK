@@ -11,6 +11,8 @@ import { apiDocsEnabled } from './nest/common/api-docs.kill-switch';
 import { setupApiDocs } from './nest/platform/api-docs';
 import { McpRegistryService } from '@trek/nest-mcp';
 import { setMcpRegistry } from './mcp/registry-handoff';
+import { MCP_METADATA_MIDDLEWARE } from './nest/platform/mcp-metadata.middleware';
+import type { RequestHandler } from 'express';
 import { validateBodyContracts } from './nest/common/validate-body-contracts';
 import { validateRouteGuards } from './nest/common/validate-route-guards';
 import { TrekWsAdapter } from './nest/realtime/trek-ws.adapter';
@@ -82,6 +84,13 @@ export async function buildApp(): Promise<INestApplication> {
   applyGlobalMiddleware(instance, { http });
   applyPlatformUploads(instance);
   applyPlatformTransport(instance);
+  // The SDK discovery router (+ its addon gate). Container-built so its deps
+  // are injected (same pre-init consumption bridge as httpConfig above), but
+  // applied here as a PATHLESS app.use: the SDK router matches absolute
+  // /.well-known/* paths against req.url, and any Nest wildcard forRoutes()
+  // mount is an Express pattern mount that strips the matched prefix from
+  // req.url before the middleware runs.
+  instance.use(app.get<RequestHandler>(MCP_METADATA_MIDDLEWARE));
   applyPlatformStatic(instance);
   // Pin the request-body ceiling explicitly. The Express shell used to set
   // '100kb' and stopped doing it when the Nest instance took over parsing, which

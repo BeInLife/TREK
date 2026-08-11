@@ -5,9 +5,9 @@ import { AddonsModule } from '../addons/addons.module';
 
 /** Server capability reporting. `GET /api/health/features` tells the client which
  *  optional server-side features are usable, so it can hide the affordances it
- *  cannot back. `GET /api/health` itself is the container probe and stays on the
- *  raw express layer (`platform.routes.ts`) — it must answer before Nest routing
- *  and before the HTTPS redirect. */
+ *  cannot back. `GET /api/health` is the container probe — the forced-HTTPS
+ *  redirect and HSTS exempt it by path inside globalMiddleware, so it answers
+ *  plain-HTTP probes no matter where the route itself is registered. */
 @Module({
   imports: [KitineraryExtractorModule, AddonsModule],
   controllers: [FeaturesController],

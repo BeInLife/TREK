@@ -5,12 +5,10 @@ import { NotFoundException } from '@nestjs/common';
 const h = vi.hoisted(() => ({
   verifyJwtAndLoadUser: vi.fn(),
   isAddonEnabled: vi.fn(),
-  getMcpSafeUrl: vi.fn(() => 'https://trek.example.test'),
   dbPrepare: vi.fn(),
   existsSync: vi.fn(),
   // SDK middleware spies — each returns a tagged handler so we can identify which
   // app.use call received it.
-  metaRouter: vi.fn(),
   authorizeHandler: vi.fn(),
   registerHandler: vi.fn(),
   mcpHandler: vi.fn(),
@@ -21,16 +19,9 @@ vi.mock('../../../src/db/database', () => ({ db: { prepare: h.dbPrepare } }));
 vi.mock('../../../src/mcp', () => ({ mcpHandler: h.mcpHandler }));
 vi.mock('../../../src/mcp/oauthProvider', () => ({ trekOAuthProvider: {}, trekClientsStore: {} }));
 vi.mock('../../../src/nest/addons/addons.bridge', () => ({ isAddonEnabled: h.isAddonEnabled }));
-vi.mock('../../../src/app-config', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../src/app-config')>();
-  return { ...actual, getMcpSafeUrl: h.getMcpSafeUrl };
-});
 
-// SDK router/handler factories return distinct tagged middleware so we never hit
-// real new URL(...) wiring during registration.
-vi.mock('@modelcontextprotocol/sdk/server/auth/router', () => ({
-  mcpAuthMetadataRouter: vi.fn(() => h.metaRouter),
-}));
+// SDK handler factories return distinct tagged middleware so we never hit real
+// wiring during registration.
 vi.mock('@modelcontextprotocol/sdk/server/auth/handlers/authorize', () => ({
   authorizationHandler: vi.fn(() => h.authorizeHandler),
 }));
@@ -101,7 +92,6 @@ function makeRes() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  h.getMcpSafeUrl.mockReturnValue('https://trek.example.test');
 });
 
 describe('applyPlatformUploads', () => {
@@ -234,91 +224,6 @@ describe('applyPlatformTransport', () => {
     return calls;
   }
 
-  it('GET /api/health sets no-store and returns ok', () => {
-    const calls = build();
-    const health = calls.find((c) => c.method === 'get' && c.path === '/api/health')!.handlers[0];
-    const res = makeRes();
-    health({}, res);
-    expect(res.headers['Cache-Control']).toBe('no-store, must-revalidate');
-    expect(res.body).toEqual({ status: 'ok' });
-  });
-
-  describe('the /.well-known metadata middleware', () => {
-    function wellKnownMw(calls: ReturnType<typeof build>) {
-      // first app.use with no path, registered right after /api/health
-      return calls.find((c) => c.method === 'use' && c.path === undefined)!.handlers[0];
-    }
-
-    it('404s a /.well-known path when MCP is disabled', () => {
-      h.isAddonEnabled.mockReturnValue(false);
-      const mw = wellKnownMw(build());
-      const res = makeRes();
-      const next = vi.fn();
-      mw({ path: '/.well-known/oauth-authorization-server' }, res, next);
-      expect(res.statusCode).toBe(404);
-      expect(next).not.toHaveBeenCalled();
-    });
-
-    it('delegates to the SDK meta router for a non-well-known path', () => {
-      h.isAddonEnabled.mockReturnValue(true);
-      const mw = wellKnownMw(build());
-      const res = makeRes();
-      const next = vi.fn();
-      mw({ path: '/anything' }, res, next);
-      expect(h.metaRouter).toHaveBeenCalled();
-    });
-
-    it('delegates to the SDK meta router for a well-known path when MCP is enabled', () => {
-      h.isAddonEnabled.mockReturnValue(true);
-      const mw = wellKnownMw(build());
-      const res = makeRes();
-      const next = vi.fn();
-      mw({ path: '/.well-known/oauth-authorization-server' }, res, next);
-      expect(h.metaRouter).toHaveBeenCalled();
-    });
-  });
-
-  it('GET /.well-known/openid-configuration returns AS metadata + userinfo_endpoint', () => {
-    const calls = build();
-    const handler = calls.find((c) => c.path === '/.well-known/openid-configuration')!.handlers[0];
-    const res = makeRes();
-    handler({}, res);
-    const body = res.body as { issuer: string; userinfo_endpoint: string };
-    expect(body.issuer).toBe('https://trek.example.test');
-    expect(body.userinfo_endpoint).toBe('https://trek.example.test/oauth/userinfo');
-  });
-
-  it('trims trailing slashes off the configured base URL', () => {
-    h.getMcpSafeUrl.mockReturnValue('https://trek.example.test///');
-    const calls = build();
-    const handler = calls.find((c) => c.path === '/.well-known/openid-configuration')!.handlers[0];
-    const res = makeRes();
-    handler({}, res);
-    expect((res.body as { issuer: string }).issuer).toBe('https://trek.example.test');
-  });
-
-  describe('GET /.well-known/oauth-protected-resource (flat)', () => {
-    function handler() {
-      return build().find((c) => c.method === 'get' && c.path === '/.well-known/oauth-protected-resource')!.handlers[0];
-    }
-
-    it('404 when MCP is disabled', () => {
-      h.isAddonEnabled.mockReturnValue(false);
-      const res = makeRes();
-      handler()({}, res);
-      expect(res.statusCode).toBe(404);
-    });
-
-    it('returns the PRM document when MCP is enabled', () => {
-      h.isAddonEnabled.mockReturnValue(true);
-      const res = makeRes();
-      handler()({}, res);
-      const body = res.body as { resource: string; authorization_servers: string[] };
-      expect(body.resource).toBe('https://trek.example.test/mcp');
-      expect(body.authorization_servers).toEqual(['https://trek.example.test']);
-    });
-  });
-
   describe('mcpAddonGate (used on /oauth/authorize + /oauth/register)', () => {
     function gate() {
       // The gate is the first handler on the /oauth/authorize use registration.
@@ -356,60 +261,6 @@ describe('applyPlatformTransport', () => {
     expect(calls.find((c) => c.method === 'post' && c.path === '/mcp')!.handlers[0]).toBe(h.mcpHandler);
     expect(calls.find((c) => c.method === 'get' && c.path === '/mcp')!.handlers[0]).toBe(h.mcpHandler);
     expect(calls.find((c) => c.method === 'delete' && c.path === '/mcp')!.handlers[0]).toBe(h.mcpHandler);
-  });
-
-  describe('the terminal /.well-known JSON-404 middleware', () => {
-    function mw() {
-      // The pathless app.use registered after the /mcp routes.
-      const calls = build();
-      const pathless = calls.filter((c) => c.method === 'use' && c.path === undefined);
-      // first pathless = meta router; second = the JSON 404.
-      return pathless[1].handlers[0];
-    }
-
-    it('404 JSON for an unhandled /.well-known path', () => {
-      const res = makeRes();
-      const next = vi.fn();
-      mw()({ path: '/.well-known/unknown' }, res, next);
-      expect(res.statusCode).toBe(404);
-      expect(res.body).toEqual({ error: 'not_found' });
-      expect(next).not.toHaveBeenCalled();
-    });
-
-    it('calls next() for any non-well-known path', () => {
-      const res = makeRes();
-      const next = vi.fn();
-      mw()({ path: '/dashboard' }, res, next);
-      expect(next).toHaveBeenCalled();
-    });
-  });
-
-  it('the /oauth/consent middleware relaxes COOP then continues', () => {
-    const calls = build();
-    const mw = calls.find((c) => c.method === 'use' && c.path === '/oauth/consent')!.handlers[0];
-    const res = makeRes();
-    const next = vi.fn();
-    mw({}, res, next);
-    expect(res.headers['Cross-Origin-Opener-Policy']).toBe('unsafe-none');
-    expect(next).toHaveBeenCalled();
-  });
-
-  it('caches the OAuth metadata + SDK router across requests (lazy init runs once)', async () => {
-    const router = await import('@modelcontextprotocol/sdk/server/auth/router');
-    const calls = build();
-    const openid = calls.find((c) => c.path === '/.well-known/openid-configuration')!.handlers[0];
-    h.getMcpSafeUrl.mockClear();
-    openid({}, makeRes());
-    openid({}, makeRes());
-    // getMcpSafeUrl is only consulted on the first lazy build of the metadata.
-    expect(h.getMcpSafeUrl).toHaveBeenCalledTimes(1);
-
-    // Trigger the meta router lazy build twice; the SDK factory runs once.
-    const metaMw = calls.find((c) => c.method === 'use' && c.path === undefined)!.handlers[0];
-    h.isAddonEnabled.mockReturnValue(true);
-    metaMw({ path: '/x' }, makeRes(), vi.fn());
-    metaMw({ path: '/y' }, makeRes(), vi.fn());
-    expect(router.mcpAuthMetadataRouter).toHaveBeenCalledTimes(1);
   });
 });
 

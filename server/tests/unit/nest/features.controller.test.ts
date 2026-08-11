@@ -70,4 +70,17 @@ describe('FeaturesController (GET /api/health/features)', () => {
     expect(Reflect.getMetadata('path', FeaturesController)).toBe('api/health');
     expect(Reflect.getMetadata('path', FeaturesController.prototype.features)).toBe('features');
   });
+
+  it('FEAT-009: GET /api/health writes the exact probe bytes (legacy parity)', () => {
+    const { controller } = make(true, true);
+    const res = {
+      headers: {} as Record<string, string>,
+      body: undefined as unknown,
+      setHeader: vi.fn(function (this: { headers: Record<string, string> }, k: string, v: string) { this.headers[k] = v; }),
+      json: vi.fn(function (this: { body: unknown }, b: unknown) { this.body = b; }),
+    };
+    controller.health(res as never);
+    expect(res.headers['Cache-Control']).toBe('no-store, must-revalidate');
+    expect(res.body).toEqual({ status: 'ok' });
+  });
 });

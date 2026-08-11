@@ -80,7 +80,15 @@ export const PUBLIC_ROUTE_ALLOW_LIST: string[] = [
   'AuthPublicController.resetPassword',
   'AuthPublicController.verifyMfaLogin',
   'ConfigController.getConfig',
+  // OAuth/OIDC discovery documents + the JSON 404 catchalls that keep
+  // /.well-known probes from ever seeing SPA HTML.
+  'DiscoveryController.openidConfiguration',
+  'DiscoveryController.protectedResource',
+  'DiscoveryController.wellKnownFallback',
+  'DiscoveryController.wellKnownRoot',
   'FeaturesController.features',
+  // The container/uptime probe.
+  'FeaturesController.health',
   // The download link carries its own short-lived token.
   'FilesDownloadController.download',
   'HelpController.asset',

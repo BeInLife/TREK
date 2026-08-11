@@ -1,10 +1,12 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Res } from '@nestjs/common';
+import type { Response } from 'express';
 import { KitineraryExtractorService } from '../booking-import/kitinerary-extractor.service';
 import { AddonsService } from '../addons/addons.service';
 import { ADDON_IDS } from '../../addons';
 import { Public } from '../auth/public.decorator';
 
-/** Exposes server feature flags consumed by the frontend to show/hide optional UI. */
+/** Exposes the container probe and the server feature flags consumed by the
+ *  frontend to show/hide optional UI. */
 @Public('server capability flags the login screen reads to decide what to offer')
 @Controller('api/health')
 export class FeaturesController {
@@ -12,6 +14,15 @@ export class FeaturesController {
     private readonly extractor: KitineraryExtractorService,
     private readonly addons: AddonsService,
   ) {}
+
+  /** The container/uptime probe. The forced-HTTPS redirect and HSTS exempt this
+   *  path inside globalMiddleware, so probes work regardless of proxy setup;
+   *  @Res() keeps the exact legacy header casing and body bytes. */
+  @Get()
+  health(@Res() res: Response): void {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    res.json({ status: 'ok' });
+  }
 
   @Get('features')
   features() {

@@ -9,12 +9,8 @@ import { mcpHandler } from '../../mcp';
 import { trekOAuthProvider, trekClientsStore } from '../../mcp/oauthProvider';
 import { isAddonEnabled } from '../addons/addons.bridge';
 import { ADDON_IDS } from '../../addons';
-import { ALL_SCOPES } from '../../mcp/scopes';
-import { mcpAuthMetadataRouter } from '@modelcontextprotocol/sdk/server/auth/router';
 import { authorizationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/authorize';
 import { clientRegistrationHandler } from '@modelcontextprotocol/sdk/server/auth/handlers/register';
-import type { OAuthMetadata } from '@modelcontextprotocol/sdk/shared/auth';
-import { getMcpSafeUrl } from '../../app-config';
 
 // Platform / transport routes extracted verbatim from createApp() (app.ts) so they can be
 // mounted on either the legacy Express app or the NestJS Express instance (strangler A6/A8).
@@ -104,102 +100,19 @@ export function applyPlatformUploads(app: express.Application): void {
 }
 
 /**
- * Legacy /api/health handler, the OAuth/MCP SDK + transport wiring (well-known metadata,
- * authorize/register SDK handlers, the COOP header, the /mcp routes), and the production
- * SPA static + catch-all. Must be applied AFTER the API route mounts and BEFORE the global
- * error handler (identical to its original position near the bottom of createApp).
- *
- * Note: the SDK metadata closures (getOAuthMetadata/getMetaRouter) and their lazy-init
- * cache are kept module-local PER CALL so each app instance gets its own lazy state — the
- * same as when they were function-local inside createApp.
+ * The OAuth SDK + /mcp transport mounts still living on the pre-init Express
+ * layer. The rest of the former transport surface is behind the container now:
+ * /api/health (FeaturesController), OAuth discovery (DiscoveryController + the
+ * McpMetadataMiddleware bootstrap applies pre-init), and the /oauth/consent
+ * COOP override (ConsentCoopMiddleware via PlatformModule.configure).
  */
 export function applyPlatformTransport(app: express.Application): void {
-  app.get('/api/health', (_req: Request, res: Response) => {
-    res.setHeader('Cache-Control', 'no-store, must-revalidate')
-    res.json({ status: 'ok' })
-  });
-
   // OAuth 2.1 — public endpoints
   // Gate: 404 when MCP addon is disabled (M2 — prevents feature fingerprinting)
   const mcpAddonGate = (_req: Request, res: Response, next: NextFunction) => {
     if (!isAddonEnabled(ADDON_IDS.MCP)) return res.status(404).end();
     next();
   };
-
-  // SDK metadata router — built lazily on first request so the issuer URL is
-  // resolved from the live env, not frozen at createApp() time.
-  // mcpAuthMetadataRouter serves:
-  //   /.well-known/oauth-authorization-server   — RFC 8414 AS metadata
-  //   /.well-known/oauth-protected-resource/mcp — RFC 9728 path-based PRM (fixes issue #959 bug 1)
-  let _oauthMetadata: OAuthMetadata | null = null;
-  let _sdkMetaRouter: express.Router | null = null;
-
-  function getOAuthMetadata(): OAuthMetadata {
-    if (_oauthMetadata) return _oauthMetadata;
-    const base = getMcpSafeUrl().replace(/\/+$/, '');
-    _oauthMetadata = {
-      issuer:                                base,
-      authorization_endpoint:                `${base}/oauth/authorize`,
-      token_endpoint:                        `${base}/oauth/token`,
-      revocation_endpoint:                   `${base}/oauth/revoke`,
-      registration_endpoint:                 `${base}/oauth/register`,
-      response_types_supported:              ['code'],
-      grant_types_supported:                 ['authorization_code', 'refresh_token', 'client_credentials'],
-      code_challenge_methods_supported:      ['S256'],
-      token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
-      scopes_supported:                      ALL_SCOPES,
-    };
-    return _oauthMetadata;
-  }
-
-  function getMetaRouter(): express.Router {
-    if (_sdkMetaRouter) return _sdkMetaRouter;
-    const metadata = getOAuthMetadata();
-    _sdkMetaRouter = mcpAuthMetadataRouter({
-      oauthMetadata: metadata,
-      resourceServerUrl: new URL(`${metadata.issuer}/mcp`),
-      scopesSupported: ALL_SCOPES as string[],
-      resourceName: 'TREK MCP',
-    });
-    return _sdkMetaRouter;
-  }
-
-  // Only invoke the SDK metadata router for /.well-known/* paths.
-  // Calling getMetaRouter() on every request triggers lazy init (new URL(...)) which
-  // throws "Invalid URL" when APP_URL lacks a protocol — breaking all page loads.
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith('/.well-known/') && !isAddonEnabled(ADDON_IDS.MCP)) return res.status(404).end();
-    getMetaRouter()(req, res, next);
-  });
-
-  // ChatGPT (and other OIDC-first clients) bootstrap OAuth discovery via
-  // /.well-known/openid-configuration. Serve the AS metadata plus the OIDC
-  // userinfo_endpoint so ChatGPT can fetch the authenticated user's email
-  // for authorization domain claiming.
-  app.get('/.well-known/openid-configuration', (_req: Request, res: Response) => {
-    const meta = getOAuthMetadata();
-    res.json({
-      ...meta,
-      userinfo_endpoint: `${meta.issuer}/oauth/userinfo`,
-    });
-  });
-
-  // RFC 9728 flat well-known URL — served alongside the path-based form the SDK already provides.
-  // Clients like ChatGPT probe /.well-known/oauth-protected-resource (no path suffix) on every
-  // fresh discovery. Without this, they get 404, fall back to the issuer URL as the resource
-  // parameter, and the authorize handler rejects them with invalid_target — showing the user
-  // the TREK home page instead of the consent form.
-  app.get('/.well-known/oauth-protected-resource', (_req: Request, res: Response) => {
-    if (!isAddonEnabled(ADDON_IDS.MCP)) return res.status(404).end();
-    const meta = getOAuthMetadata();
-    res.json({
-      resource:                 `${meta.issuer}/mcp`,
-      authorization_servers:    [meta.issuer],
-      bearer_methods_supported: ['header'],
-      scopes_supported:         ALL_SCOPES,
-      resource_name:            'TREK MCP',
-    });
-  });
 
   // SDK authorize handler: validates OAuth params, calls provider.authorize() which redirects
   // to the SPA consent page at /oauth/consent
@@ -212,21 +125,6 @@ export function applyPlatformTransport(app: express.Application): void {
   app.post('/mcp', mcpHandler);
   app.get('/mcp', mcpHandler);
   app.delete('/mcp', mcpHandler);
-
-  // Return 404 JSON for any /.well-known/* path the SDK metadata router doesn't handle.
-  // Without this, the SPA catch-all serves HTML — clients probing
-  // /.well-known/openid-configuration or the RFC 8414 path-suffixed AS metadata URL
-  // receive a 200 HTML response they can't parse as JSON, causing "does not implement OAuth".
-  app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.path.startsWith('/.well-known/')) return res.status(404).json({ error: 'not_found' });
-    next();
-  });
-
-  // Helmet's COOP: same-origin isolates the consent popup from its cross-origin opener (ChatGPT etc.), making window.opener null and breaking the OAuth flow.
-  app.use('/oauth/consent', (_req: Request, res: Response, next: NextFunction) => {
-    res.setHeader('Cross-Origin-Opener-Policy', 'unsafe-none');
-    next();
-  });
 }
 
 /**
