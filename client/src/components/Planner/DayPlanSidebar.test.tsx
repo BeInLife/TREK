@@ -16,6 +16,7 @@ import {
 import type { Accommodation, Reservation } from '../../types'
 import { calculateRouteWithLegs, generateGoogleMapsUrl } from '../Map/RouteCalculator'
 import DayPlanSidebar from './DayPlanSidebar'
+import { makeMarkerDraggable } from '../Map/markerDrag'
 
 // ── Hoisted mock state (accessible in vi.mock factories) ────────────────────
 const mockDayNotesState = vi.hoisted(() => ({
@@ -1022,6 +1023,31 @@ describe('DayPlanSidebar', () => {
 
   // ── Drop on day header (placeId) ───────────────────────────────────────
 
+  it('FE-PLANNER-DAYPLAN-199: a drag started on a map marker lands on the day (#891)', () => {
+    const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
+    const onAssignToDay = vi.fn()
+    render(<DayPlanSidebar {...makeDefaultProps({ days: [day], onAssignToDay })} />)
+
+    // Exactly what makeMarkerDraggable leaves behind on dragstart — the point of
+    // this test is that the day plan cannot tell a marker from a sidebar row.
+    const marker = document.createElement('div')
+    document.body.appendChild(marker)
+    makeMarkerDraggable(marker, 42)
+    const dragstart = new Event('dragstart', { bubbles: true })
+    const store = new Map<string, string>()
+    Object.defineProperty(dragstart, 'dataTransfer', {
+      value: { setData: (k: string, v: string) => store.set(k, v), getData: (k: string) => store.get(k) ?? '', effectAllowed: 'none' },
+    })
+    marker.dispatchEvent(dragstart)
+
+    const dayHeader = screen.getByText('Day 1').closest('[style*="cursor: pointer"]')
+    fireEvent.drop(dayHeader as Element, { dataTransfer: { getData: (k: string) => store.get(k) ?? '' } })
+
+    expect(onAssignToDay).toHaveBeenCalledWith(42, 10)
+    marker.remove()
+    window.__dragData = null
+  })
+
   it('FE-PLANNER-DAYPLAN-050: dropping place from sidebar onto day header calls onAssignToDay', () => {
     const day = buildDay({ id: 10, date: '2025-06-01', title: 'Day 1' })
     const onAssignToDay = vi.fn()
@@ -1196,6 +1222,54 @@ describe('DayPlanSidebar', () => {
     const addBtn = screen.getByRole('button', { name: 'Add' })
     await user.click(addBtn)
     expect(mockDayNotesState.saveNote).toHaveBeenCalledWith(10)
+  })
+
+  // ── Jump to today (#1567) ─────────────────────────────────────────────
+
+  describe('jump to today', () => {
+    const isoDaysAround = (offsets: number[]) => offsets.map((o, i) => {
+      const d = new Date()
+      d.setDate(d.getDate() + o)
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      return buildDay({ id: 10 + i, date: iso, title: `Day ${i + 1}` })
+    })
+
+    it('FE-PLANNER-DAYPLAN-195: opening a running trip selects today rather than day one', async () => {
+      const onSelectDay = vi.fn()
+      const days = isoDaysAround([-1, 0, 1])
+      render(<DayPlanSidebar {...makeDefaultProps({ days, onSelectDay })} />)
+
+      await waitFor(() => expect(onSelectDay).toHaveBeenCalledWith(days[1].id, true))
+    })
+
+    it('FE-PLANNER-DAYPLAN-196: a trip that is not running is left alone', async () => {
+      const onSelectDay = vi.fn()
+      const days = isoDaysAround([5, 6, 7])
+      render(<DayPlanSidebar {...makeDefaultProps({ days, onSelectDay })} />)
+
+      await new Promise(r => setTimeout(r, 30))
+      expect(onSelectDay).not.toHaveBeenCalled()
+    })
+
+    it('FE-PLANNER-DAYPLAN-197: a day the user already picked wins over the jump', async () => {
+      const onSelectDay = vi.fn()
+      const days = isoDaysAround([-1, 0, 1])
+      // Coming back from another tab, or in via a deep link: the selection is
+      // already made and must not be overruled.
+      render(<DayPlanSidebar {...makeDefaultProps({ days, onSelectDay, selectedDayId: days[0].id })} />)
+
+      await new Promise(r => setTimeout(r, 30))
+      expect(onSelectDay).not.toHaveBeenCalled()
+    })
+
+    it('FE-PLANNER-DAYPLAN-198: a trip planned without dates has nothing to jump to', async () => {
+      const onSelectDay = vi.fn()
+      const days = [buildDay({ id: 1, date: null, title: 'Day 1' }), buildDay({ id: 2, date: null, title: 'Day 2' })]
+      render(<DayPlanSidebar {...makeDefaultProps({ days, onSelectDay })} />)
+
+      await new Promise(r => setTimeout(r, 30))
+      expect(onSelectDay).not.toHaveBeenCalled()
+    })
   })
 
   // ── Note colours and formatting (#1629) ───────────────────────────────
