@@ -375,12 +375,24 @@ gate-verifiable, worth re-checking after every phase:
   cron a domain provider on `CronRegistrarService` (`src/nest/scheduling/`),
   `node-cron` out of `package.json`. `index.ts` no longer boots any cron and its
   `shutdown()` rides `nestApp.close()`. The db-boot airport backfill was already
-  gone (`9c46f31c`); ws/MCP wiring remain its hand-booted seams.
-- 🟡 (re-checked 2026-08-11, after the bridge fold) **5** `*.bridge.ts` files
-  remain — `oauth`, `audit`, `addons`, `auth`, `permissions` — each shrunk to
-  the exports its consumers import, all pinned by the ONE remaining seam (the
-  pre-`app.init()` MCP/OAuth mount) and all dying together if that mount ever
-  moves behind the container. The 2026-08-10 endgame executed and then some:
+  gone (`9c46f31c`). (2026-08-11: the ws gateway binds inside `buildApp()` and
+  /mcp is a Nest controller — `index.ts`'s only MCP touch left is the
+  `closeMcpSessions()` housekeeping call in `shutdown()`.)
+- ✅ (2026-08-11, MCP/OAuth mount migration) **Zero** `*.bridge.ts` files
+  remain. The one remaining seam died: /api/health, OAuth discovery, the
+  consent COOP override, /oauth/authorize + /oauth/register (SDK routers via
+  `OauthModule.configure`) and /mcp (`nest/mcp-transport/`) all moved behind
+  the container, so `oauth`/`audit`/`addons`/`auth`/`permissions` bridges
+  became ordinary injections and were deleted, along with
+  `mcp/registry-handoff.ts` (the transport injects `McpRegistryService`).
+  `_shared.ts`'s impure guards became the injectable `McpToolGuardsService`
+  (`nest/mcp-shared/`). Pre-init Express now carries only global middleware,
+  uploads, the DI-built discovery metadata middleware, static assets, api-docs
+  and the named body-parser wrappers (which keep `/mcp` bodies raw for the
+  SDK).
+- 🟡 (historical — the 2026-08-11 morning state this replaced) 5 bridges
+  remained after the bridge fold, all pinned by the pre-`app.init()` mount.
+  The 2026-08-10 endgame executed and then some:
   the 4 dead ones deleted (`8e4261ed`); `journey.bridge` +
   `src/mcp/resources.ts` retired with the journey-resource migration;
   `budget.bridge` deleted (UserCleanupService injects BudgetService);
@@ -394,10 +406,14 @@ gate-verifiable, worth re-checking after every phase:
   them.
 - ✅ (2026-08-11) `src/mcp/resources.ts` gone — the 4 journey resources are
   decorator-registered on `journey.mcp.ts`; `journey.bridge` died with it.
-- ❌ The `db` proxy is still imported outside DatabaseModule:
-  `mcp/oauthProvider.ts`, `mcp/tools/_shared.ts`, and the surviving bridges —
-  the MCP/OAuth seam above (`websocket.ts` is a re-export stub with no `db`
-  import since the gateway move; the scheduler's cron-path imports are gone).
+- 🟡 (re-checked 2026-08-11, after the mount migration) The `db` proxy is
+  imported outside DatabaseModule by exactly four files: `backup.impl.ts`
+  (the backup lifecycle the DoD explicitly allows), `auth/jwt-verify.ts`
+  (the canonical pre-init token verifier the uploads route shares),
+  `platform.routes.ts` (the guarded /uploads/photos route) and
+  `places/place-image.ts`. Nothing under `src/mcp/` touches it anymore —
+  `oauthProvider.ts` is the injectable `oauth-sdk.provider.ts`, `_shared.ts`
+  is pure, and every bridge is gone.
 
 ## Keep in mind — ORM / data-layer swap (not scheduled, just recorded)
 

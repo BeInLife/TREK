@@ -152,10 +152,11 @@ tools, which never pass through an HTTP guard. In the five domains piloted for
     It replaced `setupWebSocket(server)`, which index.ts kicked off with a
     dynamic import after listen().
   - `ws-state.ts` holds the socket registry, and that is **module state on
-    purpose**. The out-of-container bridges and `notifications.instance.ts`
-    build `new RealtimeService()` outside the container; rooms on a provider
-    instance would leave their broadcasts going to an empty map, with no error
-    and no log. Same reasoning as the geo throttle cursor.
+    purpose**. The no-Nest test harnesses build `new RealtimeService()`
+    outside the container and 115 test files `vi.mock` the `src/websocket`
+    stub; rooms on a provider instance would leave their broadcasts going to
+    an empty map, with no error and no log. Same reasoning as the geo
+    throttle cursor.
   - `trek-ws.adapter.ts` exists because the stock `WsAdapter` dispatches on
     `{ event, data }` and every deployed client sends `{ type, tripId }`. It
     also builds the ws server itself rather than delegating: the base's port-0
@@ -190,9 +191,9 @@ tools, which never pass through an HTTP guard. In the five domains piloted for
   politely waited and OSM saw a single instance ignoring its rate limit. Both
   domains now go through `nominatimFetch`.
   - The throttle cursor and the cache are **module state, not provider state**,
-    for the permissions-cache reason: the bridges build their collaborators with
-    `new`, outside the container, and a second copy of the cursor is the very bug
-    the fold removes. `GeoModule` is registered straight in AppModule and neither
+    for the permissions-cache reason: the no-Nest test harnesses build their
+    collaborators with `new`, outside the container, and a second copy of the
+    cursor is the very bug the fold removes. `GeoModule` is registered straight in AppModule and neither
     `MapsModule` nor `AtlasModule` imports it — an import would claim an
     injection edge that does not exist.
   - `GeocodingService` owns exactly one thing: the cache-cleanup timer's
@@ -226,12 +227,27 @@ was the fullest example — a structural `SchedulerDeps` interface filled by
 `index.ts` — until every cron became an in-container `*.job.ts` provider and
 the seam disappeared entirely, which is the real endgame for this shape.)
 
-**`<domain>.bridge.ts` is the older shape** and still correct for the MCP
-registrars that reach a domain at import time. Its cost is real, though: a
-bridge rebuilds its services with `new`, so adding one constructor parameter to
-a service means hand-editing every bridge that constructs it — five of them in
-one PR, most recently. `app.get()` costs nothing there and returns the container
-singleton rather than a second instance.
+**`<domain>.bridge.ts` is a retired shape** — zero bridge files remain since
+the MCP/OAuth mount moved behind the container (2026-08-11). It served code
+that ran before `app.init()` and so could not inject; its cost was real: a
+bridge rebuilt its services with `new`, so adding one constructor parameter to
+a service meant hand-editing every bridge that constructed it — five of them in
+one PR, at the worst. If a pre-init consumer ever reappears, prefer the
+`bootstrap.ts` pattern instead: resolve the container singleton with
+`app.get(...)` before init (the `httpConfig.KEY` / discovery-metadata
+precedent) rather than minting a second instance.
+
+**Express middleware with DI has two honest mounts** (first used by the mount
+migration): `consumer.apply(...).forRoutes('<concrete path>')` in a module's
+`configure()` — an Express prefix mount, exactly the legacy `app.use('/path')`
+semantics, which is how `OauthModule` mounts the MCP SDK's authorize/register
+routers and `PlatformModule` the consent-COOP override — and, for middleware
+that must see the ORIGINAL `req.url` (a wildcard `forRoutes()` is a pattern
+mount that strips the matched prefix), a pathless `app.use` in `bootstrap.ts`
+over a container-resolved factory provider (`MCP_METADATA_MIDDLEWARE`).
+`nest/mcp-transport/` (the /mcp controller + service over injected services)
+and `nest/mcp-shared/` (`McpToolGuardsService` for the `*.mcp.ts` classes) are
+the module shapes that replaced the last bridges.
 
 **A bridge imported from INSIDE the container hides an edge from the module
 graph**, which is a different problem from serving a genuine outside consumer.

@@ -108,8 +108,8 @@ export class TrekWsAdapter extends WsAdapter {
     // failures; this one keeps the transport's own errors visible.
     server.on('error', (err) => logError(`ws server error: ${err instanceof Error ? err.message : String(err)}`));
 
-    // The fan-out primitives reach the live server through here, and so do the
-    // out-of-container bridges.
+    // The fan-out primitives reach the live server through here, and so does
+    // every out-of-container RealtimeService the test harnesses build.
     setServer(server);
     return server;
   }

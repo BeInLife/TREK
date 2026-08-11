@@ -34,8 +34,9 @@ const HEARTBEAT_INTERVAL = 30_000;
  * than an interval nobody stops.
  *
  * What did NOT move is the socket registry. It stays module-scoped in
- * ws-state.ts because out-of-container code (the MCP seam's safeBroadcast,
- * auth.bridge's graph) must see the same rooms; see the note there.
+ * ws-state.ts because out-of-container code (the no-Nest test harnesses,
+ * the vi.mock'd src/websocket seam) must see the same rooms; see the note
+ * there.
  *
  * The wire protocol is unchanged, down to the frame names. TrekWsAdapter maps
  * `{ type }` onto @SubscribeMessage, because the stock adapter dispatches on

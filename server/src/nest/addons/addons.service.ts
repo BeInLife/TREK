@@ -14,8 +14,7 @@ import { getPhotoProviderConfig } from '../memories/memories.helpers';
  * bag-tracking and collab-features flags. The boolean polarities differ on
  * purpose — bag tracking is opt-in (`=== 'true'`, default OFF), the collab
  * sub-features are opt-out (`!== 'false'`, default ON). Reads are uncached
- * per-call queries so admin toggles stay immediately visible; out-of-container
- * consumers go through addons.bridge.ts.
+ * per-call queries so admin toggles stay immediately visible.
  */
 @Injectable()
 export class AddonsService {

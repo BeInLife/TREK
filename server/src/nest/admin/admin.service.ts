@@ -6,11 +6,11 @@ import path from 'path';
 import { ADDON_IDS } from '../../addons';
 import { readEnv } from '../../app-config';
 import { updateJwtSecret } from '../../config';
-// Import from sessionManager directly, NOT the ../../mcp barrel: the barrel pulls
-// the whole tools fan-out (and via the domain bridges, the Nest services) into
-// every consumer of this module — a nest→mcp→nest module cycle. The
-// invalidateMcpSessions barrel import below predates the fold and is deliberately
-// separate: it is only reached from the controller, never from the cron path.
+// Import from sessionManager directly, NOT the ../../mcp barrel — the direct
+// path keeps this module's graph minimal, and the split predates the barrel's
+// shrink to process-wide state. The invalidateMcpSessions barrel import below
+// is deliberately separate: it is only reached from the controller, never from
+// the cron path.
 import { revokeUserSessions, revokeUserSessionsForClient } from '../../mcp/sessionManager';
 import { invalidateMcpSessions } from '../../mcp';
 import { emitUserDeleted } from '../../plugin-user-lifecycle';

@@ -4,7 +4,7 @@ import { RealtimeService } from './realtime.service';
 /**
  * Global so every migrated module can inject RealtimeService without
  * re-importing (same rationale as DatabaseModule). The service stays
- * stateless and dependency-free so the out-of-container bridges can build it
+ * stateless and dependency-free so the no-Nest test harnesses can build it
  * with a bare `new`.
  *
  * The transport itself lives in RealtimeGatewayModule, which AppModule imports

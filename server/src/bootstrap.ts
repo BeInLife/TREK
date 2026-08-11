@@ -21,26 +21,28 @@ import { TrekWsAdapter } from './nest/realtime/trek-ws.adapter';
  * former Express app is gone. One builder is shared by the production bootstrap
  * (index.ts) and the integration-test harness so the two can never drift.
  *
- * Composition order is load-bearing. Everything except the SPA index.html fallback
- * is registered on the underlying Express instance BEFORE `app.init()`, because
- * Nest's router terminates an unmatched request by throwing NotFoundException — it
- * does NOT fall through to a route registered after init, so a post-init Express
- * route is unreachable. The platform routes are all specific paths (/uploads/*,
- * /api/health, /mcp, /.well-known/*, /oauth/{authorize,register,consent}) so they
- * match their own requests and `next()` everything else through to the Nest
- * controllers registered during init.
+ * Composition order is load-bearing. The few remaining pre-`app.init()` pieces
+ * are registered on the underlying Express instance first, because Nest's
+ * router terminates an unmatched request by throwing NotFoundException — it
+ * does NOT fall through to a route registered after init, so a post-init
+ * Express route is unreachable. Each pre-init piece matches its own requests
+ * and `next()`s everything else through to the Nest controllers:
  *
- *   1. applyGlobalMiddleware — helmet/CSP, CORS, HSTS, forced-HTTPS, the global MFA
- *      policy, request logging + cookie-parser. `bodyParser: false` so Nest does its
- *      own parsing and the raw /mcp body reaches the MCP handler unparsed.
+ *   1. applyGlobalMiddleware — helmet/CSP, CORS, HSTS, forced-HTTPS, request
+ *      logging + cookie-parser.
  *   2. applyPlatformUploads — the static + guarded /uploads/* routes.
- *   3. applyPlatformTransport — /api/health, the OAuth/MCP SDK + /.well-known
- *      metadata, the /mcp routes, the /oauth/consent COOP header.
- *   4. applyPlatformStatic — the production built-client static assets (so a real
- *      asset request returns the file before the Nest router 404s it).
- *   4b. setupApiDocs — Swagger UI/spec at /api/docs* when TREK_API_DOCS_ENABLED;
- *      also Express-level, so it must precede init for the same reason.
- *   5. app.init() — registers every migrated /api domain (the Nest controllers).
+ *   3. MCP_METADATA_MIDDLEWARE — the SDK's OAuth discovery router + addon
+ *      gate, container-built (DI) but mounted pathless here (see below).
+ *   4. applyPlatformStatic — the production built-client static assets (so a
+ *      real asset request returns the file before the Nest router 404s it).
+ *   4b. setupApiDocs — Swagger UI/spec at /api/docs* when TREK_API_DOCS_ENABLED.
+ *   4c. the named body-parser wrappers — the global 100kb JSON/urlencoded
+ *      parsers, exempting /mcp so the MCP SDK reads the raw stream.
+ *   5. app.init() — every domain controller, including the transport surface
+ *      that used to live pre-init: /api/health (FeaturesController), OAuth
+ *      discovery documents (DiscoveryController), the /oauth/consent COOP
+ *      override (ConsentCoopMiddleware), /oauth/authorize + /oauth/register
+ *      (SDK routers via OauthModule.configure) and /mcp (McpTransportModule).
  *
  * The SPA index.html fallback (unmatched GET → index.html in production) is the
  * SpaFallbackFilter (APP_FILTER in AppModule); the global error envelope is the
