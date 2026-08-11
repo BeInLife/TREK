@@ -243,31 +243,50 @@ through. `@trek/nest-mcp` hands the gate its declaring instance now, and
 `AddonsService`. `reservations.mcp.ts` (assignments) and `atlas.mcp.ts` /
 `journey.mcp.ts` (auth) went the same way.
 
-Four in-container uses are left, each for a reason that injection does not fix.
-Keep this list current: an entry that outlives its cause reads as a standing
-exception and invites the next one.
+Two in-container uses are left, both verified-real module cycles that
+injection cannot fix without forwardRef. Keep this list current: an entry that
+outlives its cause reads as a standing exception and invites the next one.
 
 - `places.mcp.ts` → `assignments.bridge`: a real cycle, `DaysModule →
   PlacesModule → AssignmentsModule → DaysModule`.
 - `budget.mcp.ts` / `packing.mcp.ts` / `costs.rpc.ts` → `trips.bridge`:
-  `TripsModule` imports both, so importing it back closes the loop.
-- `auth/user-cleanup.service.ts` → `budget.bridge`: `BudgetModule` imports
-  `AuthModule`, same shape.
-- `backup/backup.impl.ts` → `permissions.bridge`: free functions, not a
-  provider, so there is nothing for an injected service to hang off. Its second
-  caller, `src/scheduler.ts`, is gone; the cache invalidation is not.
+  `TripsModule`, `TripReadModelModule` and `TripMembersModule` all import the
+  budget/packing domains, so injecting any of the backing services back
+  closes a loop.
 
-`files.bridge` used to be the fifth and is gone, resolved 2026-08-10 exactly as
-predicted: `MulterModule.registerAsync` over an `AllowedFileTypesService` leaf,
-and `files.controller.ts` / `journey.controller.ts` build their multer options
-from that.
+Two more were on this list and folded 2026-08-11:
+
+- `auth/user-cleanup.service.ts` → `budget.bridge` died when `BudgetModule`
+  dropped its `AuthModule` import (BudgetMcp's demo guard reads
+  `RuntimeEnvService` + the users table via `isDemoUserId`, not
+  `AuthService`), which let `AuthModule` import `BudgetModule` and
+  `UserCleanupService` inject `BudgetService`. `budget.bridge` is deleted.
+- `backup/backup.impl.ts` → `permissions.bridge`: the restore path is free
+  functions, not a provider, so there is nothing for an injected service to
+  hang off — but the thing it needs is the cache, not the service. The cache
+  moved to `permissions/permissions-cache.ts` (the `oauth.pending-codes.ts`
+  precedent) and `backup.impl` imports the plain `invalidatePermissionsCache`
+  from there.
+
+`files.bridge` used to be on the list and is gone, resolved 2026-08-10 exactly
+as predicted: `MulterModule.registerAsync` over an `AllowedFileTypesService`
+leaf, and `files.controller.ts` / `journey.controller.ts` build their multer
+options from that. `systemNotices/conditions.ts` similarly stopped importing
+`addons.bridge`: the enablement check is threaded in through
+`ConditionContext.addonEnabled` by the DI-native `SystemNoticesService`.
 
 `days`, `packing`, `photos` and `reservations` had no production consumer left
 and are deleted. Each still built a service outside the container at module load
 for nobody, and three domain docblocks were still sending readers to them. The
 cases that exercised them kept their assertions and point at the service.
+`journey.bridge` died 2026-08-11 with `src/mcp/resources.ts`, when the last
+four legacy resources became `@Resource`/`@ResourceTemplate` methods on
+`journey.mcp.ts`.
 
-Twelve bridges remain. When one loses its last outside-container consumer,
+Eight bridges remain: five pinned by the pre-`app.init()` MCP/OAuth mount
+(`addons`, `audit`, `auth`, `oauth`, `permissions` — shrunk to the exports that
+seam consumes) and three verified-permanent cycle-dodges (`assignments`,
+`airtrail`, `trips`). When one loses its last outside-container consumer,
 delete it in the same change rather than leaving it as a courtesy: an unused
 bridge reads as a supported entry point.
 
@@ -288,10 +307,10 @@ That is why `tests/` is not in the build's `include`, and cleaning it up is its
 own piece of work.
 
 `notifications.instance.ts` holds the out-of-container `NotificationsService`
-for the surviving cycle-dodge bridges (trips/reservations/airtrail/packing).
-The `notifications.bridge.ts` send shim it used to back died with the
-scheduler migration — the reminder crons inject the container singleton now
-(`ReminderJobsService`).
+for the surviving cycle-dodge bridges (`trips.bridge` and `airtrail.bridge`;
+it lives exactly as long as either does). The `notifications.bridge.ts` send
+shim it used to back died with the scheduler migration — the reminder crons
+inject the container singleton now (`ReminderJobsService`).
 - `app-config/` — the `@nestjs/config` binding (`AppConfigModule`, global). Never
   read `process.env` in a module (ESLint enforces this): inject a boot-stable
   namespace via its `registerAs` token (`@Inject(mcpConfig.KEY) … ConfigType<…>`)
@@ -542,10 +561,10 @@ freeze; the 11-tool `mcp/tools/budget.ts` registrar + 3 `resources.ts` budget
 resources moved to `budget.mcp.ts`; TripsService, ReservationsService (+ its
 MCP class) and BookingImportService inject `BudgetService`; a 4-export
 `budget.bridge.ts` served the legacy tripService/userCleanupService and the
-trips/transports registrars (down to two exports since; `UserCleanupService`
-still takes `removeUserFromBudgetItems` from it, because BudgetModule imports
-AuthModule for BudgetMcp's demo guard and AuthModule therefore cannot import
-BudgetModule back); `exchange-rates.bridge.ts` was deleted with its
+trips/transports registrars (deleted 2026-08-11: BudgetMcp's demo guard moved
+off AuthService onto `isDemoUserId`, BudgetModule dropped AuthModule, and
+`UserCleanupService` injects `BudgetService` now);
+`exchange-rates.bridge.ts` was deleted with its
 last consumers, and the controller adopted `budget.dto.ts` — all nine
 allow-list entries removed).
 tripService followed (the 1121-line Wave-4 hub — the biggest fold — moved into
@@ -561,9 +580,11 @@ the `registry.attach` ctx — and the 3 share-link tools it carried moved to
 `share.mcp.ts` on the `canShareTrips` predicate (delete_trip and the
 canReadTrips reads are predicates too — the broadened legacy gates have no
 declarative equivalent); FeedsService and the plugin host inject
-`TripsService` (its 20th constructor dep); a 3-export `trips.bridge.ts`
-serves the legacy prompts registrar and budget.mcp.ts's owner/member seam
-(injecting there would need a forwardRef'd TripsModule↔BudgetModule cycle);
+`TripsService` (its 20th constructor dep); a 4-export `trips.bridge.ts`
+serves budget.mcp.ts / packing.mcp.ts / costs.rpc.ts (verified-permanent
+2026-08-11: the trip read-model/members modules import the budget and packing
+domains, so injecting any backing service there closes a real cycle; the
+prompts registrar it also served is long migrated);
 `todo.bridge.ts`, `share.bridge.ts`, `collab.bridge.ts` and `vacay.bridge.ts`
 were deleted with their last consumers and the unused days/budget bridge
 exports pruned; the controller adopted `trips.dto.ts` — all seven allow-list
@@ -834,7 +855,8 @@ SQL, statuses, bodies, and error strings. The plugin RPC host is **no longer a
 bridge consumer**: since Option A of `src/nest/plugins/DI-MIGRATION.md` it
 injects domain services via `PluginHostDepsFactory`, so a migrated domain adds
 `exports: [XService]` + a `PluginsModule` import instead of a bridge entry.
-Only legacy `src/mcp` registrars (and websocket code) still need bridges — the
+Only the pre-`app.init()` MCP/OAuth mount and the three verified module-cycle
+seams still need bridges — nothing on the websocket path imports one, and the
 crons all inject now (`*.job.ts` providers on `scheduling/CronRegistrarService`).
 
 1. **Move the SQL** into `<domain>.service.ts` as methods over an injected
