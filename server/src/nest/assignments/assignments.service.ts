@@ -19,9 +19,8 @@ type Trip = TripAccess;
  * uses). Trip access rides DatabaseService.canAccessTrip; mutations use
  * 'day_edit'. The batch tag/participant loaders are injected as
  * QueryHelpersService (shared with the day, share and place services).
- * Non-Nest consumers (the legacy places/reservations MCP registrars) go
- * through assignments.bridge.ts; the plugin RPC host and the assignments MCP
- * tools inject this class.
+ * Every consumer injects this class (assignments.bridge.ts is deleted —
+ * PlacesMcp injects it from AssignmentsDomainModule now).
  */
 @Injectable()
 export class AssignmentsService {

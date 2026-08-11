@@ -1,10 +1,8 @@
 import { Module } from '@nestjs/common';
-import { JourneyDomainModule } from '../journey/journey-domain.module';
-import { DaysModule } from '../days/days.module';
 import { PermissionsModule } from '../permissions/permissions.module';
-import { QueryHelpersModule } from '../query-helpers/query-helpers.module';
+import { DaysModule } from '../days/days.module';
 import { DayAssignmentsController, AssignmentOpsController } from './assignments.controller';
-import { AssignmentsService } from './assignments.service';
+import { AssignmentsDomainModule } from './assignments-domain.module';
 import { ItineraryRpc } from './itinerary.rpc';
 import { PluginGuardsModule } from '../plugins/host/plugin-guards.module';
 import { RealtimeModule } from '../realtime/realtime.module';
@@ -14,14 +12,17 @@ import { AuthModule } from '../auth/auth.module';
 /**
  * Assignments domain (S7 — Phase 2 trip sub-domain). The day-assignments mount
  * sits under the /api/trips/:tripId/days prefix (S6); the per-assignment ops use
- * the /api/trips/:tripId/assignments prefix. AssignmentsService is exported for
- * the plugin RPC surface (ItineraryRpc injects it).
+ * the /api/trips/:tripId/assignments prefix. AssignmentsService lives in
+ * AssignmentsDomainModule (re-exported here for ReservationsModule and the
+ * plugin RPC surface) so PlacesModule can reach it without closing the
+ * DaysModule → PlacesModule → AssignmentsModule loop this module is on.
  */
 @Module({
   // DaysModule: AssignmentsMcp injects DaysService for the target-day checks.
-  imports: [DaysModule, PermissionsModule, QueryHelpersModule, AuthModule, JourneyDomainModule, RealtimeModule, PluginGuardsModule],
+  // PermissionsModule: the controllers' TripAccessGuard injects PermissionsService.
+  imports: [AssignmentsDomainModule, DaysModule, PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule],
   controllers: [DayAssignmentsController, AssignmentOpsController],
-  providers: [AssignmentsService, AssignmentsMcp, ItineraryRpc],
-  exports: [AssignmentsService],
+  providers: [AssignmentsMcp, ItineraryRpc],
+  exports: [AssignmentsDomainModule],
 })
 export class AssignmentsModule {}

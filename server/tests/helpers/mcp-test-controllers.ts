@@ -144,8 +144,7 @@ export function createMcpTestRegistry(): McpRegistry {
   // one — against the same test DB, which is what makes the `when:` gates
   // answer truthfully here instead of against the process-wide singleton.
   const addonsService = new AddonsService(dbService);
-  // One instance, two consumers: AssignmentsMcp and, since it stopped reaching
-  // through assignments.bridge, ReservationsMcp.
+  // One instance, three consumers: AssignmentsMcp, ReservationsMcp and PlacesMcp.
   const assignmentsService = new AssignmentsService(dbService, permissionsService, realtimeService, queryHelpersService, journeyDomain);
   return createTestRegistry(
     [
@@ -169,7 +168,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new TripPromptsMcp(tripsService, readModelService, packingService, addonsService),
       new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService, queryHelpersService, placePhotoCache), authService),
       new MapsMcp(mapsService),
-      new PlacesMcp(placesService, mapsService, dbService, authService, journeyDomain),
+      new PlacesMcp(placesService, mapsService, dbService, authService, journeyDomain, assignmentsService),
       new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService, notificationsStub()), dbService, authService, addonsService),
       new TransitMcp(new TransitService(), daysService, reservationsService, dbService, authService),
       new AtlasMcp(new AtlasService(dbService), addonsService, authService),

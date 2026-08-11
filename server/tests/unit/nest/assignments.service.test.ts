@@ -5,8 +5,8 @@
  * relocated SQL — MAX(order_index)+1 ordering, post-write re-selects, the
  * time-driven auto-sort with its '99:99' sentinel — plus the hardening that
  * followed the move: transactional writes, the DB-derived move source day,
- * empty-string time clearing, the unified compact tag projection, and the
- * assignments.bridge delegation). Uses a real in-memory SQLite DB so SQL
+ * empty-string time clearing, and the unified compact tag projection; the
+ * bridge-delegation case died with assignments.bridge). Uses a real in-memory SQLite DB so SQL
  * logic is exercised faithfully.
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
@@ -51,7 +51,6 @@ import { createUser, createTrip, addTripMember, createDay, createPlace, createDa
 import { DatabaseService, type TripAccess } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { AssignmentsService } from '../../../src/nest/assignments/assignments.service';
-import { createAssignment, dayExists } from '../../../src/nest/assignments/assignments.bridge';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { QueryHelpersService } from '../../../src/nest/query-helpers/query-helpers.service';
 import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.service';
@@ -398,13 +397,5 @@ describe('setLegTransportMode', () => {
   });
 });
 
-// ── bridge delegation ─────────────────────────────────────────────────────────
-
-describe('assignments.bridge', () => {
-  it('ASG-SVC-026: bridge exports delegate to the same SQL over the shared connection', () => {
-    const { trip, day, place } = fixture();
-    expect(dayExists(day.id, trip.id)).toBe(true);
-    const created = createAssignment(day.id, place.id, null);
-    expect(created).toMatchObject({ day_id: day.id, place_id: place.id, order_index: 0 });
-  });
-});
+// ASG-SVC-026 pinned the deleted assignments.bridge and died with it — the
+// same paths are covered on the service above and via places.mcp injection.

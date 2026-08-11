@@ -7,6 +7,7 @@ import { PluginGuardsModule } from '../plugins/host/plugin-guards.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PlacesMcp } from './places.mcp';
 import { PermissionsModule } from '../permissions/permissions.module';
+import { AssignmentsDomainModule } from '../assignments/assignments-domain.module';
 import { AppConfigModule } from '../app-config/app-config.module';
 import { UnsplashModule } from '../unsplash/unsplash.module';
 import { PlacePhotosModule } from '../place-photos/place-photos.module';
@@ -23,7 +24,7 @@ import { AuthModule } from '../auth/auth.module';
  * is no places.bridge.ts: nothing outside the container consumes this domain.
  */
 @Module({
-  imports: [PermissionsModule, QueryHelpersModule, MapsModule, AuthModule, AppConfigModule, UnsplashModule, PlacePhotosModule, JourneyDomainModule, RealtimeModule, PluginGuardsModule],
+  imports: [PermissionsModule, QueryHelpersModule, MapsModule, AuthModule, AppConfigModule, UnsplashModule, PlacePhotosModule, JourneyDomainModule, RealtimeModule, PluginGuardsModule, AssignmentsDomainModule],
   controllers: [PlacesController],
   providers: [PlacesService, PlacesMcp, PlacesRpc],
   exports: [PlacesService],

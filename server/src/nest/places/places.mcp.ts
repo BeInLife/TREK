@@ -6,7 +6,7 @@ import {
 } from '@trek/nest-mcp';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
-import { createAssignment, dayExists } from '../assignments/assignments.bridge';
+import { AssignmentsService } from '../assignments/assignments.service';
 import { JourneyDomainService } from '../journey/journey-domain.service';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
 import { DatabaseService } from '../database/database.service';
@@ -29,13 +29,11 @@ function parseId(value: string | string[]): number | null {
  * `search_place` stays in this controller even though it calls MapsService:
  * its legacy gate is `places:read`, not the geo group that maps.mcp.ts carries.
  *
- * The two assignments imports stay on assignments.bridge rather than injecting
- * AssignmentsService, and this is now the ONLY MCP controller left on that
- * bridge: AssignmentsModule imports DaysModule, and DaysModule imports
- * PlacesModule for days.mcp.ts's place creation, so injecting here would close
- * a DaysModule → PlacesModule → AssignmentsModule → DaysModule cycle. A real
- * cycle, not the module-load problem the others had — reservations.mcp.ts sits
- * outside that loop and injects the service now.
+ * AssignmentsService is injected from AssignmentsDomainModule — the split that
+ * retired assignments.bridge. The full AssignmentsModule sits on the
+ * DaysModule → PlacesModule → AssignmentsModule loop (its MCP class injects
+ * DaysService), but the service itself never did, so its own module stays off
+ * the loop and PlacesModule can import it.
  */
 @McpController()
 export class PlacesMcp {
@@ -45,6 +43,7 @@ export class PlacesMcp {
     private readonly db: DatabaseService,
     private readonly auth: AuthService,
     private readonly journey: JourneyDomainService,
+    private readonly assignments: AssignmentsService,
   ) {}
 
   @Tool({
@@ -123,11 +122,11 @@ export class PlacesMcp {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
-    if (!dayExists(dayId, tripId)) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
+    if (!this.assignments.dayExists(dayId, tripId)) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
     try {
       const result = this.db.transaction(() => {
         const place = this.places.create(String(tripId), { name, description, lat, lng, address, category_id, google_place_id, google_ftid, osm_id, notes: place_notes, website, phone, price, currency });
-        const assignment = createAssignment(dayId, place.id, assignment_notes ?? null);
+        const assignment = this.assignments.createAssignment(dayId, place.id, assignment_notes ?? null);
         return { place, assignment };
       });
       safeBroadcast(tripId, 'place:created', { place: result.place });
