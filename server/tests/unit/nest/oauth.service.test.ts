@@ -64,7 +64,6 @@ import { AuditService } from '../../../src/nest/audit/audit.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
 import { getMcpSafeUrl } from '../../../src/app-config';
 import { ADDON_IDS } from '../../../src/addons';
-import * as bridge from '../../../src/nest/oauth/oauth.bridge';
 import { MAX_PENDING_CODES, sweepPendingCodes } from '../../../src/nest/oauth/oauth.pending-codes';
 
 const dbs = new DatabaseService(testDb);
@@ -1110,20 +1109,7 @@ describe('branches the legacy suite could not reach', () => {
   });
 });
 
-describe('oauth.bridge delegation', () => {
-  // The bridge is down to its one surviving export — what the MCP transport's
-  // token verification reaches outside the container. The SDK provider paths
-  // that used to be bridged live behind the container now (oauth-sdk.provider).
-  it('verifies a container-issued token through the bridge instance', () => {
-    const { user } = createUser(testDb);
-    const created = makeClient(user.id);
-    const clientId = (created.client as { client_id: string }).client_id;
-
-    const tokens = issueTokens(clientId, user.id, ['trips:read']);
-
-    expect(bridge.getUserByAccessToken(tokens.access_token)?.user.id).toBe(user.id);
-  });
-
+describe('module-scoped OAuth state', () => {
   it('shares the pending-code map across service instances', () => {
     // The load-bearing invariant: the consent controller writes the code through
     // the DI singleton, the SDK exchange path reads it back. The map is module-

@@ -1,18 +1,17 @@
 import nodeHttp from 'node:http';
+import express from 'express';
+import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import { NestFactory } from '@nestjs/core';
-import { ExpressAdapter, type NestExpressApplication } from '@nestjs/platform-express';
+import { ExpressAdapter } from '@nestjs/platform-express';
 import type { INestApplication } from '@nestjs/common';
 import type { ConfigType } from '@nestjs/config';
 import { AppModule } from './nest/app.module';
 import { httpConfig } from './nest/app-config';
 import { applyGlobalMiddleware } from './middleware/globalMiddleware';
-import { applyPlatformUploads, applyPlatformTransport, applyPlatformStatic } from './nest/platform/platform.routes';
+import { applyPlatformUploads, applyPlatformStatic } from './nest/platform/platform.routes';
 import { apiDocsEnabled } from './nest/common/api-docs.kill-switch';
 import { setupApiDocs } from './nest/platform/api-docs';
-import { McpRegistryService } from '@trek/nest-mcp';
-import { setMcpRegistry } from './mcp/registry-handoff';
 import { MCP_METADATA_MIDDLEWARE } from './nest/platform/mcp-metadata.middleware';
-import type { RequestHandler } from 'express';
 import { validateBodyContracts } from './nest/common/validate-body-contracts';
 import { validateRouteGuards } from './nest/common/validate-route-guards';
 import { TrekWsAdapter } from './nest/realtime/trek-ws.adapter';
@@ -83,7 +82,6 @@ export async function buildApp(): Promise<INestApplication> {
   const http = app.get<ConfigType<typeof httpConfig>>(httpConfig.KEY);
   applyGlobalMiddleware(instance, { http });
   applyPlatformUploads(instance);
-  applyPlatformTransport(instance);
   // The SDK discovery router (+ its addon gate). Container-built so its deps
   // are injected (same pre-init consumption bridge as httpConfig above), but
   // applied here as a PATHLESS app.use: the SDK router matches absolute
@@ -96,17 +94,31 @@ export async function buildApp(): Promise<INestApplication> {
   // '100kb' and stopped doing it when the Nest instance took over parsing, which
   // left the limit implicit — the same number, but nowhere anybody would find
   // it, and one NestFactory default away from silently becoming something else.
-  // Configured through Nest rather than a second express.json(): its parser
-  // carries the verify hook that keeps req.rawBody, which the plugin webhook
-  // routes need to check a provider's HMAC over the exact payload.
-  const express = app as unknown as NestExpressApplication;
-  express.useBodyParser('json', { limit: '100kb' });
-  express.useBodyParser('urlencoded', { limit: '100kb', extended: true });
+  // The verify hook keeps req.rawBody, which the plugin webhook routes need to
+  // check a provider's HMAC over the exact payload (same hook Nest's own
+  // useBodyParser would install).
+  //
+  // /mcp is exempted and stays RAW: the MCP SDK's StreamableHTTPServerTransport
+  // reads the request stream itself (its own size handling and JSON-RPC error
+  // bodies), and the transport controller passes the still-undefined req.body
+  // through as handleRequest's parsedBody argument. No Nest route may ever
+  // @Body() on /mcp. The wrapper NAMES are load-bearing:
+  // ExpressAdapter.registerParserMiddleware skips its own init-time parsers
+  // only when layers named jsonParser/urlencodedParser already sit in the stack.
+  const rawBodyKeeper = (req: Request, _res: Response, buffer: Buffer) => {
+    if (Buffer.isBuffer(buffer)) (req as Request & { rawBody?: Buffer }).rawBody = buffer;
+  };
+  const json = express.json({ limit: '100kb', verify: rawBodyKeeper });
+  const urlencoded = express.urlencoded({ limit: '100kb', extended: true, verify: rawBodyKeeper });
+  const isMcp = (req: Request) => req.path === '/mcp' || req.path === '/mcp/';
+  instance.use(function jsonParser(req: Request, res: Response, next: NextFunction) {
+    return isMcp(req) ? next() : json(req, res, next);
+  });
+  instance.use(function urlencodedParser(req: Request, res: Response, next: NextFunction) {
+    return isMcp(req) ? next() : urlencoded(req, res, next);
+  });
   if (apiDocsEnabled()) setupApiDocs(app);
   await app.init();
-  // The /mcp handler is mounted pre-init (step 3) and has no DI access — hand
-  // it the boot-discovered registry now that the container is fully built.
-  setMcpRegistry(app.get(McpRegistryService));
   // Fail closed on unvalidated mutation bodies: every POST/PUT/PATCH @Body()
   // must carry a createZodDto class (validated by the global ZodValidationPipe)
   // or sit on the ratchet-only legacy allow-list — otherwise refuse to boot.

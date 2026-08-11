@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
-import { getMcpRegistry } from './registry-handoff';
+import type { McpRegistry } from '@trek/nest-mcp';
 
-export function registerTools(server: McpServer, userId: number, scopes: string[] | null, isStaticToken = false, getDeprecationNotice: () => string | null = () => null): void {
+export function registerTools(registry: McpRegistry | null, server: McpServer, userId: number, scopes: string[] | null, isStaticToken = false, getDeprecationNotice: () => string | null = () => null): void {
   // The trip tools moved to the DI-discovered src/nest/trips/trips.mcp.ts and
   // the share-link tools to src/nest/share/share.mcp.ts (@McpController,
   // attached via the nest-mcp registry below — getDeprecationNotice rides the
@@ -61,10 +61,9 @@ export function registerTools(server: McpServer, userId: number, scopes: string[
   // static-token notice to auth.mcp.ts (its `if (isStaticToken)` became a
   // `when` gate — the registry hands `when` the session context).
 
-  // Decorator-registered domains (@trek/nest-mcp) — migrating off the legacy
-  // registrar fan-out above, one domain at a time. Unset registry (direct
-  // callers without a Nest app, e.g. unit tests) ⇒ skip; the test harness
-  // attaches its own via createTestRegistry + setMcpRegistry.
-  const registry = getMcpRegistry();
+  // Decorator-registered domains (@trek/nest-mcp). Production passes the
+  // container-discovered McpRegistryService (injected into the transport
+  // service); the no-Nest harness hands in createTestRegistry()'s build.
+  // A null registry (direct callers without either) ⇒ skip.
   if (registry) registry.attach(server, { userId, scopes, isStaticToken, getDeprecationNotice });
 }

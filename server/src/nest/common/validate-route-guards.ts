@@ -98,6 +98,10 @@ export const PUBLIC_ROUTE_ALLOW_LIST: string[] = [
   'JourneyPublicController.get',
   'JourneyPublicController.legacyPhoto',
   'JourneyPublicController.photo',
+  // The MCP transport — bearer tokens are verified inside the handler.
+  'McpTransportController.delete',
+  'McpTransportController.get',
+  'McpTransportController.post',
   'OauthPublicController.revoke',
   'OauthPublicController.token',
   'OauthPublicController.userinfo',

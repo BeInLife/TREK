@@ -67,7 +67,6 @@ import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin, createInviteToken, createTrip, createPlace, createReservation } from '../../helpers/factories';
 import { AuthService } from '../../../src/nest/auth/auth.service';
 import { TokenService } from '../../../src/nest/tokens/token.service';
-import * as authBridge from '../../../src/nest/auth/auth.bridge';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
@@ -928,23 +927,24 @@ describe('auth quirk fixes', () => {
 });
 
 // ---------------------------------------------------------------------------
-// auth.bridge.ts delegation (coverage gate: one case per bridge export)
+// MCP-token verification round-trips (was the auth.bridge delegation block;
+// the MCP transport now injects TokenService/AuthService directly)
 // ---------------------------------------------------------------------------
 
-describe('auth.bridge delegation', () => {
+describe('MCP token verification round-trips', () => {
   it('AUTH-BR-002: verifyMcpToken resolves a freshly created token to its user', () => {
     const { user } = createUser(testDb);
     const created = tokens.createMcpToken(user.id, 'bridge-case');
     const raw = (created.token as { raw_token: string }).raw_token;
-    const resolved = authBridge.verifyMcpToken(raw);
+    const resolved = tokens.verifyMcpToken(raw);
     expect(resolved?.id).toBe(user.id);
-    expect(authBridge.verifyMcpToken('trek_no_such_token')).toBeNull();
+    expect(tokens.verifyMcpToken('trek_no_such_token')).toBeNull();
   });
 
   it('AUTH-BR-003: verifyJwtToken round-trips a service-minted token through the pv gate', () => {
     const { user } = createUser(testDb);
     const token = svc.generateToken({ id: user.id });
-    expect(authBridge.verifyJwtToken(token)?.id).toBe(user.id);
-    expect(authBridge.verifyJwtToken('not-a-jwt')).toBeNull();
+    expect(svc.verifyJwtToken(token)?.id).toBe(user.id);
+    expect(svc.verifyJwtToken('not-a-jwt')).toBeNull();
   });
 });

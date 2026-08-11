@@ -5,7 +5,6 @@ import fs from 'node:fs';
 import { readEnv } from '../../app-config';
 import { verifyJwtAndLoadUser } from '../auth/jwt-verify';
 import { db } from '../../db/database';
-import { mcpHandler } from '../../mcp';
 
 // Platform / transport routes extracted verbatim from createApp() (app.ts) so they can be
 // mounted on either the legacy Express app or the NestJS Express instance (strangler A6/A8).
@@ -92,21 +91,6 @@ export function applyPlatformUploads(app: express.Application): void {
   app.use('/uploads/files', (_req: Request, res: Response) => {
     res.status(401).send('Authentication required');
   });
-}
-
-/**
- * The /mcp transport mounts — the last pre-init platform routes. Everything
- * else that used to live here is behind the container now: /api/health
- * (FeaturesController), OAuth discovery (DiscoveryController + the metadata
- * middleware bootstrap applies pre-init), /oauth/authorize + /oauth/register
- * (OauthModule.configure over the injected SDK adapters), and the
- * /oauth/consent COOP override (ConsentCoopMiddleware).
- */
-export function applyPlatformTransport(app: express.Application): void {
-  // MCP endpoint
-  app.post('/mcp', mcpHandler);
-  app.get('/mcp', mcpHandler);
-  app.delete('/mcp', mcpHandler);
 }
 
 /**

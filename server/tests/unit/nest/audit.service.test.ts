@@ -42,7 +42,6 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 import { AuditService } from '../../../src/nest/audit/audit.service';
 import { getClientIp } from '../../../src/nest/audit/client-ip';
 import { logInfo, logDebug, logError } from '../../../src/nest/audit/audit-log.logger';
-import { writeAudit as bridgeWriteAudit, getClientIp as bridgeGetClientIp } from '../../../src/nest/audit/audit.bridge';
 
 const svc = new AuditService(new DatabaseService(testDb));
 
@@ -180,17 +179,3 @@ describe('writeAudit', () => {
   });
 });
 
-// ── audit.bridge delegation ───────────────────────────────────────────────────
-
-describe('audit.bridge delegation', () => {
-  it('AUDIT-SVC-015: writeAudit writes a real row through the module-level instance', () => {
-    seedUser(1, 'a@b.c');
-    bridgeWriteAudit({ userId: 1, action: 'user.login', ip: '5.5.5.5' });
-    const row = testDb.prepare('SELECT user_id, action, ip FROM audit_log').get();
-    expect(row).toEqual({ user_id: 1, action: 'user.login', ip: '5.5.5.5' });
-  });
-
-  it('AUDIT-SVC-016: getClientIp is the same pure helper', () => {
-    expect(bridgeGetClientIp).toBe(getClientIp);
-  });
-});

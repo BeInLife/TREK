@@ -6,13 +6,10 @@ const h = vi.hoisted(() => ({
   verifyJwtAndLoadUser: vi.fn(),
   dbPrepare: vi.fn(),
   existsSync: vi.fn(),
-  // Tagged handler so we can identify which route registration received it.
-  mcpHandler: vi.fn(),
 }));
 
 vi.mock('../../../src/nest/auth/jwt-verify', () => ({ verifyJwtAndLoadUser: h.verifyJwtAndLoadUser }));
 vi.mock('../../../src/db/database', () => ({ db: { prepare: h.dbPrepare } }));
-vi.mock('../../../src/mcp', () => ({ mcpHandler: h.mcpHandler }));
 
 vi.mock('node:fs', async (orig) => {
   const real = (await orig()) as Record<string, unknown>;
@@ -21,7 +18,6 @@ vi.mock('node:fs', async (orig) => {
 
 import {
   applyPlatformUploads,
-  applyPlatformTransport,
   applyPlatformSpa,
   applyPlatformStatic,
 } from '../../../src/nest/platform/platform.routes';
@@ -199,21 +195,6 @@ describe('applyPlatformUploads', () => {
       );
       expect(String(res.body)).toContain('FILE:');
     });
-  });
-});
-
-describe('applyPlatformTransport', () => {
-  function build() {
-    const { app, calls } = fakeApp();
-    applyPlatformTransport(app);
-    return calls;
-  }
-
-  it('mounts the MCP handler on POST/GET/DELETE /mcp', () => {
-    const calls = build();
-    expect(calls.find((c) => c.method === 'post' && c.path === '/mcp')!.handlers[0]).toBe(h.mcpHandler);
-    expect(calls.find((c) => c.method === 'get' && c.path === '/mcp')!.handlers[0]).toBe(h.mcpHandler);
-    expect(calls.find((c) => c.method === 'delete' && c.path === '/mcp')!.handlers[0]).toBe(h.mcpHandler);
   });
 });
 
