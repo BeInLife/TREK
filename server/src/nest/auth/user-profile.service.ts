@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import path from 'path';
 import fs from 'fs';
+import { readEnv, getAppUrl } from '../../app-config';
 import { DatabaseService } from '../database/database.service';
 import { decrypt_api_key, maybe_encrypt_api_key } from '../common/crypto/apiKeyCrypto';
 import { avatarUrl } from '../common/avatarUrl';
@@ -201,11 +202,15 @@ export class UserProfileService {
     const maps_api_key = decrypt_api_key(user.maps_api_key);
     if (maps_api_key) {
       try {
+        // Same Referer as maps.service googleFetch — without it, keys with an
+        // HTTP-referrer restriction fail validation while real requests succeed.
+        const referer = readEnv().app.appUrl ? getAppUrl() : undefined;
         const mapsRes = await fetch(
           `https://places.googleapis.com/v1/places:searchText`,
           {
             method: 'POST',
             headers: {
+              ...(referer ? { Referer: referer } : {}),
               'Content-Type': 'application/json',
               'X-Goog-Api-Key': maps_api_key,
               'X-Goog-FieldMask': 'places.displayName',
