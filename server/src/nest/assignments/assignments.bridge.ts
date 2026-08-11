@@ -8,25 +8,22 @@ import { JourneyDomainService } from '../journey/journey-domain.service';
 import { TrekPhotosRepository } from '../photos/trek-photos.repository';
 
 /**
- * Non-Nest entry point for the assignments domain — for code running OUTSIDE
- * the Nest container (the legacy places and reservations MCP registrars in
- * src/mcp/tools/places.ts and src/mcp/tools/reservations.ts; the assignment
- * MCP tools moved to the DI-discovered assignments.mcp.ts, and the plugin RPC
- * surface, ItineraryRpc, injects AssignmentsService directly). Exports only the
- * legacy services/assignmentService names still consumed outside the
- * container, 1:1, so repointing a consumer is an import-path-only diff. Inside
- * the container, inject AssignmentsService instead. Delete this file when
- * those legacy consumers migrate.
+ * Verified-permanent cycle-dodge for the assignments domain. The one consumer
+ * is places.mcp.ts, and the cycle is real: DaysModule → PlacesModule →
+ * AssignmentsModule → DaysModule, so PlacesModule cannot import
+ * AssignmentsModule back (see the note in places.mcp.ts). Everything else —
+ * the DI-discovered assignments.mcp.ts, the plugin RPC surface, ItineraryRpc,
+ * the controllers — injects AssignmentsService. Only the two exports
+ * places.mcp.ts consumes survive; this file dies if that module cycle is ever
+ * broken (e.g. an assignments read-model split), not before.
  *
- * Unlike todo/packing, the instance is built lazily on first call, NOT at
- * module scope: this bridge sits on the mcp tools fan-out while its service
- * has a deep legacy-services import closure, so a module-level
- * `new AssignmentsService` would crash with an uninitialized class binding if
- * a services→mcp import edge ever forms a cycle through here (one existed via
- * adminService importing the ../mcp barrel until that was rerouted to
- * mcp/sessionManager). By the time any bridge function is called, all modules
- * have finished evaluating. (`db` is the reinitialize-proof Proxy onto the
- * shared better-sqlite3 singleton.)
+ * The instance is built lazily on first call, NOT at module scope: the
+ * consumer is an in-container module evaluated during container assembly, so
+ * a module-level `new AssignmentsService` would crash with an uninitialized
+ * class binding if an import edge ever forms a cycle through here. By the
+ * time any bridge function is called, all modules have finished evaluating.
+ * (`db` is the reinitialize-proof Proxy onto the shared better-sqlite3
+ * singleton.)
  */
 function journeyDomain(): JourneyDomainService {
   const dbs = new DatabaseService(db);
@@ -44,12 +41,4 @@ export function createAssignment(dayId: string | number, placeId: string | numbe
 
 export function dayExists(dayId: string | number, tripId: string | number) {
   return assignments().dayExists(dayId, tripId);
-}
-
-export function placeExists(placeId: string | number, tripId: string | number) {
-  return assignments().placeExists(placeId, tripId);
-}
-
-export function getAssignmentForTrip(id: string | number, tripId: string | number) {
-  return assignments().getAssignmentForTrip(id, tripId);
 }

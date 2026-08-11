@@ -6,8 +6,8 @@ import { User } from '../../types';
  * The socket registry: rooms, per-socket identity, and the three fan-out
  * primitives.
  *
- * MODULE state, not provider state, and that is load-bearing. Seventeen
- * `*.bridge.ts` files and notifications.instance.ts build `new
+ * MODULE state, not provider state, and that is load-bearing. The
+ * out-of-container bridges and notifications.instance.ts build `new
  * RealtimeService()` by hand, outside the container, because they run outside
  * it. If the rooms lived on a provider instance, those broadcasts would go to
  * an empty map: no error, no log, just a client that stops updating. Same

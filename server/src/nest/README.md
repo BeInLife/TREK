@@ -152,7 +152,7 @@ tools, which never pass through an HTTP guard. In the five domains piloted for
     It replaced `setupWebSocket(server)`, which index.ts kicked off with a
     dynamic import after listen().
   - `ws-state.ts` holds the socket registry, and that is **module state on
-    purpose**. Seventeen `*.bridge.ts` files and `notifications.instance.ts`
+    purpose**. The out-of-container bridges and `notifications.instance.ts`
     build `new RealtimeService()` outside the container; rooms on a provider
     instance would leave their broadcasts going to an empty map, with no error
     and no log. Same reasoning as the geo throttle cursor.

@@ -51,7 +51,7 @@ import { createUser, createTrip, addTripMember, createDay, createPlace, createDa
 import { DatabaseService, type TripAccess } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { AssignmentsService } from '../../../src/nest/assignments/assignments.service';
-import { createAssignment, dayExists, placeExists, getAssignmentForTrip } from '../../../src/nest/assignments/assignments.bridge';
+import { createAssignment, dayExists } from '../../../src/nest/assignments/assignments.bridge';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { QueryHelpersService } from '../../../src/nest/query-helpers/query-helpers.service';
 import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.service';
@@ -404,9 +404,7 @@ describe('assignments.bridge', () => {
   it('ASG-SVC-026: bridge exports delegate to the same SQL over the shared connection', () => {
     const { trip, day, place } = fixture();
     expect(dayExists(day.id, trip.id)).toBe(true);
-    expect(placeExists(place.id, trip.id)).toBe(true);
     const created = createAssignment(day.id, place.id, null);
     expect(created).toMatchObject({ day_id: day.id, place_id: place.id, order_index: 0 });
-    expect(getAssignmentForTrip(created!.id, trip.id)).toMatchObject({ id: created!.id, day_id: day.id });
   });
 });

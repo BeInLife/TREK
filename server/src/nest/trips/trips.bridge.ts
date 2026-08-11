@@ -28,16 +28,17 @@ import { notificationsInstance } from '../notifications/notifications.instance';
 import { EphemeralTokenService } from '../auth/ephemeral-token.service';
 
 /**
- * Non-Nest entry point for the trip domain — for the two consumers that cannot
- * inject TripsService: the legacy packing-list/budget-overview prompt
- * registrar in src/mcp/tools/prompts.ts (outside the container) and
- * budget.mcp.ts's owner/member lookups (injecting TripsService there would
- * need a forwardRef'd TripsModule↔BudgetModule cycle, so it stays on the
- * bridge seam migration-graph.md planned). Exports only the legacy
- * services/tripService names they consume, 1:1, so repointing was an
- * import-path-only diff. Everything else injects TripsService. Delete this
- * file when the prompts registrar migrates and the budget MCP surface can
- * inject TripsService without a module cycle.
+ * Verified-permanent cycle-dodge for the trip domain. Three in-container
+ * consumers cannot inject the backing services: budget.mcp.ts (getTripOwner /
+ * listMembers / getTripSummary), packing.mcp.ts (getTripSummary) and
+ * costs.rpc.ts (listTripsForUser). Every direction was checked 2026-08-11 and
+ * every one closes a real module cycle — TripsModule imports BudgetModule and
+ * PackingModule, TripReadModelModule imports both, and TripMembersModule
+ * imports BudgetModule, so none of TripsService, TripReadModelService or
+ * TripMembersService can be injected into the budget/packing surfaces without
+ * forwardRef. Exports only what those three consume, 1:1. Everything else
+ * injects the services. This file dies if the trip read model ever stops
+ * importing the budget/packing domains, not before.
  *
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.

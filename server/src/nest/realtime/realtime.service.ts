@@ -22,7 +22,7 @@ import { broadcast, broadcastToUser, getOnlineUserIds } from '../../websocket';
  * method wasn't asked for — many test mocks provide `broadcast` only.
  *
  * The service is deliberately dependency-free so module-level bridge code
- * (todo.bridge.ts pattern) can construct it with a bare `new RealtimeService()`.
+ * (the trips.bridge.ts pattern) can construct it with a bare `new RealtimeService()`.
  */
 @Injectable()
 export class RealtimeService {

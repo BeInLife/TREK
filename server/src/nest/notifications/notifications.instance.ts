@@ -9,10 +9,10 @@ import { NotificationsService } from './notifications.service';
 
 /**
  * The out-of-container NotificationsService, for the bridges that hand-build
- * their collaborators (trips/reservations/airtrail/packing — the permanent
- * cycle-dodges). The reminder crons that used to reach it through a dedicated
- * send bridge inject the container singleton now (ReminderJobsService); that
- * bridge is gone.
+ * their collaborators (trips.bridge and airtrail.bridge — the permanent
+ * cycle-dodges; this file lives exactly as long as either does). The reminder
+ * crons that used to reach it through a dedicated send bridge inject the
+ * container singleton now (ReminderJobsService); that bridge is gone.
  *
  * One instance, module-scoped, because the channel registry is: the built-ins
  * registered in the constructor and the channels the plugin runtime pushes in
