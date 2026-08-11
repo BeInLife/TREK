@@ -6,7 +6,7 @@ import fs from 'fs';
 import Database from 'better-sqlite3';
 import { db, closeDb, reinitialize } from '../../db/database';
 import { VALID_INTERVALS } from './auto-backup.settings';
-import { invalidatePermissionsCache } from '../permissions/permissions.bridge';
+import { invalidatePermissionsCache } from '../permissions/permissions-cache';
 import { pluginsCodeRoot, pluginsDataRoot } from '../plugins/paths';
 import { stageExtractedPluginTrees, applyStagedRestoreNow } from '../plugins/plugin-backup';
 import { snapshotAllPluginDataDbs } from '../plugins/host/plugin-data.service';

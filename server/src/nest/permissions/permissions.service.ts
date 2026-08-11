@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { logError } from '../audit/audit-log.logger';
+import {
+  getPermissionsCache,
+  setPermissionsCache,
+  invalidatePermissionsCache as invalidateSharedCache,
+} from './permissions-cache';
 
 /**
  * Permission levels (hierarchical, higher includes lower):
@@ -58,21 +63,22 @@ export const PERMISSION_ACTIONS: PermissionAction[] = [
 
 const ACTIONS_MAP = new Map(PERMISSION_ACTIONS.map(a => [a.key, a]));
 
-// In-memory cache, invalidated on save. Deliberately MODULE-scoped, not
-// instance state: two instances exist at runtime (the container singleton and
-// the permissions.bridge instance for out-of-container consumers), and legacy
-// callers — backupService invalidating after a restore, integration tests —
-// must flush the same cache the request path reads. Both instances wrap the
-// same shared connection, so a single cache is also the correct data shape.
-let cache: Map<string, PermissionLevel> | null = null;
+// The in-memory cache is deliberately MODULE-scoped, not instance state, and
+// lives in ./permissions-cache: two service instances exist at runtime (the
+// container singleton and the permissions.bridge instance for
+// out-of-container consumers), and the backup restore path — plain functions,
+// no DI — must flush the same cache the request path reads. Both instances
+// wrap the same shared connection, so a single cache is also the correct
+// data shape.
 
 @Injectable()
 export class PermissionsService {
   constructor(private readonly dbs: DatabaseService) {}
 
   private loadPermissions(): Map<string, PermissionLevel> {
-    if (cache) return cache;
-    cache = new Map<string, PermissionLevel>();
+    const cached = getPermissionsCache();
+    if (cached) return cached;
+    const cache = setPermissionsCache(new Map<string, PermissionLevel>());
     try {
       const rows = this.dbs.all<{ key: string; value: string }>(
         "SELECT key, value FROM app_settings WHERE key LIKE 'perm_%'"
@@ -98,7 +104,7 @@ export class PermissionsService {
   }
 
   invalidatePermissionsCache(): void {
-    cache = null;
+    invalidateSharedCache();
   }
 
   getPermissionLevel(actionKey: string): PermissionLevel {

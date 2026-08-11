@@ -56,7 +56,7 @@ import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createAdmin, createTrip, createPlace, addTripMember } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { PlacesService } from '../../src/nest/places/places.service';
-import { invalidatePermissionsCache } from '../../src/nest/permissions/permissions.bridge';
+import { invalidatePermissionsCache } from '../../src/nest/permissions/permissions-cache';
 
 let nestApp: INestApplication;
 let app: Application;

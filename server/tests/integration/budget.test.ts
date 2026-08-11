@@ -424,7 +424,7 @@ describe('Reorder budget items', () => {
 
     // Restrict budget_edit to trip_owner only
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_budget_edit', 'trip_owner')").run();
-    const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions.bridge');
+    const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
     invalidatePermissionsCache();
 
     const res = await request(app)
@@ -527,7 +527,7 @@ describe('Budget edit permission enforcement', () => {
     const trip = createTrip(testDb, owner.id);
     addTripMember(testDb, trip.id, member.id);
 
-    const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions.bridge');
+    const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_budget_edit', 'trip_owner')").run();
     invalidatePermissionsCache();
 
@@ -548,7 +548,7 @@ describe('Budget edit permission enforcement', () => {
     addTripMember(testDb, trip.id, member.id);
     createBudgetItem(testDb, trip.id, { name: 'Item', category: 'Transport' });
 
-    const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions.bridge');
+    const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_budget_edit', 'trip_owner')").run();
     invalidatePermissionsCache();
 

@@ -307,7 +307,7 @@ describe('Shared trip access', () => {
     addTripMember(testDb, trip.id, member.id);
     await request(app).post(`/api/trips/${trip.id}/share-link`).set('Cookie', authCookie(owner.id)).send({});
 
-    const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions.bridge');
+    const { invalidatePermissionsCache } = await import('../../src/nest/permissions/permissions-cache');
     testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('perm_share_manage', 'trip_member')").run();
     invalidatePermissionsCache();
     try {

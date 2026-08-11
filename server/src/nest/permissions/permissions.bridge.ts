@@ -9,18 +9,14 @@ import { PermissionsService } from './permissions.service';
  * Inside the container, inject PermissionsService instead. Delete this file
  * when the MCP/OAuth mount moves behind the container.
  *
- * The permissions cache is module-scoped in permissions.service.ts, so this
- * instance and the container singleton share one cache — invalidating through
- * either flushes both (backup restores depend on this).
+ * The permissions cache is module-scoped in permissions-cache.ts, so this
+ * instance and the container singleton share one cache (backup restores
+ * invalidate it through that module directly).
  *
  * Module-level construction is safe: `db` is the reinitialize-proof Proxy onto
  * the shared better-sqlite3 singleton.
  */
 const permissions = new PermissionsService(new DatabaseService(db));
-
-export function invalidatePermissionsCache(): void {
-  permissions.invalidatePermissionsCache();
-}
 
 export function checkPermission(
   actionKey: string,

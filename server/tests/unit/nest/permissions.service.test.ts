@@ -43,10 +43,8 @@ import { runMigrations } from '../../../src/db/migrations';
 import { logError } from '../../../src/nest/audit/audit-log.logger';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService, PERMISSION_ACTIONS } from '../../../src/nest/permissions/permissions.service';
-import {
-  checkPermission as bridgeCheckPermission,
-  invalidatePermissionsCache as bridgeInvalidatePermissionsCache,
-} from '../../../src/nest/permissions/permissions.bridge';
+import { checkPermission as bridgeCheckPermission } from '../../../src/nest/permissions/permissions.bridge';
+import { invalidatePermissionsCache as invalidateSharedCache } from '../../../src/nest/permissions/permissions-cache';
 
 const svc = new PermissionsService(new DatabaseService(testDb));
 
@@ -253,11 +251,12 @@ describe('permissions.bridge delegation', () => {
     // (checkPermission for a plain member flips with the stored level).
     svc.savePermissions({ trip_edit: 'trip_member' });
     expect(bridgeCheckPermission('trip_edit', 'user', 10, 20, true)).toBe(true);
-    // Raw SQL write, then invalidate through the BRIDGE — the DI instance
-    // must serve the fresh value (backup-restore relies on exactly this).
+    // Raw SQL write, then invalidate through permissions-cache — the plain
+    // function backup.impl.ts calls after a restore. Both service instances
+    // must serve the fresh value afterwards.
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'trip_owner');
     expect(svc.getPermissionLevel('trip_edit')).toBe('trip_member'); // still cached
-    bridgeInvalidatePermissionsCache();
+    invalidateSharedCache();
     expect(svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
     expect(bridgeCheckPermission('trip_edit', 'user', 10, 20, true)).toBe(false);
   });

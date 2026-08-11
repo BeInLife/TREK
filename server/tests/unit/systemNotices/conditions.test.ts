@@ -25,6 +25,9 @@ const baseCtx = {
   user: { login_count: 5, first_seen_version: '1.0.0', role: 'user', noTrips: 1 },
   currentAppVersion: '2.0.0',
   now: new Date('2026-06-01T00:00:00Z'),
+  // Threaded in by the caller since the addons.bridge import left this module;
+  // false keeps every case below reading as it did.
+  addonEnabled: () => false,
 };
 
 describe('firstLogin', () => {
@@ -98,5 +101,14 @@ describe('AND logic', () => {
 describe('empty conditions', () => {
   it('always passes when conditions array is empty', () => {
     expect(evaluate(baseNotice, baseCtx)).toBe(true);
+  });
+});
+
+describe('addonEnabled', () => {
+  it('asks the threaded-in check with the condition addon id', () => {
+    const notice = noticeWith({ kind: 'addonEnabled', addonId: 'journey' });
+    expect(evaluate(notice, { ...baseCtx, addonEnabled: (id) => id === 'journey' })).toBe(true);
+    expect(evaluate(notice, { ...baseCtx, addonEnabled: (id) => id === 'vacay' })).toBe(false);
+    expect(evaluate(notice, baseCtx)).toBe(false);
   });
 });

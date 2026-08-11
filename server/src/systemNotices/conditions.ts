@@ -1,11 +1,15 @@
 import semver from 'semver';
-import { isAddonEnabled } from '../nest/addons/addons.bridge.js';
 import type { NoticeCondition, SystemNotice } from './types.js';
 
 interface ConditionContext {
   user: { login_count: number; first_seen_version: string; role: string; noTrips: number };
   currentAppVersion: string;
   now: Date;
+  /**
+   * Addon-enablement check, threaded in by the caller (the Nest service passes
+   * its injected AddonsService) so this plain module carries no bridge import.
+   */
+  addonEnabled: (addonId: string) => boolean;
 }
 
 // Custom predicate registry — extensible without modifying this file
@@ -48,7 +52,7 @@ function evaluateOne(condition: NoticeCondition, ctx: ConditionContext): boolean
       return condition.roles.includes(ctx.user.role as 'admin' | 'user');
 
     case 'addonEnabled':
-      return isAddonEnabled(condition.addonId);
+      return ctx.addonEnabled(condition.addonId);
 
     case 'custom': {
       const fn = customPredicates.get(condition.id);
