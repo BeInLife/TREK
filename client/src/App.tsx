@@ -1,4 +1,4 @@
-import React, { useEffect, useState, ReactNode, Suspense } from 'react'
+import React, { useEffect, useState, useRef, ReactNode, Suspense } from 'react'
 import { Routes, Route, Navigate, useLocation } from 'react-router'
 import { useAuthStore } from './store/authStore'
 import { useSettingsStore } from './store/settingsStore'
@@ -20,7 +20,7 @@ import { lazyWithRetry } from './utils/lazyWithRetry'
 import { useIsPhone } from './mobile/useIsPhone'
 import { TranslationProvider, useTranslation } from './i18n'
 import { authApi, tripsApi } from './api/client'
-import { readStartDestination, tripStartPath, DEFAULT_START_PAGE, DEFAULT_START_TRIP_TAB, SETTINGS_WAIT_MS } from './utils/startDestination'
+import { readStartDestination, tripStartPath, DEFAULT_START_PAGE, DEFAULT_START_TRIP_TAB, SETTINGS_WAIT_MS, START_DESTINATION_ROUTE } from './utils/startDestination'
 import { usePermissionsStore, PermissionLevel } from './store/permissionsStore'
 import { useInAppNotificationListener } from './hooks/useInAppNotificationListener.ts'
 import { registerSyncTriggers, unregisterSyncTriggers } from './sync/syncTriggers'
@@ -155,8 +155,25 @@ function ProtectedRoute({ children, adminRequired = false, addonId }: ProtectedR
  * never sees them — including /login, where someone lands when everything else
  * failed, and the two anonymous share pages.
  */
-function PublicRoute({ children }: { children: React.ReactNode }) {
+function PublicRoute({ children, redirectAuthed = false }: { children: React.ReactNode; redirectAuthed?: boolean }) {
   const location = useLocation()
+  // redirectAuthed (only /login and /register) bounces a visitor who is already
+  // authenticated when they land here — manual URL, browser back button (#1810).
+  // Only on a bare URL, because every parameter this page takes is a flow that
+  // has to reach useLogin intact: ?redirect= carries the OAuth consent handoff
+  // (bouncing drops it, or loops if the server still reports login_required),
+  // ?invite= puts the form into register mode against a validated token, and
+  // ?oidc_code= / ?oidc_error= complete an external login. A visitor with any of
+  // those in the URL asked for this page on purpose.
+  // Capture the flag at mount so a fresh login is left alone: it flips
+  // isAuthenticated to true while the takeoff animation still plays here, before
+  // useLogin navigates away.
+  // The target is START_DESTINATION_ROUTE, not /dashboard, so the bounce honours
+  // the start-page preference the same way useLogin does.
+  const wasAuthenticated = useRef(useAuthStore.getState().isAuthenticated)
+  if (redirectAuthed && wasAuthenticated.current && !location.search) {
+    return <Navigate to={START_DESTINATION_ROUTE} replace />
+  }
   return (
     <ErrorBoundary key={location.pathname} boundaryId="public-route" level="route">
       {children}
@@ -372,10 +389,10 @@ export default function App() {
       <Suspense fallback={<RouteFallback />}>
         <Routes>
           <Route path="/" element={<RootRedirect />} />
-          <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+          <Route path="/login" element={<PublicRoute redirectAuthed><LoginPage /></PublicRoute>} />
           <Route path="/shared/:token" element={<PublicRoute><SharedTripPage /></PublicRoute>} />
           <Route path="/public/journey/:token" element={<PublicRoute><JourneyPublicPage /></PublicRoute>} />
-          <Route path="/register" element={<PublicRoute><LoginPage /></PublicRoute>} />
+          <Route path="/register" element={<PublicRoute redirectAuthed><LoginPage /></PublicRoute>} />
           <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
           <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
           {/* OAuth 2.1 consent page — intentionally outside ProtectedRoute */}
