@@ -277,6 +277,90 @@ describe('exportICS', () => {
     expect(ics).toContain('Route: CDG → JFK');
   });
 
+  it('TRIP-SVC-024a: a flight that also carries reservation_time still uses per-side endpoint zones', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Paris Trip' });
+    const reservation = createReservation(testDb, trip.id, {
+      title: 'CDG → JFK',
+      type: 'flight',
+    });
+    // TransportModal stamps reservation_time/_end_time (departure/arrival) alongside
+    // the endpoints. That branch's only zone is the linked place — a flight has none —
+    // so it floated both ends in the subscribed feed; endpoints must win (#1453).
+    testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
+      .run('2025-06-02T09:00', '2025-06-02T12:00', reservation.id);
+    const insertEp = testDb.prepare(
+      'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    insertEp.run(reservation.id, 'from', 0, 'Paris CDG', 'CDG', 49.0, 2.5, 'Europe/Paris', '09:00', '2025-06-02');
+    insertEp.run(reservation.id, 'to', 1, 'New York JFK', 'JFK', 40.6, -73.8, 'America/New_York', '12:00', '2025-06-02');
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20250602T090000');
+    expect(ics).toContain('DTEND;TZID=America/New_York:20250602T120000');
+    // The bug was a floating DTSTART/DTEND (no TZID) from the reservation_time branch.
+    expect(ics).not.toContain('DTSTART:20250602T090000');
+    expect(ics).not.toContain('DTEND:20250602T120000');
+  });
+
+  it('TRIP-SVC-024c: a one-sided transport keeps the multi-day DTEND from reservation_end_time', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Rental Trip' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Rental car', type: 'car_rental' });
+    // An imported rental geocodes the pickup only, so there is no second endpoint
+    // to carry the return. Before the endpoint branch took precedence, the return
+    // came from reservation_end_time; it still has to.
+    testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
+      .run('2025-06-02T10:00', '2025-06-09T10:00', reservation.id);
+    testDb.prepare(
+      'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(reservation.id, 'from', 0, 'Berlin', null, 52.5, 13.4, 'Europe/Berlin', '10:00', '2025-06-02');
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20250602T100000');
+    expect(ics).toContain('DTEND;TZID=Europe/Berlin:20250609T100000');
+  });
+
+  it('TRIP-SVC-024d: an untimed arrival endpoint still takes its DTEND from reservation_end_time', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Train Trip' });
+    const reservation = createReservation(testDb, trip.id, { title: 'ICE 1234', type: 'train' });
+    testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
+      .run('2025-06-02T08:00', '2025-06-02T14:30', reservation.id);
+    const insertEp = testDb.prepare(
+      'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    );
+    insertEp.run(reservation.id, 'from', 0, 'Berlin Hbf', null, 52.5, 13.4, 'Europe/Berlin', '08:00', '2025-06-02');
+    // The destination was added without a clock — the arrival time only exists
+    // on the reservation itself.
+    insertEp.run(reservation.id, 'to', 1, 'Wien Hbf', null, 48.2, 16.4, 'Europe/Vienna', null, '2025-06-02');
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20250602T080000');
+    expect(ics).toContain('DTEND;TZID=Europe/Berlin:20250602T143000');
+  });
+
+  it('TRIP-SVC-024e: a lone timed endpoint without reservation_end_time stays a DTSTART', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Ferry Trip' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Ferry', type: 'ferry' });
+    testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=NULL WHERE id=?')
+      .run('2025-06-02T07:00', reservation.id);
+    testDb.prepare(
+      'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(reservation.id, 'from', 0, 'Dover', null, 51.1, 1.3, 'Europe/London', '07:00', '2025-06-02');
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;TZID=Europe/London:20250602T070000');
+    // Nothing to end it with, so no DTEND may be invented (the trip's own all-day
+    // DTEND is VALUE=DATE, hence the narrower match).
+    expect(ics).not.toContain('DTEND;TZID=');
+  });
+
   it('TRIP-SVC-024b: an invalid endpoint timezone degrades to floating time instead of crashing the export', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Bad TZ Trip' });

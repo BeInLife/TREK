@@ -295,9 +295,40 @@ export class CalendarService {
     const isTime = (s: string | null | undefined) => !!s && /^\d{2}:\d{2}/.test(s);
 
     // Build the DTSTART/DTEND lines for a reservation, or null when it has no
-    // calendar-placeable time. Hotels/restaurants use reservation_time; flights
-    // fall back to their first/last endpoint.
+    // calendar-placeable time. Transports keep a per-side wall clock + IANA zone
+    // on their endpoints, so consult a timed departure endpoint FIRST: transports
+    // also carry a top-level reservation_time (TransportModal stamps it), whose
+    // only zone is the linked place — flights have none — so that branch floats
+    // both ends in the subscribed feed (#1453). Hotels/restaurants have no
+    // endpoints and fall through to reservation_time.
     const buildReservationTimeLines = (r: any): string | null => {
+      const eps = endpointsMap.get(r.id);
+      const ordered = eps && eps.length > 0 ? [...eps].sort((a, b) => a.sequence - b.sequence) : null;
+      const first = ordered?.[0];
+
+      if (first && isDate(first.local_date) && isTime(first.local_time)) {
+        // Transport: departure endpoint zone drives DTSTART, arrival drives DTEND.
+        // Prefer the stored IANA zone; fall back to the endpoint's coordinates.
+        const last = ordered![ordered!.length - 1];
+        const startZone = first.timezone || resolveTimeZone(first.lat, first.lng);
+        const startWallClock = `${first.local_date}T${first.local_time}`;
+        let out = dtLine('DTSTART', startWallClock, startZone);
+        if (last !== first && isDate(last.local_date) && isTime(last.local_time)) {
+          const endZone = last.timezone || resolveTimeZone(last.lat, last.lng);
+          out += dtLine('DTEND', `${last.local_date}T${last.local_time}`, endZone);
+        } else if (r.reservation_end_time) {
+          // No second timed endpoint, so the arrival side still lives in
+          // reservation_end_time — a rental car imported with only a geocoded
+          // pickup is the common shape. Taking the endpoint branch without this
+          // would drop the DTEND the reservation_time branch used to emit and
+          // shrink a multi-day booking to a point. The departure zone is the
+          // best one on hand for that end too.
+          const endDt = fmtDateTime(r.reservation_end_time, startWallClock);
+          if (endDt.length >= 15) out += dtLine('DTEND', r.reservation_end_time, startZone, startWallClock);
+        }
+        return out;
+      }
+
       if (r.reservation_time) {
         const datePart = r.reservation_time.includes('T') ? r.reservation_time.split('T')[0] : r.reservation_time;
         if (!isDate(datePart)) return null; // time-only (relative "Day N" trips)
@@ -314,24 +345,11 @@ export class CalendarService {
         return `DTSTART;VALUE=DATE:${fmtDate(r.reservation_time)}\r\n`;
       }
 
-      const eps = endpointsMap.get(r.id);
-      if (!eps || eps.length === 0) return null;
-      const ordered = [...eps].sort((a, b) => a.sequence - b.sequence);
-      const first = ordered[0];
-      const last = ordered[ordered.length - 1];
-      if (!isDate(first.local_date)) return null;
-      if (isTime(first.local_time)) {
-        // Transport: departure endpoint zone drives DTSTART, arrival drives DTEND.
-        // Prefer the stored IANA zone; fall back to the endpoint's coordinates.
-        const startZone = first.timezone || resolveTimeZone(first.lat, first.lng);
-        let out = dtLine('DTSTART', `${first.local_date}T${first.local_time}`, startZone);
-        if (last !== first && isDate(last.local_date) && isTime(last.local_time)) {
-          const endZone = last.timezone || resolveTimeZone(last.lat, last.lng);
-          out += dtLine('DTEND', `${last.local_date}T${last.local_time}`, endZone);
-        }
-        return out;
+      // Untimed transport (endpoint has a date but no clock, no reservation_time).
+      if (first && isDate(first.local_date)) {
+        return `DTSTART;VALUE=DATE:${fmtDate(first.local_date)}\r\n`;
       }
-      return `DTSTART;VALUE=DATE:${fmtDate(first.local_date)}\r\n`;
+      return null;
     };
 
     // Reservations as events
