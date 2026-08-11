@@ -1,5 +1,5 @@
 /**
- * Unit tests for the DI-native TripsService — TRIP-SVC-001 through TRIP-SVC-058
+ * Unit tests for the DI-native TripsService — TRIP-SVC-001 through TRIP-SVC-059
  * (001–038 moved 1:1 from the legacy tests/unit/services/tripService.test.ts;
  * the exportICS cases that duplicated the generateDays 010–012 numbering were
  * renumbered to 024–026 with the post-fold quirk-fix commit; 040–041 pinned
@@ -746,6 +746,68 @@ describe('folded trip CRUD', () => {
     const secondCopy = svc.copy(trip.id, user.id);
     expect((testDb.prepare('SELECT title FROM trips WHERE id = ?').get(secondCopy) as any).title).toBe('Origin');
   });
+
+  it('TRIP-SVC-059: copy remaps cross-links and carries splits/participants (smoke-test I-01)', () => {
+    const { user: owner } = createUser(testDb);
+    const { user: friend } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id, { title: 'Linked', start_date: '2025-06-01', end_date: '2025-06-02' });
+    const days = getDays(trip.id);
+    const place = createPlace(testDb, trip.id, { name: 'Hotel Le Test' });
+    const assignment = createDayAssignment(testDb, days[0].id, place.id);
+    testDb.prepare('INSERT INTO assignment_participants (assignment_id, user_id) VALUES (?, ?)').run(assignment.id, owner.id);
+
+    const accomId = Number(testDb.prepare(`
+      INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_out)
+      VALUES (?, ?, ?, ?, '15:00', '11:00')
+    `).run(trip.id, place.id, days[0].id, days[1].id).lastInsertRowid);
+
+    const resId = Number(testDb.prepare(`
+      INSERT INTO reservations (trip_id, day_id, assignment_id, accommodation_id, title, type, url)
+      VALUES (?, ?, ?, ?, 'Hotel booking', 'hotel', 'https://example.test/booking')
+    `).run(trip.id, days[0].id, assignment.id, accomId).lastInsertRowid);
+
+    const itemId = Number(testDb.prepare(`
+      INSERT INTO budget_items (trip_id, category, name, total_price, persons, reservation_id, currency, exchange_rate, expense_date)
+      VALUES (?, 'Accommodation', 'Hotel', 240, 2, ?, 'JPY', 0.0062, '2025-06-01')
+    `).run(trip.id, resId).lastInsertRowid);
+    testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 1, 120)').run(itemId, owner.id);
+    testDb.prepare('INSERT INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, 0, 120)').run(itemId, friend.id);
+    testDb.prepare('INSERT INTO budget_item_payers (budget_item_id, user_id, amount) VALUES (?, ?, 240)').run(itemId, owner.id);
+    testDb.prepare("INSERT INTO todo_items (trip_id, name, checked) VALUES (?, 'Book transfer', 1)").run(trip.id);
+
+    const newTripId = svc.copy(trip.id, owner.id, 'Linked copy');
+
+    // Budget → reservation link points at the copied reservation, not null / not the old id.
+    const newItem = testDb.prepare('SELECT * FROM budget_items WHERE trip_id = ?').get(newTripId) as any;
+    const newRes = testDb.prepare('SELECT * FROM reservations WHERE trip_id = ?').get(newTripId) as any;
+    expect(newRes.id).not.toBe(resId);
+    expect(newItem.reservation_id).toBe(newRes.id);
+    expect(newItem).toMatchObject({ currency: 'JPY', exchange_rate: 0.0062, expense_date: '2025-06-01' });
+
+    // Reservation → accommodation resolves to the copied accommodation (accommodation_id is TEXT).
+    const newAccom = testDb.prepare('SELECT * FROM day_accommodations WHERE trip_id = ?').get(newTripId) as any;
+    expect(newAccom.id).not.toBe(accomId);
+    expect(Number(newRes.accommodation_id)).toBe(newAccom.id);
+    expect(newRes.url).toBe('https://example.test/booking');
+
+    // Splits carried over with per-member paid flags and amounts.
+    const members = testDb.prepare('SELECT user_id, paid, amount FROM budget_item_members WHERE budget_item_id = ? ORDER BY user_id').all(newItem.id) as any[];
+    expect(members).toEqual([
+      { user_id: owner.id, paid: 1, amount: 120 },
+      { user_id: friend.id, paid: 0, amount: 120 },
+    ]);
+    const payers = testDb.prepare('SELECT user_id, amount FROM budget_item_payers WHERE budget_item_id = ?').all(newItem.id) as any[];
+    expect(payers).toEqual([{ user_id: owner.id, amount: 240 }]);
+
+    // Assignment participants copied onto the remapped assignment.
+    const newAssignment = getAssignments(getDays(newTripId)[0].id)[0];
+    const participants = testDb.prepare('SELECT user_id FROM assignment_participants WHERE assignment_id = ?').all(newAssignment.id) as any[];
+    expect(participants).toEqual([{ user_id: owner.id }]);
+
+    // To-dos come across but reset to unchecked (documented behaviour).
+    const todos = testDb.prepare('SELECT name, checked FROM todo_items WHERE trip_id = ?').all(newTripId) as any[];
+    expect(todos).toEqual([{ name: 'Book transfer', checked: 0 }]);
+  });
 });
 
 // ── Wrapper helpers (delegating members of the aggregate root) ────────────────
@@ -878,10 +940,12 @@ describe('folded quirk branches', () => {
     expect(newAccom.place_id).toBe(newPlace.id);
     expect(newAccom.start_day_id).toBe(newDays[0].id);
     const newRes = testDb.prepare('SELECT day_id, end_day_id, place_id, accommodation_id FROM reservations WHERE trip_id = ?').get(newTripId) as any;
-    // Quirk preserved from the legacy copyTripById: reservations.accommodation_id
-    // is a TEXT column, so the number-keyed accomMap lookup never matches and the
-    // copied reservation loses its accommodation link (nulled, not remapped).
-    expect(newRes).toEqual({ day_id: newDays[0].id, end_day_id: newDays[1].id, place_id: newPlace.id, accommodation_id: null });
+    // The legacy copyTripById nulled this link (TEXT column vs number-keyed map);
+    // fixed with smoke-test I-01 — the copy now coerces and remaps it.
+    expect(newRes.day_id).toBe(newDays[0].id);
+    expect(newRes.end_day_id).toBe(newDays[1].id);
+    expect(newRes.place_id).toBe(newPlace.id);
+    expect(Number(newRes.accommodation_id)).toBe(newAccom.id);
     expect((testDb.prepare('SELECT COUNT(*) AS n FROM budget_items WHERE trip_id = ?').get(newTripId) as any).n).toBe(1);
     const newItem = testDb.prepare('SELECT checked, bag_id FROM packing_items WHERE trip_id = ?').get(newTripId) as any;
     expect(newItem.checked).toBe(0);

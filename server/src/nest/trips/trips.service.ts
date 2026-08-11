@@ -521,8 +521,10 @@ export class TripsService {
   /**
    * Duplicates a trip (all days, places, assignments, accommodations, reservations,
    * budget, packing bags/items, day notes) into a new trip owned by `newOwnerId`.
-   * Packing items are reset to unchecked. Budget paid status is cleared.
-   * Returns the new trip's ID.
+   * Cross-links are remapped to the copied rows (reservation↔budget item,
+   * reservation↔accommodation) and split data travels with the copy
+   * (budget_item_members/payers incl. paid flags, assignment_participants).
+   * Packing items and to-dos are reset to unchecked. Returns the new trip's ID.
    */
   copy(sourceTripId: string | number, newOwnerId: number, title?: string): number {
     const src = this.db.prepare('SELECT * FROM trips WHERE id = ?').get(sourceTripId) as any;
@@ -590,6 +592,18 @@ export class TripsService {
         }
       }
 
+      const oldParticipants = this.db.prepare(`
+        SELECT ap.* FROM assignment_participants ap
+        JOIN day_assignments da ON da.id = ap.assignment_id
+        JOIN days d ON d.id = da.day_id
+        WHERE d.trip_id = ?
+      `).all(sourceTripId) as any[];
+      const insertParticipant = this.db.prepare('INSERT OR IGNORE INTO assignment_participants (assignment_id, user_id) VALUES (?, ?)');
+      for (const ap of oldParticipants) {
+        const newAssignmentId = assignmentMap.get(ap.assignment_id);
+        if (newAssignmentId) insertParticipant.run(newAssignmentId, ap.user_id);
+      }
+
       const oldAccom = this.db.prepare('SELECT * FROM day_accommodations WHERE trip_id = ?').all(sourceTripId) as any[];
       const accomMap = new Map<number, number | bigint>();
       const insertAccom = this.db.prepare(`
@@ -607,32 +621,61 @@ export class TripsService {
       }
 
       const oldReservations = this.db.prepare('SELECT * FROM reservations WHERE trip_id = ?').all(sourceTripId) as any[];
+      // The external_* / sync_enabled columns are deliberately not copied: the
+      // duplicate must not inherit the source's external sync identity.
+      const reservationMap = new Map<number, number | bigint>();
       const insertReservation = this.db.prepare(`
         INSERT INTO reservations (trip_id, day_id, end_day_id, place_id, assignment_id, accommodation_id, title, reservation_time, reservation_end_time,
-          location, confirmation_number, notes, status, type, metadata, day_plan_position, needs_review)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          location, confirmation_number, notes, url, status, type, metadata, day_plan_position, needs_review)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const r of oldReservations) {
-        insertReservation.run(newTripId,
+        const rr = insertReservation.run(newTripId,
           r.day_id ? (dayMap.get(r.day_id) ?? null) : null,
           // end_day_id is a day reference too (multi-day transport) — remap it like
           // day_id, otherwise the duplicated trip loses the reservation's end-day link.
           r.end_day_id ? (dayMap.get(r.end_day_id) ?? null) : null,
           r.place_id ? (placeMap.get(r.place_id) ?? null) : null,
           r.assignment_id ? (assignmentMap.get(r.assignment_id) ?? null) : null,
-          r.accommodation_id ? (accomMap.get(r.accommodation_id) ?? null) : null,
+          // accommodation_id is a TEXT column, so it reads back as a string —
+          // coerce before the number-keyed map lookup or the link silently nulls.
+          r.accommodation_id != null ? (accomMap.get(Number(r.accommodation_id)) ?? null) : null,
           r.title, r.reservation_time, r.reservation_end_time,
-          r.location, r.confirmation_number, r.notes, r.status, r.type,
+          r.location, r.confirmation_number, r.notes, r.url, r.status, r.type,
           r.metadata, r.day_plan_position, r.needs_review ?? 0);
+        reservationMap.set(r.id, rr.lastInsertRowid);
       }
 
       const oldBudget = this.db.prepare('SELECT * FROM budget_items WHERE trip_id = ?').all(sourceTripId) as any[];
+      const budgetMap = new Map<number, number | bigint>();
       const insertBudget = this.db.prepare(`
-        INSERT INTO budget_items (trip_id, category, name, total_price, persons, days, note, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO budget_items (trip_id, category, name, total_price, persons, days, note, sort_order,
+          reservation_id, currency, exchange_rate, expense_date, ticket_json, paid_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const b of oldBudget) {
-        insertBudget.run(newTripId, b.category, b.name, b.total_price, b.persons, b.days, b.note, b.sort_order);
+        const br = insertBudget.run(newTripId, b.category, b.name, b.total_price, b.persons, b.days, b.note, b.sort_order,
+          b.reservation_id ? (reservationMap.get(b.reservation_id) ?? null) : null,
+          b.currency, b.exchange_rate ?? 1, b.expense_date, b.ticket_json, b.paid_by_user_id);
+        budgetMap.set(b.id, br.lastInsertRowid);
+      }
+
+      const oldBudgetMembers = this.db.prepare(`
+        SELECT bm.* FROM budget_item_members bm JOIN budget_items b ON b.id = bm.budget_item_id WHERE b.trip_id = ?
+      `).all(sourceTripId) as any[];
+      const insertBudgetMember = this.db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid, amount) VALUES (?, ?, ?, ?)');
+      for (const bm of oldBudgetMembers) {
+        const newItemId = budgetMap.get(bm.budget_item_id);
+        if (newItemId) insertBudgetMember.run(newItemId, bm.user_id, bm.paid ?? 0, bm.amount);
+      }
+
+      const oldBudgetPayers = this.db.prepare(`
+        SELECT bp.* FROM budget_item_payers bp JOIN budget_items b ON b.id = bp.budget_item_id WHERE b.trip_id = ?
+      `).all(sourceTripId) as any[];
+      const insertBudgetPayer = this.db.prepare('INSERT OR IGNORE INTO budget_item_payers (budget_item_id, user_id, amount) VALUES (?, ?, ?)');
+      for (const bp of oldBudgetPayers) {
+        const newItemId = budgetMap.get(bp.budget_item_id);
+        if (newItemId) insertBudgetPayer.run(newItemId, bp.user_id, bp.amount ?? 0);
       }
 
       const oldBags = this.db.prepare('SELECT * FROM packing_bags WHERE trip_id = ?').all(sourceTripId) as any[];

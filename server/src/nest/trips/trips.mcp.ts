@@ -335,7 +335,7 @@ export class TripsMcp {
 
   @Tool({
     name: 'copy_trip',
-    description: 'Duplicate a trip (all days, places, itinerary, packing, budget, reservations, day notes). Packing items are reset to unchecked. Returns the new trip.',
+    description: 'Duplicate a trip (all days, places, itinerary, packing, budget, reservations, day notes). Packing items and to-dos are reset to unchecked. Returns the new trip.',
     inputSchema: {
       tripId: z.number().int().positive().describe('Source trip ID to duplicate'),
       title: z.string().min(1).max(200).optional().describe('Title for the new trip (defaults to source title)'),
