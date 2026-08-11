@@ -15,6 +15,8 @@ import { AuthService } from '../auth/auth.service';
 import { TokenService } from '../tokens/token.service';
 import { OauthService } from '../oauth/oauth.service';
 import { AddonsService } from '../addons/addons.service';
+import { AuditService } from '../audit/audit.service';
+import { getClientIp } from '../audit/client-ip';
 
 /**
  * The MCP transport handler behind the container — the former non-Nest
@@ -99,6 +101,7 @@ export class McpTransportService {
     private readonly tokens: TokenService,
     private readonly oauth: OauthService,
     private readonly addons: AddonsService,
+    private readonly audit: AuditService,
     private readonly registry: McpRegistryService,
   ) {}
 
@@ -174,6 +177,7 @@ export class McpTransportService {
         return;
       }
       session.lastActivity = Date.now();
+      session.lastClientIp = getClientIp(req);
       armSseKeepalive(res, () => { session.lastActivity = Date.now(); });
       try {
         await session.transport.handleRequest(req, res, req.body);
@@ -238,12 +242,37 @@ export class McpTransportService {
       return STATIC_TOKEN_DEPRECATION_NOTICE;
     };
 
-    registerTools(this.registry, server, user.id, scopes, isStaticToken, getDeprecationNotice);
+    // Tool-call audit trail: who called which tool, when, from where. Fired by
+    // the registry immediately before each tool handler runs (the nest-mcp
+    // onInvoke seam) — transport-level body sniffing can't see tool names
+    // because /mcp bodies are raw. The IP is the session's most recent
+    // authorized request (tool calls arrive on resumed requests); an audit
+    // failure must never fail the tool call, so the closure catches its own.
+    const createIp = getClientIp(req);
+    const transportHolder: { current: StreamableHTTPServerTransport | null } = { current: null };
+    const onInvoke = (info: { kind: string; name: string }): void => {
+      if (info.kind !== 'tool') return;
+      try {
+        const sid = transportHolder.current?.sessionId;
+        const ip = (sid ? sessions.get(sid)?.lastClientIp : null) ?? createIp;
+        this.audit.writeAudit({
+          userId: user.id,
+          action: 'mcp.tool_call',
+          resource: info.name,
+          details: { clientId: clientId ?? 'native' },
+          ip,
+        });
+      } catch (err) {
+        console.error('[MCP] tool-call audit failed:', (err as Error | undefined)?.message ?? err);
+      }
+    };
+
+    registerTools(this.registry, server, user.id, scopes, isStaticToken, getDeprecationNotice, onInvoke);
 
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: () => randomUUID(),
       onsessioninitialized: (sid) => {
-        sessions.set(sid, { server, transport, userId: user.id, scopes, clientId, isStaticToken, lastActivity: Date.now() });
+        sessions.set(sid, { server, transport, userId: user.id, scopes, clientId, isStaticToken, lastActivity: Date.now(), lastClientIp: createIp });
         const authMethod = isStaticToken ? 'static-token' : scopes ? `oauth(${scopes.join(',')})` : 'jwt';
         console.log(`[MCP] Session ${sid} created for user ${user.id} [${authMethod}]. Active sessions: ${sessions.size}`);
       },
@@ -255,6 +284,7 @@ export class McpTransportService {
     transport.onclose = () => {
       if (transport.sessionId) sessions.delete(transport.sessionId);
     };
+    transportHolder.current = transport;
 
     armSseKeepalive(res);
     try {

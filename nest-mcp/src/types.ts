@@ -133,6 +133,19 @@ export interface PromptOptions extends McpEntryOptionsBase {
 
 export type McpEntryKind = 'tool' | 'resource' | 'resourceTemplate' | 'prompt';
 
+/** Per-session options for `McpRegistry.attach()`. */
+export interface McpAttachOptions {
+  /**
+   * Called immediately before every attached handler runs, with the entry's
+   * kind and registered name. This is the host's observability seam (e.g. a
+   * tool-call audit trail) — nest-mcp itself attaches no semantics to it.
+   * Contract: the hook MUST NOT throw; nest-mcp does not catch, so a throwing
+   * hook fails the very invocation it is observing. Hosts wrap their own
+   * failure handling.
+   */
+  onInvoke?: (info: { kind: McpEntryKind; name: string }) => void;
+}
+
 export type McpEntry =
   | { kind: 'tool'; methodName: string; options: ToolOptions }
   | { kind: 'resource'; methodName: string; options: ResourceOptions }

@@ -250,3 +250,50 @@ describe('McpRegistry.attach', () => {
     ).toThrow(/declares declarative access but no accessPolicy was configured/);
   });
 });
+
+describe('McpAttachOptions.onInvoke', () => {
+  let harness: AttachHarness | undefined;
+  afterEach(async () => {
+    await harness?.cleanup();
+    harness = undefined;
+  });
+
+  const fullCtx: TestCtx = { userId: 7, canRead: true, canWrite: true, allow: true };
+
+  it('fires once per invocation with the entry kind and name — attach and listing stay silent', async () => {
+    const seen: Array<{ kind: string; name: string }> = [];
+    harness = await createAttachHarness(buildRegistry(), fullCtx, { onInvoke: (info) => seen.push(info) });
+    // Neither attach() nor the initialize handshake is an invocation.
+    expect(seen).toEqual([]);
+
+    await harness.client.callTool({ name: 'open_tool', arguments: {} });
+    expect(seen).toEqual([{ kind: 'tool', name: 'open_tool' }]);
+
+    // The inputSchema'd tool goes through the other normalization branch.
+    await harness.client.callTool({ name: 'read_tool', arguments: { name: 'x' } });
+    expect(seen[1]).toEqual({ kind: 'tool', name: 'read_tool' });
+
+    await harness.client.readResource({ uri: 'test://doc' });
+    expect(seen[2]).toEqual({ kind: 'resource', name: 'fixture_doc' });
+
+    await harness.client.readResource({ uri: 'test://item/5' });
+    expect(seen[3]).toEqual({ kind: 'resourceTemplate', name: 'fixture_item' });
+
+    await harness.client.getPrompt({ name: 'fixture_prompt', arguments: { topic: 't' } });
+    expect(seen[4]).toEqual({ kind: 'prompt', name: 'fixture_prompt' });
+
+    // Listing is not an invocation.
+    await harness.client.listTools();
+    expect(seen).toHaveLength(5);
+  });
+
+  it('runs before the handler, so a throwing hook fails the invocation it observes', async () => {
+    harness = await createAttachHarness(buildRegistry(), fullCtx, {
+      onInvoke: () => {
+        throw new Error('audit exploded');
+      },
+    });
+    const result = await harness.client.callTool({ name: 'open_tool', arguments: {} });
+    expect((result as { isError?: boolean }).isError).toBe(true);
+  });
+});

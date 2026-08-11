@@ -2,6 +2,7 @@ import { getEntry, isMcpController, type ClassRef } from './metadata';
 import type {
   McpAccessPolicy,
   McpAccessValidator,
+  McpAttachOptions,
   McpContext,
   McpEntry,
   McpRegistryListing,
@@ -98,25 +99,26 @@ export class McpRegistry {
 
   /**
    * Registers every entry passing its access check onto `server`, binding
-   * `ctx` as the handler's last argument (in the SDK `extra` slot).
+   * `ctx` as the handler's last argument (in the SDK `extra` slot). `opts`
+   * carries per-session hooks — see `McpAttachOptions`.
    */
-  attach(server: McpServer, ctx: McpContext): void {
+  attach(server: McpServer, ctx: McpContext, opts?: McpAttachOptions): void {
     const registrar = server as unknown as LooseRegistrar;
     for (const { entry, instance } of this.bound) {
       if (!this.allowed(entry, ctx, instance)) continue;
       const handler = (instance as unknown as Record<string, AnyHandler>)[entry.methodName];
       switch (entry.kind) {
         case 'tool':
-          this.attachTool(registrar, entry.options, instance, handler, ctx);
+          this.attachTool(registrar, entry.options, instance, handler, ctx, opts);
           break;
         case 'resource':
-          this.attachResource(registrar, entry.options, instance, handler, ctx);
+          this.attachResource(registrar, entry.options, instance, handler, ctx, opts);
           break;
         case 'resourceTemplate':
-          this.attachResourceTemplate(registrar, entry.options, instance, handler, ctx);
+          this.attachResourceTemplate(registrar, entry.options, instance, handler, ctx, opts);
           break;
         case 'prompt':
-          this.attachPrompt(registrar, entry.options, instance, handler, ctx);
+          this.attachPrompt(registrar, entry.options, instance, handler, ctx, opts);
           break;
       }
     }
@@ -206,6 +208,7 @@ export class McpRegistry {
     instance: object,
     handler: AnyHandler,
     ctx: McpContext,
+    opts?: McpAttachOptions,
   ): void {
     const config: Record<string, unknown> = {
       title: options.title,
@@ -220,8 +223,14 @@ export class McpRegistry {
     // the decorated method always receives (args, ctx).
     const cb =
       options.inputSchema !== undefined
-        ? (args: unknown, _extra: unknown) => handler.call(instance, args, ctx)
-        : (_extra: unknown) => handler.call(instance, {}, ctx);
+        ? (args: unknown, _extra: unknown) => {
+            opts?.onInvoke?.({ kind: 'tool', name: options.name });
+            return handler.call(instance, args, ctx);
+          }
+        : (_extra: unknown) => {
+            opts?.onInvoke?.({ kind: 'tool', name: options.name });
+            return handler.call(instance, {}, ctx);
+          };
     registrar.registerTool(options.name, config, cb);
   }
 
@@ -231,6 +240,7 @@ export class McpRegistry {
     instance: object,
     handler: AnyHandler,
     ctx: McpContext,
+    opts?: McpAttachOptions,
   ): void {
     const metadata: Record<string, unknown> = {
       title: options.title,
@@ -238,9 +248,10 @@ export class McpRegistry {
       mimeType: options.mimeType,
       _meta: options._meta,
     };
-    registrar.registerResource(options.name, options.uri, metadata, (uri: unknown, _extra: unknown) =>
-      handler.call(instance, uri, ctx),
-    );
+    registrar.registerResource(options.name, options.uri, metadata, (uri: unknown, _extra: unknown) => {
+      opts?.onInvoke?.({ kind: 'resource', name: options.name });
+      return handler.call(instance, uri, ctx);
+    });
   }
 
   private attachResourceTemplate(
@@ -249,6 +260,7 @@ export class McpRegistry {
     instance: object,
     handler: AnyHandler,
     ctx: McpContext,
+    opts?: McpAttachOptions,
   ): void {
     const metadata: Record<string, unknown> = {
       title: options.title,
@@ -260,7 +272,10 @@ export class McpRegistry {
       options.name,
       new SdkResourceTemplate(options.uriTemplate, { list: undefined }),
       metadata,
-      (uri: unknown, variables: unknown, _extra: unknown) => handler.call(instance, uri, variables, ctx),
+      (uri: unknown, variables: unknown, _extra: unknown) => {
+        opts?.onInvoke?.({ kind: 'resourceTemplate', name: options.name });
+        return handler.call(instance, uri, variables, ctx);
+      },
     );
   }
 
@@ -270,6 +285,7 @@ export class McpRegistry {
     instance: object,
     handler: AnyHandler,
     ctx: McpContext,
+    opts?: McpAttachOptions,
   ): void {
     const config: Record<string, unknown> = {
       title: options.title,
@@ -278,8 +294,14 @@ export class McpRegistry {
     };
     const cb =
       options.argsSchema !== undefined
-        ? (args: unknown, _extra: unknown) => handler.call(instance, args, ctx)
-        : (_extra: unknown) => handler.call(instance, {}, ctx);
+        ? (args: unknown, _extra: unknown) => {
+            opts?.onInvoke?.({ kind: 'prompt', name: options.name });
+            return handler.call(instance, args, ctx);
+          }
+        : (_extra: unknown) => {
+            opts?.onInvoke?.({ kind: 'prompt', name: options.name });
+            return handler.call(instance, {}, ctx);
+          };
     registrar.registerPrompt(options.name, config, cb);
   }
 }

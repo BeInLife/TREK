@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { TokensModule } from '../tokens/tokens.module';
 import { OauthModule } from '../oauth/oauth.module';
 import { AddonsModule } from '../addons/addons.module';
+import { AuditModule } from '../audit/audit.module';
 
 /**
  * The /mcp transport endpoint — the OAuth 2.1-authenticated MCP server the
@@ -14,7 +15,7 @@ import { AddonsModule } from '../addons/addons.module';
  * bearer verification, session create/resume, rate limiting, SSE keep-alive.
  */
 @Module({
-  imports: [AuthModule, TokensModule, OauthModule, AddonsModule],
+  imports: [AuthModule, TokensModule, OauthModule, AddonsModule, AuditModule],
   controllers: [McpTransportController],
   providers: [McpTransportService],
 })

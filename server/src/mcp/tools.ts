@@ -1,7 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
-import type { McpRegistry } from '@trek/nest-mcp';
+import type { McpAttachOptions, McpRegistry } from '@trek/nest-mcp';
 
-export function registerTools(registry: McpRegistry | null, server: McpServer, userId: number, scopes: string[] | null, isStaticToken = false, getDeprecationNotice: () => string | null = () => null): void {
+export function registerTools(registry: McpRegistry | null, server: McpServer, userId: number, scopes: string[] | null, isStaticToken = false, getDeprecationNotice: () => string | null = () => null, onInvoke?: McpAttachOptions['onInvoke']): void {
   // The trip tools moved to the DI-discovered src/nest/trips/trips.mcp.ts and
   // the share-link tools to src/nest/share/share.mcp.ts (@McpController,
   // attached via the nest-mcp registry below — getDeprecationNotice rides the
@@ -65,5 +65,5 @@ export function registerTools(registry: McpRegistry | null, server: McpServer, u
   // container-discovered McpRegistryService (injected into the transport
   // service); the no-Nest harness hands in createTestRegistry()'s build.
   // A null registry (direct callers without either) ⇒ skip.
-  if (registry) registry.attach(server, { userId, scopes, isStaticToken, getDeprecationNotice });
+  if (registry) registry.attach(server, { userId, scopes, isStaticToken, getDeprecationNotice }, { onInvoke });
 }

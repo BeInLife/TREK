@@ -1,4 +1,4 @@
-import type { McpContext, McpRegistry } from '../src';
+import type { McpAttachOptions, McpContext, McpRegistry } from '../src';
 import { Client } from '@modelcontextprotocol/sdk/client/index';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
@@ -20,9 +20,13 @@ export interface AttachHarness {
 }
 
 /** Bare McpServer + Client over an in-memory transport with the registry attached. */
-export async function createAttachHarness(registry: McpRegistry, ctx: TestCtx): Promise<AttachHarness> {
+export async function createAttachHarness(
+  registry: McpRegistry,
+  ctx: TestCtx,
+  opts?: McpAttachOptions,
+): Promise<AttachHarness> {
   const server = new McpServer({ name: 'nest-mcp-test', version: '1.0.0' });
-  registry.attach(server, asCtx(ctx));
+  registry.attach(server, asCtx(ctx), opts);
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: 'test-client', version: '1.0.0' });

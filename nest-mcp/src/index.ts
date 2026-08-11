@@ -25,6 +25,7 @@ export {
   type McpAccessPolicy,
   type McpAccessPredicate,
   type McpAccessValidator,
+  type McpAttachOptions,
   type McpContext,
   type McpDeclarativeAccess,
   type McpEntry,

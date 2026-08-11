@@ -458,6 +458,55 @@ describe('MCP transport parity pins (Nest-hosted /mcp)', () => {
     expect(second.text).not.toContain('Deprecated authentication');
   });
 
+  it('MCP-P13 — an authorized tools/call writes exactly one mcp.tool_call audit row', async () => {
+    const { user } = createUser(testDb);
+    const { accessToken, clientId } = mintOauthToken(user.id, MCP_AUDIENCE);
+    const sessionId = await createSession(accessToken);
+    testDb.prepare("DELETE FROM audit_log WHERE action = 'mcp.tool_call'").run();
+
+    const call = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .set('mcp-session-id', sessionId)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'tools/call', id: 3, params: { name: 'list_trips', arguments: {} } });
+    expect(call.status).toBe(200);
+
+    const rows = testDb.prepare(
+      "SELECT user_id, action, resource, details FROM audit_log WHERE action = 'mcp.tool_call'",
+    ).all() as Array<{ user_id: number; action: string; resource: string; details: string }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].user_id).toBe(user.id);
+    expect(rows[0].resource).toBe('list_trips');
+    expect(JSON.parse(rows[0].details)).toEqual({ clientId });
+  });
+
+  it('MCP-P14 — tools/list and resource reads write no mcp.tool_call rows', async () => {
+    const { user } = createUser(testDb);
+    const token = generateToken(user.id);
+    const sessionId = await createSession(token);
+    testDb.prepare("DELETE FROM audit_log WHERE action = 'mcp.tool_call'").run();
+
+    const list = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${token}`)
+      .set('mcp-session-id', sessionId)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'tools/list', id: 2, params: {} });
+    expect(list.status).toBe(200);
+
+    const read = await request(app)
+      .post('/mcp')
+      .set('Authorization', `Bearer ${token}`)
+      .set('mcp-session-id', sessionId)
+      .set('Accept', 'application/json, text/event-stream')
+      .send({ jsonrpc: '2.0', method: 'resources/list', id: 3, params: {} });
+    expect(read.status).toBe(200);
+
+    const rows = testDb.prepare("SELECT id FROM audit_log WHERE action = 'mcp.tool_call'").all();
+    expect(rows).toHaveLength(0);
+  });
+
   it('MCP-P10 — /mcp bodies stay raw: an initialize payload over the global 100kb cap succeeds', async () => {
     const { user } = createUser(testDb);
     const big = {

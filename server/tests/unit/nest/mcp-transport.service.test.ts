@@ -24,6 +24,7 @@ import type { AuthService } from '../../../src/nest/auth/auth.service';
 import type { TokenService } from '../../../src/nest/tokens/token.service';
 import type { OauthService } from '../../../src/nest/oauth/oauth.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { AuditService } from '../../../src/nest/audit/audit.service';
 import type { McpRegistryService } from '@trek/nest-mcp';
 import { IS_PUBLIC } from '../../../src/nest/auth/public.decorator';
 
@@ -39,8 +40,9 @@ function makeService(overrides: {
   const tokens = { verifyMcpToken: vi.fn(() => null), ...overrides.tokens } as unknown as TokenService;
   const oauth = { getUserByAccessToken: vi.fn(() => null), ...overrides.oauth } as unknown as OauthService;
   const addons = { isAddonEnabled: vi.fn(() => true), ...overrides.addons } as unknown as AddonsService;
+  const audit = { writeAudit: vi.fn() } as unknown as AuditService;
   const registry = { attach: vi.fn() } as unknown as McpRegistryService;
-  return { svc: new McpTransportService(auth, tokens, oauth, addons, registry), auth, tokens, oauth, addons };
+  return { svc: new McpTransportService(auth, tokens, oauth, addons, audit, registry), auth, tokens, oauth, addons, audit };
 }
 
 beforeEach(() => {
