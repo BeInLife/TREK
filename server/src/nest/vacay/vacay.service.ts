@@ -16,6 +16,8 @@ export interface VacayPlan {
   school_holidays_enabled: number;
   company_holidays_enabled: number;
   carry_over_enabled: number;
+  weekend_days: string | null;
+  week_start: number | null;
 }
 
 export interface VacayUserYear {
@@ -118,6 +120,16 @@ function normalizeFraction(value: unknown): number {
 /** Coerce an arbitrary input to a supported leave type: comp/flex or vacation (#1074). */
 function normalizeKind(value: unknown): 'vacation' | 'comp' {
   return value === 'comp' ? 'comp' : 'vacation';
+}
+
+/**
+ * Same semantics as the client's isWeekend guard (holidays.ts): UTC weekday,
+ * weekend_days falls back to Sat/Sun when the column is NULL or empty.
+ */
+function isBlockedWeekend(plan: Pick<VacayPlan, 'block_weekends' | 'weekend_days'>, date: string): boolean {
+  if (!plan.block_weekends) return false;
+  const days = plan.weekend_days ? String(plan.weekend_days).split(',').map(Number) : [0, 6];
+  return days.includes(new Date(date + 'T00:00:00Z').getUTCDay());
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
@@ -1064,9 +1076,11 @@ export class VacayService {
     return { entries, companyHolidays };
   }
 
-  toggleEntry(userId: number, planId: number, date: string, fraction?: unknown, kind?: unknown, socketId?: string): { action: string; fraction?: number; kind?: string } {
+  toggleEntry(userId: number, planId: number, date: string, fraction?: unknown, kind?: unknown, socketId?: string): { action?: string; fraction?: number; kind?: string; error?: string } {
     const frac = normalizeFraction(fraction);
     const knd = normalizeKind(kind);
+    const plan = this.db.get<VacayPlan>('SELECT * FROM vacay_plans WHERE id = ?', planId);
+    const weekendBlocked = plan ? isBlockedWeekend(plan, date) : false;
     const existing = this.db.get<{ id: number; fraction: number; kind: string | null }>('SELECT id, fraction, kind FROM vacay_entries WHERE user_id = ? AND date = ? AND plan_id = ?', userId, date, planId);
     if (existing) {
       // Clicking the exact same day again (same type AND same fraction) clears it;
@@ -1076,10 +1090,14 @@ export class VacayService {
         this.notifyPlanUsers(planId, socketId);
         return { action: 'removed' };
       }
+      // Removing a stray entry on a blocked day stays possible; keeping one
+      // there (converted in place) does not.
+      if (weekendBlocked) return { error: 'weekend_blocked' };
       this.db.run('UPDATE vacay_entries SET fraction = ?, kind = ? WHERE id = ?', frac, knd, existing.id);
       this.notifyPlanUsers(planId, socketId);
       return { action: 'updated', fraction: frac, kind: knd };
     }
+    if (weekendBlocked) return { error: 'weekend_blocked' };
     this.db.run('INSERT INTO vacay_entries (plan_id, user_id, date, note, fraction, kind) VALUES (?, ?, ?, ?, ?, ?)', planId, userId, date, '', frac, knd);
     this.notifyPlanUsers(planId, socketId);
     return { action: 'added', fraction: frac, kind: knd };

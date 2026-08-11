@@ -144,6 +144,12 @@ describe('VacayController (parity with the legacy /api/addons/vacay route)', () 
       expect(toggleEntry).toHaveBeenCalledWith(1, 10, '2026-07-01', 0.5, undefined, 'sock');
     });
 
+    it('400 with the bespoke message when the service blocks a weekend day (I-02)', () => {
+      const toggleEntry = vi.fn().mockReturnValue({ error: 'weekend_blocked' });
+      return thrown(() => makeController({ ...planBase, toggleEntry }).toggleEntry(user, { date: '2026-07-04' })).then((r) =>
+        expect(r).toEqual({ status: 400, body: { error: 'Weekend days are blocked on this plan' } }));
+    });
+
     it('forwards the comp/flex leave type (#1074)', () => {
       const toggleEntry = vi.fn().mockReturnValue({ action: 'added', kind: 'comp' });
       makeController({ ...planBase, toggleEntry }).toggleEntry(user, { date: '2026-07-01', kind: 'comp' }, 'sock');

@@ -272,6 +272,7 @@ export class VacayMcp {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     const planId = this.vacay.getActivePlanId(ctx.userId);
     const result = this.vacay.toggleEntry(ctx.userId, planId, date, 1, 'vacation', undefined);
+    if (result.error) return errorResult(result.error);
     return ok(result);
   }
 

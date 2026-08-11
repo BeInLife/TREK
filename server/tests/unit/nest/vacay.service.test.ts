@@ -83,6 +83,14 @@ function setupUserWithPlan() {
   return { user, plan };
 }
 
+/**
+ * Lift the (default-on) weekend blocking for tests whose dates are derived
+ * from the current year and can land on any weekday.
+ */
+function allowWeekends(planId: number) {
+  testDb.prepare('UPDATE vacay_plans SET block_weekends = 0 WHERE id = ?').run(planId);
+}
+
 // ── getOwnPlan ────────────────────────────────────────────────────────────────
 
 describe('getOwnPlan', () => {
@@ -508,13 +516,13 @@ describe('toggleEntry', () => {
   it('VACAY-SVC-033: removes the entry on second call (action: removed)', () => {
     const { user, plan } = setupUserWithPlan();
 
-    svc.toggleEntry(user.id, plan.id, '2025-08-02', undefined);
-    const result = svc.toggleEntry(user.id, plan.id, '2025-08-02', undefined);
+    svc.toggleEntry(user.id, plan.id, '2025-08-04', undefined);
+    const result = svc.toggleEntry(user.id, plan.id, '2025-08-04', undefined);
 
     expect(result.action).toBe('removed');
     const row = testDb
       .prepare('SELECT * FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
-      .get(user.id, plan.id, '2025-08-02');
+      .get(user.id, plan.id, '2025-08-04');
     expect(row).toBeUndefined();
   });
 
@@ -554,6 +562,81 @@ describe('toggleEntry', () => {
       .prepare('SELECT id FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
       .get(user.id, plan.id, '2025-08-07');
     expect(row).toBeUndefined();
+  });
+
+  // Weekend blocking (I-02): plans default to block_weekends = 1 / weekend_days '0,6'.
+  it('VACAY-SVC-033d: rejects a blocked weekend day with error weekend_blocked (I-02)', () => {
+    const { user, plan } = setupUserWithPlan();
+
+    const result = svc.toggleEntry(user.id, plan.id, '2025-07-19', undefined); // Saturday
+
+    expect(result).toEqual({ error: 'weekend_blocked' });
+    const row = testDb
+      .prepare('SELECT id FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
+      .get(user.id, plan.id, '2025-07-19');
+    expect(row).toBeUndefined();
+  });
+
+  it('VACAY-SVC-033e: accepts a non-weekend day on a blocking plan', () => {
+    const { user, plan } = setupUserWithPlan();
+
+    const result = svc.toggleEntry(user.id, plan.id, '2025-07-16', undefined); // Wednesday
+
+    expect(result).toMatchObject({ action: 'added' });
+  });
+
+  it('VACAY-SVC-033f: accepts a weekend day when block_weekends is off', () => {
+    const { user, plan } = setupUserWithPlan();
+    testDb.prepare('UPDATE vacay_plans SET block_weekends = 0 WHERE id = ?').run(plan.id);
+
+    const result = svc.toggleEntry(user.id, plan.id, '2025-07-19', undefined); // Saturday
+
+    expect(result).toMatchObject({ action: 'added' });
+  });
+
+  it('VACAY-SVC-033g: honours custom weekend_days (5,6 blocks Friday, frees Sunday)', () => {
+    const { user, plan } = setupUserWithPlan();
+    testDb.prepare("UPDATE vacay_plans SET weekend_days = '5,6' WHERE id = ?").run(plan.id);
+
+    expect(svc.toggleEntry(user.id, plan.id, '2025-07-18', undefined)).toEqual({ error: 'weekend_blocked' }); // Friday
+    expect(svc.toggleEntry(user.id, plan.id, '2025-07-20', undefined)).toMatchObject({ action: 'added' }); // Sunday
+  });
+
+  it('VACAY-SVC-033h: a NULL weekend_days column falls back to Sat/Sun', () => {
+    const { user, plan } = setupUserWithPlan();
+    testDb.prepare('UPDATE vacay_plans SET weekend_days = NULL WHERE id = ?').run(plan.id);
+
+    expect(svc.toggleEntry(user.id, plan.id, '2025-07-19', undefined)).toEqual({ error: 'weekend_blocked' }); // Saturday
+  });
+
+  it('VACAY-SVC-033i: still removes an existing entry on a blocked day (stray-data cleanup)', () => {
+    const { user, plan } = setupUserWithPlan();
+    testDb
+      .prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note, fraction, kind) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(plan.id, user.id, '2025-07-19', '', 1, 'vacation');
+
+    const result = svc.toggleEntry(user.id, plan.id, '2025-07-19', 1, 'vacation');
+
+    expect(result.action).toBe('removed');
+    const row = testDb
+      .prepare('SELECT id FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
+      .get(user.id, plan.id, '2025-07-19');
+    expect(row).toBeUndefined();
+  });
+
+  it('VACAY-SVC-033j: refuses to convert an existing entry in place on a blocked day', () => {
+    const { user, plan } = setupUserWithPlan();
+    testDb
+      .prepare('INSERT INTO vacay_entries (plan_id, user_id, date, note, fraction, kind) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(plan.id, user.id, '2025-07-19', '', 0.5, 'vacation');
+
+    const result = svc.toggleEntry(user.id, plan.id, '2025-07-19', 1, 'vacation');
+
+    expect(result).toEqual({ error: 'weekend_blocked' });
+    const row = testDb
+      .prepare('SELECT fraction FROM vacay_entries WHERE user_id = ? AND plan_id = ? AND date = ?')
+      .get(user.id, plan.id, '2025-07-19') as { fraction: number };
+    expect(row.fraction).toBe(0.5);
   });
 });
 
@@ -721,6 +804,7 @@ describe('getStats', () => {
     const { user, plan } = setupUserWithPlan();
     const yr = new Date().getFullYear();
 
+    allowWeekends(plan.id);
     svc.toggleEntry(user.id, plan.id, `${yr}-09-10`, undefined);
     svc.toggleEntry(user.id, plan.id, `${yr}-09-11`, undefined);
 
@@ -734,6 +818,7 @@ describe('getStats', () => {
     const { user, plan } = setupUserWithPlan();
     const yr = new Date().getFullYear();
 
+    allowWeekends(plan.id);
     svc.toggleEntry(user.id, plan.id, `${yr}-09-12`, 1);    // full day
     svc.toggleEntry(user.id, plan.id, `${yr}-09-13`, 0.5);  // half day
 
@@ -747,6 +832,7 @@ describe('getStats', () => {
     const { user, plan } = setupUserWithPlan();
     const yr = new Date().getFullYear();
 
+    allowWeekends(plan.id);
     svc.toggleEntry(user.id, plan.id, `${yr}-09-14`, 1, 'vacation');
     svc.toggleEntry(user.id, plan.id, `${yr}-09-15`, 1, 'comp');
 
@@ -760,6 +846,7 @@ describe('getStats', () => {
     const { user, plan } = setupUserWithPlan();
     const yr = new Date().getFullYear();
 
+    allowWeekends(plan.id);
     svc.toggleEntry(user.id, plan.id, `${yr}-09-16`, 0.5, 'comp');
 
     const stats = svc.getStats(plan.id, yr);
@@ -772,6 +859,7 @@ describe('getStats', () => {
     const { user, plan } = setupUserWithPlan();
     const yr = new Date().getFullYear();
 
+    allowWeekends(plan.id);
     svc.toggleEntry(user.id, plan.id, `${yr}-09-17`, 1, 'comp');
     svc.toggleEntry(user.id, plan.id, `${yr}-09-18`, 0.5, 'comp');
     svc.toggleEntry(user.id, plan.id, `${yr}-09-19`, 1, 'vacation');
@@ -786,6 +874,7 @@ describe('getStats', () => {
     const { user, plan } = setupUserWithPlan();
     const yr = new Date().getFullYear();
 
+    allowWeekends(plan.id);
     svc.toggleEntry(user.id, plan.id, `${yr}-09-20`, 1, 'vacation');
     expect(svc.getStats(plan.id, yr)[0].used).toBe(1);
 
@@ -793,6 +882,20 @@ describe('getStats', () => {
 
     expect(result).toMatchObject({ action: 'updated', kind: 'comp' });
     expect(svc.getStats(plan.id, yr)[0].used).toBe(0);
+  });
+
+  it('VACAY-SVC-045g: a rejected weekend toggle leaves used/remaining untouched (I-02)', () => {
+    const { user, plan } = setupUserWithPlan();
+    svc.toggleEntry(user.id, plan.id, '2025-07-16', 1, 'vacation'); // Wednesday
+    const before = svc.getStats(plan.id, 2025)[0];
+    expect(before.used).toBe(1);
+
+    const result = svc.toggleEntry(user.id, plan.id, '2025-07-19', 1, 'vacation'); // Saturday
+
+    expect(result).toEqual({ error: 'weekend_blocked' });
+    const after = svc.getStats(plan.id, 2025)[0];
+    expect(after.used).toBe(before.used);
+    expect(after.remaining).toBe(before.remaining);
   });
 
   it('VACAY-SVC-045f: getStats reports the window it counted over (#737)', () => {
@@ -970,8 +1073,8 @@ describe('usage over a shifted window (#737)', () => {
     `).run(user.id, plan.id);
 
     // Two days inside the 2030 period (Jul 2030 – Jun 2031), one of them in 2031.
-    svc.toggleEntry(user.id, plan.id, '2030-09-01', 1, 'vacation');
-    svc.toggleEntry(user.id, plan.id, '2031-02-01', 1, 'vacation');
+    svc.toggleEntry(user.id, plan.id, '2030-09-02', 1, 'vacation');
+    svc.toggleEntry(user.id, plan.id, '2031-02-03', 1, 'vacation');
 
     svc.addYear(plan.id, 2031, undefined);
 
@@ -990,7 +1093,7 @@ describe('usage over a shifted window (#737)', () => {
       VALUES (?, ?, 2030, 10, 0)
     `).run(user.id, plan.id);
 
-    svc.toggleEntry(user.id, plan.id, '2031-02-01', 1, 'comp');
+    svc.toggleEntry(user.id, plan.id, '2031-02-03', 1, 'comp');
 
     svc.addYear(plan.id, 2031, undefined);
 
@@ -1393,6 +1496,7 @@ describe('quirk fixes', () => {
   it('VACAY-SVC-069: deleteYear is atomic — a failure mid-flow keeps the year and its entries', () => {
     const { user, plan } = setupUserWithPlan();
     const year = new Date().getFullYear();
+    allowWeekends(plan.id);
     svc.toggleEntry(user.id, plan.id, `${year}-03-03`, 1);
 
     const broken = failingService('DELETE FROM vacay_user_years');

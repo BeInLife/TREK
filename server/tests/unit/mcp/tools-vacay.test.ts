@@ -252,7 +252,7 @@ describe('Tool: toggle_vacay_entry', () => {
   it('toggles entry and returns action', async () => {
     const { user } = createUser(testDb);
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-15' } });
+      const result = await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-16' } });
       const data = parseToolResult(result) as any;
       expect(data.action).toBeDefined();
     });
@@ -262,7 +262,7 @@ describe('Tool: toggle_vacay_entry', () => {
     process.env.DEMO_MODE = 'true';
     const { user } = createUser(testDb, { email: 'demo@nomad.app' });
     await withHarness(user.id, async (h) => {
-      const result = await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-15' } });
+      const result = await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-16' } });
       expect(result.isError).toBe(true);
     });
   });
@@ -561,7 +561,7 @@ describe('Tool: get_shared_vacay_calendars', () => {
     const { user: owner } = createUser(testDb);
     const { user: viewer } = createUser(testDb);
     await withHarness(owner.id, async (h) => {
-      await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-15' } });
+      await h.client.callTool({ name: 'toggle_vacay_entry', arguments: { date: '2025-06-16' } });
       await h.client.callTool({ name: 'share_vacay_calendar', arguments: { targetUserId: viewer.id } });
     });
     await withHarness(viewer.id, async (h) => {
@@ -570,7 +570,7 @@ describe('Tool: get_shared_vacay_calendars', () => {
       expect(Array.isArray(data.calendars)).toBe(true);
       expect(data.calendars).toHaveLength(1);
       expect(data.calendars[0].owner_id).toBe(owner.id);
-      expect(data.calendars[0].entries.map((e: any) => e.date)).toContain('2025-06-15');
+      expect(data.calendars[0].entries.map((e: any) => e.date)).toContain('2025-06-16');
     });
   });
 });

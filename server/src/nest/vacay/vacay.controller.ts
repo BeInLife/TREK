@@ -229,7 +229,11 @@ export class VacayController {
       }
       userId = tid;
     }
-    return this.vacay.toggleEntry(userId, planId, body.date, body.fraction, body.kind, socketId);
+    const result = this.vacay.toggleEntry(userId, planId, body.date, body.fraction, body.kind, socketId);
+    if (result.error === 'weekend_blocked') {
+      throw new HttpException({ error: 'Weekend days are blocked on this plan' }, 400);
+    }
+    return result;
   }
 
   @Post('entries/company-holiday')

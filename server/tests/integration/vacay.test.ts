@@ -187,17 +187,18 @@ describe('Vacay entries', () => {
     expect(res.status).toBe(200);
   });
 
-  it('VACAY-004 — POST /api/addons/vacay/entries/toggle on weekend is allowed (no server-side weekend blocking)', async () => {
+  it('VACAY-004 — POST /api/addons/vacay/entries/toggle on a weekend is rejected when block_weekends is on', async () => {
     const { user } = createUser(testDb);
     await request(app).get('/api/addons/vacay/plan').set('Cookie', authCookie(user.id));
     await request(app).post('/api/addons/vacay/years').set('Cookie', authCookie(user.id)).send({ year: 2025 });
 
-    // 2025-06-21 is a Saturday — server does not block weekends; client-side only
+    // 2025-06-21 is a Saturday and plans default to block_weekends = 1 (I-02)
     const res = await request(app)
       .post('/api/addons/vacay/entries/toggle')
       .set('Cookie', authCookie(user.id))
       .send({ date: '2025-06-21', year: 2025, type: 'vacation' });
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Weekend days are blocked on this plan' });
   });
 
   it('VACAY-006 — GET /api/addons/vacay/entries/:year returns vacation entries', async () => {
