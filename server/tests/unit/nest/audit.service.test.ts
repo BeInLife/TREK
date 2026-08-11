@@ -42,7 +42,7 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 import { AuditService } from '../../../src/nest/audit/audit.service';
 import { getClientIp } from '../../../src/nest/audit/client-ip';
 import { logInfo, logDebug, logError } from '../../../src/nest/audit/audit-log.logger';
-import { writeAudit as bridgeWriteAudit, getClientIp as bridgeGetClientIp, logInfo as bridgeLogInfo } from '../../../src/nest/audit/audit.bridge';
+import { writeAudit as bridgeWriteAudit, getClientIp as bridgeGetClientIp } from '../../../src/nest/audit/audit.bridge';
 
 const svc = new AuditService(new DatabaseService(testDb));
 
@@ -192,9 +192,5 @@ describe('audit.bridge delegation', () => {
 
   it('AUDIT-SVC-016: getClientIp is the same pure helper', () => {
     expect(bridgeGetClientIp).toBe(getClientIp);
-  });
-
-  it('AUDIT-SVC-017: the log helpers re-export the logger module', () => {
-    expect(bridgeLogInfo).toBe(logInfo);
   });
 });

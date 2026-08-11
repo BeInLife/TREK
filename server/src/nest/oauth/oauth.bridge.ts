@@ -19,12 +19,11 @@ import { OauthService } from './oauth.service';
  * pending authorization codes — is module-scoped in oauth.pending-codes.ts, so
  * this instance and the container singleton see the same map. That is load-
  * bearing: the consent controller writes the code through the container and
- * the SDK reads it back through here.
+ * the SDK reads it back through here (which is why consumeAuthCode is bridged
+ * and createAuthCode is not).
  */
 const dbs = new DatabaseService(db);
 const oauth = new OauthService(dbs, new AddonsService(dbs), new AuditService(dbs));
-
-export type { OAuthTokenInfo, PendingCode } from './oauth.service';
 
 export function getUserByAccessToken(rawToken: string) {
   return oauth.getUserByAccessToken(rawToken);
@@ -32,10 +31,6 @@ export function getUserByAccessToken(rawToken: string) {
 
 export function createOAuthClient(...args: Parameters<OauthService['createOAuthClient']>) {
   return oauth.createOAuthClient(...args);
-}
-
-export function createAuthCode(params: Parameters<OauthService['createAuthCode']>[0]) {
-  return oauth.createAuthCode(params);
 }
 
 export function consumeAuthCode(code: string) {

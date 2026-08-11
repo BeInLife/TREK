@@ -45,9 +45,6 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService, PERMISSION_ACTIONS } from '../../../src/nest/permissions/permissions.service';
 import {
   checkPermission as bridgeCheckPermission,
-  getPermissionLevel as bridgeGetPermissionLevel,
-  getAllPermissions as bridgeGetAllPermissions,
-  savePermissions as bridgeSavePermissions,
   invalidatePermissionsCache as bridgeInvalidatePermissionsCache,
 } from '../../../src/nest/permissions/permissions.bridge';
 
@@ -251,29 +248,17 @@ describe('permissions.bridge delegation', () => {
     expect(bridgeCheckPermission('trip_delete', 'user', 10, 20, true)).toBe(false);
   });
 
-  it('PERM-SVC-018: savePermissions via the bridge writes the row and reports skips', () => {
-    const result = bridgeSavePermissions({ trip_edit: 'trip_member', bogus: 'trip_member' });
-    expect(result.skipped).toEqual(['bogus']);
-    const row = testDb.prepare('SELECT value FROM app_settings WHERE key = ?').get('perm_trip_edit') as { value: string };
-    expect(row.value).toBe('trip_member');
-  });
-
-  it('PERM-SVC-019: getPermissionLevel/getAllPermissions delegate through the bridge', () => {
-    expect(bridgeGetPermissionLevel('trip_create')).toBe('everybody');
-    const all = bridgeGetAllPermissions();
-    expect(all.trip_delete).toBe('trip_owner');
-    expect(Object.keys(all)).toHaveLength(PERMISSION_ACTIONS.length);
-  });
-
   it('PERM-SVC-020: the cache is module-scoped — shared by the DI and bridge instances', () => {
-    // Save through the DI instance; the bridge instance sees it immediately.
+    // Save through the DI instance; the bridge instance sees it immediately
+    // (checkPermission for a plain member flips with the stored level).
     svc.savePermissions({ trip_edit: 'trip_member' });
-    expect(bridgeGetPermissionLevel('trip_edit')).toBe('trip_member');
+    expect(bridgeCheckPermission('trip_edit', 'user', 10, 20, true)).toBe(true);
     // Raw SQL write, then invalidate through the BRIDGE — the DI instance
     // must serve the fresh value (backup-restore relies on exactly this).
     testDb.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run('perm_trip_edit', 'trip_owner');
     expect(svc.getPermissionLevel('trip_edit')).toBe('trip_member'); // still cached
     bridgeInvalidatePermissionsCache();
     expect(svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
+    expect(bridgeCheckPermission('trip_edit', 'user', 10, 20, true)).toBe(false);
   });
 });

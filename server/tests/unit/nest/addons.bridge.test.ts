@@ -2,12 +2,11 @@
  * addons.bridge delegation — one case per bridged export (the permissions
  * bridge-test precedent). The bridge constructs a module-level AddonsService
  * over the reinitialize-proof db Proxy, so a real in-memory SQLite exercises
- * the byte-identical SQL relocated from services/adminService (`admin-1`),
- * including the polarity quirks: isAddonEnabled reads the addons integer
- * column, bag tracking is opt-in (=== 'true'), collab flags opt-out
- * (!== 'false').
+ * the byte-identical SQL relocated from services/adminService (`admin-1`).
+ * The bag-tracking/collab polarity quirks are pinned on the service itself
+ * (addons.service.test.ts) — those reads are no longer bridged.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 
 // ── DB setup ──────────────────────────────────────────────────────────────────
 // The db/database mock builds a real in-memory SQLite; the test body reaches it
@@ -25,15 +24,11 @@ vi.mock('../../../src/db/database', async () => {
 import { db as testDb } from '../../../src/db/database';
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
-import { isAddonEnabled, getBagTracking, getCollabFeatures } from '../../../src/nest/addons/addons.bridge';
+import { isAddonEnabled } from '../../../src/nest/addons/addons.bridge';
 
 beforeAll(() => {
   createTables(testDb);
   runMigrations(testDb);
-});
-
-beforeEach(() => {
-  testDb.prepare("DELETE FROM app_settings WHERE key IN ('bag_tracking_enabled', 'collab_chat_enabled', 'collab_notes_enabled', 'collab_polls_enabled', 'collab_whatsnext_enabled')").run();
 });
 
 describe('addons.bridge', () => {
@@ -45,17 +40,5 @@ describe('addons.bridge', () => {
     testDb.prepare('UPDATE addons SET enabled = 0 WHERE id = ?').run('test-addon');
     expect(isAddonEnabled('test-addon')).toBe(false);
     expect(isAddonEnabled('no-such-addon')).toBe(false);
-  });
-
-  it('getBagTracking is opt-in: absent row is OFF, only the string true enables', () => {
-    expect(getBagTracking()).toEqual({ enabled: false });
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('bag_tracking_enabled', 'true')").run();
-    expect(getBagTracking()).toEqual({ enabled: true });
-  });
-
-  it('getCollabFeatures is opt-out: absent rows are ON, only the string false disables', () => {
-    expect(getCollabFeatures()).toEqual({ chat: true, notes: true, polls: true, whatsnext: true });
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('collab_polls_enabled', 'false')").run();
-    expect(getCollabFeatures()).toEqual({ chat: true, notes: true, polls: false, whatsnext: true });
   });
 });

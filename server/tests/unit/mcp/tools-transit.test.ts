@@ -1,6 +1,8 @@
 import { runMigrations } from '../../../src/db/migrations';
 import { createTables } from '../../../src/db/schema';
-import { invalidatePermissionsCache, savePermissions } from '../../../src/nest/permissions/permissions.bridge';
+import { invalidatePermissionsCache } from '../../../src/nest/permissions/permissions.bridge';
+import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
+import { DatabaseService } from '../../../src/nest/database/database.service';
 import { addTripMember, createDay, createTrip, createUser } from '../../helpers/factories';
 import { createMcpHarness, parseToolResult, type McpHarness } from '../../helpers/mcp-harness';
 import { resetTestDb } from '../../helpers/test-db';
@@ -43,6 +45,12 @@ vi.mock('../../../src/config', () => ({
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
 import type { TransitPlace } from '../../../src/nest/transit/transit.helpers';
 import { TransitService } from '../../../src/nest/transit/transit.service';
+
+// savePermissions is no longer bridged; write through a service instance — the
+// permissions cache is module-scoped, so the MCP _shared checkPermission path
+// sees the write immediately.
+const permissionsService = new PermissionsService(new DatabaseService(testDb));
+const savePermissions = permissionsService.savePermissions.bind(permissionsService);
 
 // The transit tools live on the DI-discovered transit.mcp.ts since the transit
 // fold; the test registry builds a real TransitService (and injects a real

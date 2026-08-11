@@ -12,8 +12,8 @@ import { cacheKeyFor, getCached, nominatimFetch, setCached } from '../geo/nomina
 // per-country store, geocode/region caches, country poly/box indexes, the
 // shared Nominatim throttle and the geocodingInFlight dedup set) are
 // file-scoped so their lifetime stays process-global no matter how many
-// AtlasService instances exist (container singleton + auth.bridge.ts +
-// test helpers) — instance state would duplicate the multi-MB indexes the
+// AtlasService instances exist (container singleton + test helpers) —
+// instance state would duplicate the multi-MB indexes the
 // #1576 OOM fix exists to avoid and split the ≥1.1s Nominatim throttle.
 // Relocated verbatim from the legacy services/atlasService.ts fold.
 

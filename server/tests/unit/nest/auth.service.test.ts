@@ -929,11 +929,6 @@ describe('auth quirk fixes', () => {
 // ---------------------------------------------------------------------------
 
 describe('auth.bridge delegation', () => {
-  it('AUTH-BR-001: isDemoUser returns false outside demo mode', () => {
-    const { user } = createUser(testDb);
-    expect(authBridge.isDemoUser(user.id)).toBe(false);
-  });
-
   it('AUTH-BR-002: verifyMcpToken resolves a freshly created token to its user', () => {
     const { user } = createUser(testDb);
     const created = tokens.createMcpToken(user.id, 'bridge-case');
@@ -943,32 +938,10 @@ describe('auth.bridge delegation', () => {
     expect(authBridge.verifyMcpToken('trek_no_such_token')).toBeNull();
   });
 
-  it('AUTH-BR-003: generateToken + verifyJwtToken round-trip through the pv gate', () => {
+  it('AUTH-BR-003: verifyJwtToken round-trips a service-minted token through the pv gate', () => {
     const { user } = createUser(testDb);
-    const token = authBridge.generateToken({ id: user.id });
+    const token = svc.generateToken({ id: user.id });
     expect(authBridge.verifyJwtToken(token)?.id).toBe(user.id);
     expect(authBridge.verifyJwtToken('not-a-jwt')).toBeNull();
-  });
-
-  it('AUTH-BR-004: resolveAuthToggles returns the container defaults', () => {
-    vi.stubEnv('OIDC_ONLY', '');
-    expect(authBridge.resolveAuthToggles().password_login).toBe(true);
-    vi.unstubAllEnvs();
-  });
-
-  it('AUTH-BR-005: createWsToken surfaces the 503 when the ephemeral store is down', () => {
-    const { user } = createUser(testDb);
-    // createEphemeralToken is mocked to return undefined in this suite.
-    expect(authBridge.createWsToken(user.id)).toEqual({ error: 'Service unavailable', status: 503 });
-  });
-
-  it('AUTH-BR-006: stripUserForClient re-export strips secrets', () => {
-    const stripped = authBridge.stripUserForClient({ id: 1, password_hash: 'x' } as never);
-    expect(stripped).not.toHaveProperty('password_hash');
-  });
-
-  it('AUTH-BR-007: avatarUrl re-export keeps the legacy shape', () => {
-    expect(authBridge.avatarUrl({ avatar: 'a.png' })).toBe('/uploads/avatars/a.png');
-    expect(authBridge.avatarUrl({ avatar: null })).toBeNull();
   });
 });

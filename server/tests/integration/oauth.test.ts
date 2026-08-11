@@ -58,7 +58,21 @@ import { runMigrations } from '../../src/db/migrations';
 import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
-import { createOAuthClient, createAuthCode, getUserByAccessToken } from '../../src/nest/oauth/oauth.bridge';
+import { createOAuthClient, getUserByAccessToken } from '../../src/nest/oauth/oauth.bridge';
+import { OauthService } from '../../src/nest/oauth/oauth.service';
+import { DatabaseService } from '../../src/nest/database/database.service';
+import { AddonsService } from '../../src/nest/addons/addons.service';
+import { AuditService } from '../../src/nest/audit/audit.service';
+
+// In production the consent controller writes pending codes through the
+// container instance and the SDK-mounted routes read them back through the
+// bridge. createAuthCode is not bridged (only the read side is), so the tests
+// write codes the same way the consent controller does: through a service
+// instance. The pending-code map is module-scoped in oauth.pending-codes.ts,
+// so the routes under test see every code written here.
+const oauthDbs = new DatabaseService(testDb);
+const containerSideOauth = new OauthService(oauthDbs, new AddonsService(oauthDbs), new AuditService(oauthDbs));
+const createAuthCode = containerSideOauth.createAuthCode.bind(containerSideOauth);
 
 let nestApp: INestApplication;
 let app: Application;

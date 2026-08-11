@@ -55,7 +55,16 @@ import { resetTestDb, resetRateLimits } from '../helpers/test-db';
 import { createUser, createTrip } from '../helpers/factories';
 import { authCookie } from '../helpers/auth';
 import { createEphemeralToken } from '../../src/nest/auth/ephemeral-tokens';
-import { createWsToken } from '../../src/nest/auth/auth.bridge';
+import { TokenService } from '../../src/nest/tokens/token.service';
+import { DatabaseService } from '../../src/nest/database/database.service';
+import { EphemeralTokenService } from '../../src/nest/auth/ephemeral-token.service';
+
+// The gateway consumes ws-tokens through its injected TokenService; the
+// ephemeral store is module-scoped on purpose, so a directly-constructed
+// instance mints tokens the app under test accepts (TokenService is a leaf —
+// its own unit suite constructs it the same way).
+const tokenService = new TokenService(new DatabaseService(testDb), new EphemeralTokenService());
+const createWsToken = tokenService.createWsToken.bind(tokenService);
 
 let server: http.Server;
 let wsUrl: string;
