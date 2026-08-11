@@ -43,7 +43,6 @@ import { runMigrations } from '../../../src/db/migrations';
 import { logError } from '../../../src/nest/audit/audit-log.logger';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService, PERMISSION_ACTIONS } from '../../../src/nest/permissions/permissions.service';
-import { checkPermission as bridgeCheckPermission } from '../../../src/nest/permissions/permissions.bridge';
 import { invalidatePermissionsCache as invalidateSharedCache } from '../../../src/nest/permissions/permissions-cache';
 
 const svc = new PermissionsService(new DatabaseService(testDb));
@@ -238,19 +237,21 @@ describe('stored overrides + cache', () => {
   });
 });
 
-// ── permissions.bridge delegation ─────────────────────────────────────────────
+// ── module-scoped cache across instances ──────────────────────────────────────
 
-describe('permissions.bridge delegation', () => {
-  it('PERM-SVC-017: checkPermission delegates through the bridge instance', () => {
-    expect(bridgeCheckPermission('trip_create', 'user', null, 42, false)).toBe(true);
-    expect(bridgeCheckPermission('trip_delete', 'user', 10, 20, true)).toBe(false);
+describe('module-scoped permissions cache', () => {
+  const secondInstance = new PermissionsService(new DatabaseService(testDb));
+
+  it('PERM-SVC-017: checkPermission agrees across independently built instances', () => {
+    expect(secondInstance.checkPermission('trip_create', 'user', null, 42, false)).toBe(true);
+    expect(secondInstance.checkPermission('trip_delete', 'user', 10, 20, true)).toBe(false);
   });
 
-  it('PERM-SVC-020: the cache is module-scoped — shared by the DI and bridge instances', () => {
-    // Save through the DI instance; the bridge instance sees it immediately
+  it('PERM-SVC-020: the cache is module-scoped — shared by every service instance', () => {
+    // Save through the DI instance; a second instance sees it immediately
     // (checkPermission for a plain member flips with the stored level).
     svc.savePermissions({ trip_edit: 'trip_member' });
-    expect(bridgeCheckPermission('trip_edit', 'user', 10, 20, true)).toBe(true);
+    expect(secondInstance.checkPermission('trip_edit', 'user', 10, 20, true)).toBe(true);
     // Raw SQL write, then invalidate through permissions-cache — the plain
     // function backup.impl.ts calls after a restore. Both service instances
     // must serve the fresh value afterwards.
@@ -258,6 +259,6 @@ describe('permissions.bridge delegation', () => {
     expect(svc.getPermissionLevel('trip_edit')).toBe('trip_member'); // still cached
     invalidateSharedCache();
     expect(svc.getPermissionLevel('trip_edit')).toBe('trip_owner');
-    expect(bridgeCheckPermission('trip_edit', 'user', 10, 20, true)).toBe(false);
+    expect(secondInstance.checkPermission('trip_edit', 'user', 10, 20, true)).toBe(false);
   });
 });

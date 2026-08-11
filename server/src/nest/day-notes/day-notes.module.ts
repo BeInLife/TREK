@@ -7,6 +7,7 @@ import { PermissionsModule } from '../permissions/permissions.module';
 import { AuthModule } from '../auth/auth.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PluginGuardsModule } from '../plugins/host/plugin-guards.module';
+import { McpSharedModule } from '../mcp-shared/mcp-shared.module';
 
 /**
  * Day notes. Its own domain rather than a second file set inside days/, which
@@ -20,7 +21,7 @@ import { PluginGuardsModule } from '../plugins/host/plugin-guards.module';
  * for DayNotesRpc.
  */
 @Module({
-  imports: [PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule],
+  imports: [McpSharedModule, PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule],
   controllers: [DayNotesController],
   providers: [DayNotesService, DayNotesMcp, DayNotesRpc],
   exports: [DayNotesService],

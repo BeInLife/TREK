@@ -4,10 +4,11 @@ import {
   TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, errorResult, ok,
 } from '@trek/nest-mcp';
+import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { ADDON_IDS } from '../../addons';
-import { safeBroadcast, noAccess, hasTripPermission, permissionDenied, isAdminUser, adminRequired } from '../../mcp/tools/_shared';
+import { noAccess, permissionDenied, adminRequired } from '../../mcp/tools/_shared';
 import { PackingService } from './packing.service';
 import { addonGate } from '../addons/addon-gate';
 import { AddonsService } from '../addons/addons.service';
@@ -38,6 +39,7 @@ export class PackingMcp {
     private readonly packing: PackingService,
     private readonly auth: AuthService,
     readonly addons: AddonsService,
+    private readonly guards: McpToolGuardsService,
   ) {}
 
   // --- PACKING ---
@@ -57,9 +59,9 @@ export class PackingMcp {
   async createPackingItem({ tripId, name, category }: { tripId: number; name: string; category?: string }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const item = this.packing.createItem(tripId, { name, category: category || 'General' }, ctx.userId);
-    safeBroadcast(tripId, 'packing:created', { item });
+    this.guards.safeBroadcast(tripId, 'packing:created', { item });
     return ok({ item });
   }
 
@@ -78,10 +80,10 @@ export class PackingMcp {
   async togglePackingItem({ tripId, itemId, checked }: { tripId: number; itemId: number; checked: boolean }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const item = this.packing.updateItem(tripId, itemId, { checked: checked ? 1 : 0 }, ['checked']);
     if (!item) return errorResult('Packing item not found.');
-    safeBroadcast(tripId, 'packing:updated', { item });
+    this.guards.safeBroadcast(tripId, 'packing:updated', { item });
     return ok({ item });
   }
 
@@ -99,10 +101,10 @@ export class PackingMcp {
   async deletePackingItem({ tripId, itemId }: { tripId: number; itemId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const deleted = this.packing.deleteItem(tripId, itemId);
     if (!deleted) return errorResult('Packing item not found.');
-    safeBroadcast(tripId, 'packing:deleted', { itemId });
+    this.guards.safeBroadcast(tripId, 'packing:deleted', { itemId });
     return ok({ success: true });
   }
 
@@ -124,11 +126,11 @@ export class PackingMcp {
   async updatePackingItem({ tripId, itemId, name, category }: { tripId: number; itemId: number; name?: string; category?: string }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const bodyKeys = ['name', 'category'].filter(k => k === 'name' ? name !== undefined : category !== undefined);
     const item = this.packing.updateItem(tripId, itemId, { name, category }, bodyKeys);
     if (!item) return errorResult('Packing item not found.');
-    safeBroadcast(tripId, 'packing:updated', { item });
+    this.guards.safeBroadcast(tripId, 'packing:updated', { item });
     return ok({ item });
   }
 
@@ -148,9 +150,9 @@ export class PackingMcp {
   async reorderPackingItems({ tripId, orderedIds }: { tripId: number; orderedIds: number[] }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     this.packing.reorderItems(tripId, orderedIds);
-    safeBroadcast(tripId, 'packing:reordered', { orderedIds });
+    this.guards.safeBroadcast(tripId, 'packing:reordered', { orderedIds });
     return ok({ success: true });
   }
 
@@ -185,11 +187,11 @@ export class PackingMcp {
   async createPackingBag({ tripId, name, color }: { tripId: number; name: string; color?: string }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     // createBag returns a bare row; hydrate with the empty members array that
     // listBags and the schema always carry, so the client/AI consumer matches.
     const bag = { ...(this.packing.createBag(tripId, { name, color }) as object), members: [] };
-    safeBroadcast(tripId, 'packing:bag-created', { bag });
+    this.guards.safeBroadcast(tripId, 'packing:bag-created', { bag });
     return ok({ bag });
   }
 
@@ -209,7 +211,7 @@ export class PackingMcp {
   async updatePackingBag({ tripId, bagId, name, color }: { tripId: number; bagId: number; name?: string; color?: string }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const fields: Record<string, unknown> = {};
     const bodyKeys: string[] = [];
     if (name !== undefined) { fields.name = name; bodyKeys.push('name'); }
@@ -218,7 +220,7 @@ export class PackingMcp {
     if (!updated) return errorResult('Bag not found.');
     // Hydrate with the members array (matches create_packing_bag, listBags, and the schema).
     const bag = this.packing.listBags(tripId).find(b => b.id === (updated as { id: number }).id) ?? { ...(updated as object), members: [] };
-    safeBroadcast(tripId, 'packing:bag-updated', { bag });
+    this.guards.safeBroadcast(tripId, 'packing:bag-updated', { bag });
     return ok({ bag });
   }
 
@@ -236,11 +238,11 @@ export class PackingMcp {
   async deletePackingBag({ tripId, bagId }: { tripId: number; bagId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     this.packing.deleteBag(tripId, bagId);
     // { bagId } matches the REST route and the plugin host (the legacy
     // registrar's { id } was the odd one out).
-    safeBroadcast(tripId, 'packing:bag-deleted', { bagId });
+    this.guards.safeBroadcast(tripId, 'packing:bag-deleted', { bagId });
     return ok({ success: true });
   }
 
@@ -259,10 +261,10 @@ export class PackingMcp {
   async setBagMembers({ tripId, bagId, userIds }: { tripId: number; bagId: number; userIds: number[] }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const members = this.packing.setBagMembers(tripId, bagId, userIds);
     if (!members) return errorResult('Bag not found.');
-    safeBroadcast(tripId, 'packing:bag-members-updated', { bagId, members });
+    this.guards.safeBroadcast(tripId, 'packing:bag-members-updated', { bagId, members });
     return ok({ members });
   }
 
@@ -297,9 +299,9 @@ export class PackingMcp {
   async setPackingCategoryAssignees({ tripId, categoryName, userIds }: { tripId: number; categoryName: string; userIds: number[] }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const assignees = this.packing.updateCategoryAssignees(tripId, categoryName, userIds);
-    safeBroadcast(tripId, 'packing:assignees', { category: categoryName, assignees });
+    this.guards.safeBroadcast(tripId, 'packing:assignees', { category: categoryName, assignees });
     return ok({ assignees });
   }
 
@@ -317,10 +319,10 @@ export class PackingMcp {
   async applyPackingTemplate({ tripId, templateId }: { tripId: number; templateId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const items = this.packing.applyTemplate(tripId, templateId);
     if (items === null) return errorResult('Template not found.');
-    safeBroadcast(tripId, 'packing:template-applied', { items });
+    this.guards.safeBroadcast(tripId, 'packing:template-applied', { items });
     return ok({ items, count: items.length });
   }
 
@@ -353,9 +355,9 @@ export class PackingMcp {
   async savePackingTemplate({ tripId, templateName }: { tripId: number; templateName: string }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     // Templates are global; the REST route restricts saving to admins. Match it.
-    if (!isAdminUser(ctx.userId)) return adminRequired();
+    if (!this.guards.isAdminUser(ctx.userId)) return adminRequired();
     const template = this.packing.saveAsTemplate(tripId, ctx.userId, templateName);
     if (!template) return errorResult('Nothing to save — the packing list is empty.');
     return ok({ template });
@@ -374,7 +376,7 @@ export class PackingMcp {
   async deletePackingTemplate({ templateId }: { templateId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     // Templates are global; the REST route restricts management to admins. Match it.
-    if (!isAdminUser(ctx.userId)) return adminRequired();
+    if (!this.guards.isAdminUser(ctx.userId)) return adminRequired();
     const result = this.packing.deletePackingTemplate(String(templateId));
     if ('error' in result) return errorResult(result.error);
     return ok({ success: true, name: result.name });
@@ -404,9 +406,9 @@ export class PackingMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.packing.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const created = this.packing.bulkImport(tripId, items, ctx.userId);
-    for (const item of created) safeBroadcast(tripId, 'packing:created', { item });
+    for (const item of created) this.guards.safeBroadcast(tripId, 'packing:created', { item });
     return ok({ items: created, count: created.length });
   }
 

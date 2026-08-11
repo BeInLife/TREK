@@ -3,6 +3,7 @@ import {
   TOOL_ANNOTATIONS_OPEN_WORLD_NON_IDEMPOTENT, TOOL_ANNOTATIONS_OPEN_WORLD_READONLY,
   demoDenied, ok,
 } from '@trek/nest-mcp';
+import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import {
@@ -13,7 +14,7 @@ import {
   transitItinerarySchema,
   transitPlaceSchema,
 } from './transit-itinerary.helpers';
-import { hasTripPermission, noAccess, permissionDenied, safeBroadcast } from '../../mcp/tools/_shared';
+import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { RateLimitService } from '../common/rate-limit.service';
 import { DatabaseService } from '../database/database.service';
 import { DaysService } from '../days/days.service';
@@ -64,6 +65,7 @@ export class TransitMcp {
     private readonly reservations: ReservationsService,
     private readonly db: DatabaseService,
     private readonly auth: AuthService,
+    private readonly guards: McpToolGuardsService,
   ) {}
 
   @Tool({
@@ -183,7 +185,7 @@ export class TransitMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
     const day = this.days.getDay(dayId, tripId);
     if (!day) {
       return { content: [{ type: 'text' as const, text: 'dayId does not belong to this trip.' }], isError: true };
@@ -246,7 +248,7 @@ export class TransitMcp {
       endpoints,
       needs_review: false,
     });
-    safeBroadcast(tripId, 'reservation:created', { reservation });
+    this.guards.safeBroadcast(tripId, 'reservation:created', { reservation });
     this.reservations.notifyBookingChange(tripId, ctx.userId, reservation.title, reservation.type || '');
     return ok({ reservation });
   }

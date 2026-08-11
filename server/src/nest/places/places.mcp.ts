@@ -4,11 +4,12 @@ import {
   TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, ok,
 } from '@trek/nest-mcp';
+import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { JourneyDomainService } from '../journey/journey-domain.service';
-import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
+import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { DatabaseService } from '../database/database.service';
 import { MapsService } from '../maps/maps.service';
 import { PlacesService } from './places.service';
@@ -44,6 +45,7 @@ export class PlacesMcp {
     private readonly auth: AuthService,
     private readonly journey: JourneyDomainService,
     private readonly assignments: AssignmentsService,
+    private readonly guards: McpToolGuardsService,
   ) {}
 
   @Tool({
@@ -79,9 +81,9 @@ export class PlacesMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
     const place = this.places.create(String(tripId), { name, description, lat, lng, address, category_id, google_place_id, google_ftid, osm_id, notes, website, phone, price, currency });
-    safeBroadcast(tripId, 'place:created', { place });
+    this.guards.safeBroadcast(tripId, 'place:created', { place });
     return ok({ place });
   }
 
@@ -121,7 +123,7 @@ export class PlacesMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.assignments.dayExists(dayId, tripId)) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
     try {
       const result = this.db.transaction(() => {
@@ -129,8 +131,8 @@ export class PlacesMcp {
         const assignment = this.assignments.createAssignment(dayId, place.id, assignment_notes ?? null);
         return { place, assignment };
       });
-      safeBroadcast(tripId, 'place:created', { place: result.place });
-      safeBroadcast(tripId, 'assignment:created', { assignment: result.assignment });
+      this.guards.safeBroadcast(tripId, 'place:created', { place: result.place });
+      this.guards.safeBroadcast(tripId, 'assignment:created', { assignment: result.assignment });
       try { this.journey.reconcileTripSkeletons(tripId); } catch { /* non-fatal */ }
       return ok(result);
     } catch {
@@ -178,10 +180,10 @@ export class PlacesMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
     const place = this.places.update(String(tripId), String(placeId), { name, description, lat, lng, address, category_id, price, currency, place_time, end_time, duration_minutes, notes, website, phone, transport_mode, osm_id, google_place_id, google_ftid });
     if (!place) return { content: [{ type: 'text' as const, text: 'Place not found.' }], isError: true };
-    safeBroadcast(tripId, 'place:updated', { place });
+    this.guards.safeBroadcast(tripId, 'place:updated', { place });
     return ok({ place });
   }
 
@@ -205,7 +207,7 @@ export class PlacesMcp {
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
     const place = this.places.rate(String(tripId), String(placeId), ctx.userId, rating ?? null);
     if (!place) return { content: [{ type: 'text' as const, text: 'Place not found.' }], isError: true };
-    safeBroadcast(tripId, 'place:updated', { place });
+    this.guards.safeBroadcast(tripId, 'place:updated', { place });
     return ok({ place });
   }
 
@@ -222,7 +224,7 @@ export class PlacesMcp {
   async deletePlace({ tripId, placeId }: { tripId: number; placeId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
     // Scope the id to the trip before the hook: onPlaceDeleted keys on the place
     // id alone, so a foreign id would detach that trip's journey entries even
     // though the delete below refuses it.
@@ -232,7 +234,7 @@ export class PlacesMcp {
     try { this.journey.onPlaceDeleted(placeId); } catch { /* non-fatal */ } // sync journeys before the row is gone
     const deleted = this.places.remove(String(tripId), String(placeId));
     if (!deleted) return { content: [{ type: 'text' as const, text: 'Place not found.' }], isError: true };
-    safeBroadcast(tripId, 'place:deleted', { placeId });
+    this.guards.safeBroadcast(tripId, 'place:deleted', { placeId });
     return ok({ success: true });
   }
 
@@ -301,7 +303,7 @@ export class PlacesMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
 
     const result = source === 'google-list'
       ? await this.places.importGoogleList(String(tripId), url)
@@ -312,7 +314,7 @@ export class PlacesMcp {
     }
 
     for (const place of result.places) {
-      safeBroadcast(tripId, 'place:created', { place });
+      this.guards.safeBroadcast(tripId, 'place:created', { place });
     }
     return ok({ places: result.places, count: result.places.length, listName: result.listName, skipped: result.skipped });
   }
@@ -330,7 +332,7 @@ export class PlacesMcp {
   async bulkDeletePlaces({ tripId, placeIds }: { tripId: number; placeIds: number[] }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
 
     // Trip-scoped, and ahead of the DELETE: journey_entries.source_place_id is
     // ON DELETE SET NULL, so a hook that ran afterwards found nothing left to
@@ -339,7 +341,7 @@ export class PlacesMcp {
       try { this.journey.onPlaceDeleted(id); } catch { /* non-fatal */ }
     }
     const deleted = this.places.removeMany(String(tripId), placeIds);
-    for (const id of deleted) safeBroadcast(tripId, 'place:deleted', { placeId: id });
+    for (const id of deleted) this.guards.safeBroadcast(tripId, 'place:deleted', { placeId: id });
     return ok({ deleted, count: deleted.length });
   }
 
@@ -375,7 +377,7 @@ export class PlacesMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.db.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('place_edit', tripId, ctx.userId)) return permissionDenied();
 
     const fields = { category_id, price, currency, transport_mode, place_time, end_time, duration_minutes, notes, website, phone, description };
     if (Object.values(fields).every(v => v === undefined)) {
@@ -383,7 +385,7 @@ export class PlacesMcp {
     }
 
     const updated = this.places.updateMany(String(tripId), placeIds, fields);
-    for (const place of updated) safeBroadcast(tripId, 'place:updated', { place });
+    for (const place of updated) this.guards.safeBroadcast(tripId, 'place:updated', { place });
     return ok({ count: updated.length, updatedIds: updated.map(p => p.id), skipped: placeIds.length - updated.length });
   }
 

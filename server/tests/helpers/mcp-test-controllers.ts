@@ -51,6 +51,7 @@ import { TripsService } from '../../src/nest/trips/trips.service';
 import { VacayMcp } from '../../src/nest/vacay/vacay.mcp';
 import { VacayService } from '../../src/nest/vacay/vacay.service';
 import { RealtimeService } from '../../src/nest/realtime/realtime.service';
+import { McpToolGuardsService } from '../../src/nest/mcp-shared/mcp-tool-guards.service';
 import { QueryHelpersService } from '../../src/nest/query-helpers/query-helpers.service';
 import { JourneyMcp } from '../../src/nest/journey/journey.mcp';
 import { JourneyDomainService } from '../../src/nest/journey/journey-domain.service';
@@ -90,6 +91,7 @@ export function createMcpTestRegistry(): McpRegistry {
   // old shape, so `membership` and `webauthn` held the wrong objects and
   // userCleanup/mailer/tokens were undefined.
   const realtimeService = new RealtimeService();
+  const guards = new McpToolGuardsService(dbService, permissionsService, realtimeService);
   const exchangeRatesService = new ExchangeRatesService();
   const budgetService = new BudgetService(dbService, permissionsService, exchangeRatesService, realtimeService);
   const authService = new AuthService(
@@ -155,23 +157,23 @@ export function createMcpTestRegistry(): McpRegistry {
       new WeatherMcp(new WeatherService()),
       new AirportsMcp(),
       new AuthMcp(),
-      new TodoMcp(todoService, authService, addonsService),
-      new PackingMcp(packingService, authService, addonsService),
-      new BudgetMcp(budgetService, exchangeRatesService, dbService, new RuntimeEnvService(), new TripMembershipService(dbService), addonsService),
-      new ReservationsMcp(reservationsService, daysService, budgetService, authService, assignmentsService),
-      new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService), authService),
-      new DaysMcp(daysService, authService),
-      new AccommodationsMcp(accommodationsService, dbService, placesService, authService),
-      new AssignmentsMcp(assignmentsService, daysService, authService),
-      new CollabMcp(collabService, authService, addonsService),
+      new TodoMcp(todoService, authService, addonsService, guards),
+      new PackingMcp(packingService, authService, addonsService, guards),
+      new BudgetMcp(budgetService, exchangeRatesService, dbService, new RuntimeEnvService(), new TripMembershipService(dbService), addonsService, guards),
+      new ReservationsMcp(reservationsService, daysService, budgetService, authService, assignmentsService, guards),
+      new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService), authService, guards),
+      new DaysMcp(daysService, authService, guards),
+      new AccommodationsMcp(accommodationsService, dbService, placesService, authService, guards),
+      new AssignmentsMcp(assignmentsService, daysService, authService, guards),
+      new CollabMcp(collabService, authService, addonsService, guards),
       new VacayMcp(new VacayService(dbService, realtimeService, notificationsStub()), authService, addonsService),
-      new TripsMcp(tripsService, todoService, collabService, authService, calendarService, membersService, readModelService, addonsService),
+      new TripsMcp(tripsService, todoService, collabService, authService, calendarService, membersService, readModelService, addonsService, guards),
       new TripPromptsMcp(tripsService, readModelService, packingService, addonsService),
-      new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService, queryHelpersService, placePhotoCache), authService),
+      new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService, queryHelpersService, placePhotoCache), authService, guards),
       new MapsMcp(mapsService),
-      new PlacesMcp(placesService, mapsService, dbService, authService, journeyDomain, assignmentsService),
+      new PlacesMcp(placesService, mapsService, dbService, authService, journeyDomain, assignmentsService, guards),
       new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService, notificationsStub()), dbService, authService, addonsService),
-      new TransitMcp(new TransitService(), daysService, reservationsService, dbService, authService),
+      new TransitMcp(new TransitService(), daysService, reservationsService, dbService, authService, guards),
       new AtlasMcp(new AtlasService(dbService), addonsService, authService),
       new JourneyMcp(journeyDomain, new JourneyShareService(dbService, journeyDomain), addonsService, authService),
       new NotificationsMcp(makeNotificationsService(dbService, realtimeService), authService),

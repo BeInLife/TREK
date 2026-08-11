@@ -3,10 +3,11 @@ import {
   TOOL_ANNOTATIONS_WRITE, TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, errorResult, ok,
 } from '@trek/nest-mcp';
+import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { BudgetService } from '../budget/budget.service';
-import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
+import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { ReservationsService } from './reservations.service';
 import { DaysService } from '../days/days.service';
 import { findByIata } from '../airports/airports.data';
@@ -91,6 +92,7 @@ export class ReservationsMcp {
     // Appended, not inserted: the hand-wired MCP harnesses build this
     // positionally.
     private readonly assignments: AssignmentsService,
+    private readonly guards: McpToolGuardsService,
   ) {}
 
   @Tool({
@@ -128,7 +130,7 @@ export class ReservationsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
 
     // Validate that all referenced IDs belong to this trip
     if (day_id && !this.days.getDay(day_id, tripId))
@@ -156,7 +158,7 @@ export class ReservationsMcp {
     });
 
     if (accommodationCreated) {
-      safeBroadcast(tripId, 'accommodation:created', {});
+      this.guards.safeBroadcast(tripId, 'accommodation:created', {});
     }
 
     if (price != null && price > 0) {
@@ -165,10 +167,10 @@ export class ReservationsMcp {
         category: budget_category || type,
         total_price: price,
       });
-      safeBroadcast(tripId, 'budget:created', { item });
+      this.guards.safeBroadcast(tripId, 'budget:created', { item });
     }
 
-    safeBroadcast(tripId, 'reservation:created', { reservation });
+    this.guards.safeBroadcast(tripId, 'reservation:created', { reservation });
     return ok({ reservation });
   }
 
@@ -202,7 +204,7 @@ export class ReservationsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
     const existing = this.reservations.getReservation(reservationId, tripId);
     if (!existing) return errorResult('Reservation not found.');
 
@@ -216,7 +218,7 @@ export class ReservationsMcp {
       place_id: place_id !== undefined ? place_id ?? undefined : undefined,
       assignment_id: assignment_id !== undefined ? assignment_id ?? undefined : undefined,
     }, existing);
-    safeBroadcast(tripId, 'reservation:updated', { reservation });
+    this.guards.safeBroadcast(tripId, 'reservation:updated', { reservation });
     return ok({ reservation });
   }
 
@@ -233,13 +235,13 @@ export class ReservationsMcp {
   async deleteReservation({ tripId, reservationId }: { tripId: number; reservationId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
     const { deleted, accommodationDeleted } = this.reservations.remove(reservationId, tripId);
     if (!deleted) return errorResult('Reservation not found.');
     if (accommodationDeleted) {
-      safeBroadcast(tripId, 'accommodation:deleted', { accommodationId: deleted.accommodation_id });
+      this.guards.safeBroadcast(tripId, 'accommodation:deleted', { accommodationId: deleted.accommodation_id });
     }
-    safeBroadcast(tripId, 'reservation:deleted', { reservationId });
+    this.guards.safeBroadcast(tripId, 'reservation:deleted', { reservationId });
     return ok({ success: true });
   }
 
@@ -263,9 +265,9 @@ export class ReservationsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
     this.reservations.updatePositions(tripId, positions, dayId);
-    safeBroadcast(tripId, 'reservation:positions', { positions, dayId });
+    this.guards.safeBroadcast(tripId, 'reservation:positions', { positions, dayId });
     return ok({ success: true });
   }
 
@@ -293,7 +295,7 @@ export class ReservationsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
     const current = this.reservations.getReservation(reservationId, tripId);
     if (!current) return errorResult('Reservation not found.');
     if (current.type !== 'hotel') return errorResult('Reservation is not of type hotel.');
@@ -313,8 +315,8 @@ export class ReservationsMcp {
       create_accommodation: { place_id, start_day_id, end_day_id, check_in: check_in || undefined, check_out: check_out || undefined },
     }, current);
 
-    safeBroadcast(tripId, isNewAccommodation ? 'accommodation:created' : 'accommodation:updated', {});
-    safeBroadcast(tripId, 'reservation:updated', { reservation });
+    this.guards.safeBroadcast(tripId, isNewAccommodation ? 'accommodation:created' : 'accommodation:updated', {});
+    this.guards.safeBroadcast(tripId, 'reservation:updated', { reservation });
     return ok({ reservation, accommodation_id: reservation?.accommodation_id ?? null });
   }
 
@@ -392,7 +394,7 @@ export class ReservationsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
 
     if (start_day_id && !this.days.getDay(start_day_id, tripId))
       return errorResult('start_day_id does not belong to this trip.');
@@ -427,10 +429,10 @@ export class ReservationsMcp {
         category: budget_category || type,
         total_price: price,
       });
-      safeBroadcast(tripId, 'budget:created', { item });
+      this.guards.safeBroadcast(tripId, 'budget:created', { item });
     }
 
-    safeBroadcast(tripId, 'reservation:created', { reservation });
+    this.guards.safeBroadcast(tripId, 'reservation:created', { reservation });
     return ok({ reservation });
   }
 
@@ -467,7 +469,7 @@ export class ReservationsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
 
     const existing = this.reservations.getReservation(reservationId, tripId);
     if (!existing) return errorResult('Transport not found.');
@@ -503,7 +505,7 @@ export class ReservationsMcp {
       endpoints: resolvedEndpoints,
       needs_review,
     }, existing);
-    safeBroadcast(tripId, 'reservation:updated', { reservation });
+    this.guards.safeBroadcast(tripId, 'reservation:updated', { reservation });
     return ok({ reservation });
   }
 
@@ -520,10 +522,10 @@ export class ReservationsMcp {
   async deleteTransport({ tripId, reservationId }: { tripId: number; reservationId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.reservations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('reservation_edit', tripId, ctx.userId)) return permissionDenied();
     const { deleted } = this.reservations.remove(reservationId, tripId);
     if (!deleted) return errorResult('Transport not found.');
-    safeBroadcast(tripId, 'reservation:deleted', { reservationId });
+    this.guards.safeBroadcast(tripId, 'reservation:deleted', { reservationId });
     return ok({ success: true });
   }
 }

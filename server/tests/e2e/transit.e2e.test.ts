@@ -21,9 +21,6 @@ const { db } = vi.hoisted(() => {
   return { db: tmp };
 });
 vi.mock('../../src/db/database', () => ({ db, closeDb: () => {}, reinitialize: () => {} }));
-// TransitMcp (in the module graph, never invoked here) reaches _shared →
-// src/websocket at import time — silence the real ws module.
-vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 
 import { TransitModule } from '../../src/nest/transit/transit.module';
 import { TransitService } from '../../src/nest/transit/transit.service';

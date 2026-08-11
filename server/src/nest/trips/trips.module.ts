@@ -26,11 +26,12 @@ import { AccommodationsModule } from '../accommodations/accommodations.module';
 import { TripMembersModule } from '../trip-members/trip-members.module';
 import { TripReadModelModule } from '../trip-read-model/trip-read-model.module';
 import { AddonsModule } from '../addons/addons.module';
+import { McpSharedModule } from '../mcp-shared/mcp-shared.module';
 
 /** Trips aggregate root (C1 — Phase 3). Uses exact strangler prefixes so it does
  *  not capture the nested sub-domain mounts (collab, files, ...). */
 @Module({
-  imports: [TodoModule, PackingModule, FilesModule, ReservationsModule, DaysModule, PermissionsModule, AuditModule, BudgetModule, CollabModule, VacayModule, PlacesModule, AuthModule, AppConfigModule, UnsplashModule, RealtimeModule, PluginGuardsModule, AddonsModule, TripMembershipModule, CalendarModule, AccommodationsModule, TripMembersModule, TripReadModelModule],
+  imports: [McpSharedModule, TodoModule, PackingModule, FilesModule, ReservationsModule, DaysModule, PermissionsModule, AuditModule, BudgetModule, CollabModule, VacayModule, PlacesModule, AuthModule, AppConfigModule, UnsplashModule, RealtimeModule, PluginGuardsModule, AddonsModule, TripMembershipModule, CalendarModule, AccommodationsModule, TripMembersModule, TripReadModelModule],
   controllers: [TripsController],
   providers: [TripsService, TripsMcp, TripPromptsMcp, TripsRpc],
   // Exported for FeedsModule (ICS feeds) and PluginsModule (RPC host injection).

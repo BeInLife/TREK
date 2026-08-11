@@ -9,6 +9,7 @@ import { PermissionsModule } from '../permissions/permissions.module';
 import { QueryHelpersModule } from '../query-helpers/query-helpers.module';
 import { PlacesModule } from '../places/places.module';
 import { AuthModule } from '../auth/auth.module';
+import { McpSharedModule } from '../mcp-shared/mcp-shared.module';
 
 /**
  * Days (S6 — Phase 2 trip sub-domain), mounted at /api/trips/:tripId/days.
@@ -20,7 +21,7 @@ import { AuthModule } from '../auth/auth.module';
  * own domain now (day-notes/).
  */
 @Module({
-  imports: [PermissionsModule, QueryHelpersModule, PlacesModule, AuthModule, RealtimeModule, PluginGuardsModule],
+  imports: [McpSharedModule, PermissionsModule, QueryHelpersModule, PlacesModule, AuthModule, RealtimeModule, PluginGuardsModule],
   controllers: [DaysController],
   providers: [DaysService, DaysMcp, DaysRpc],
   exports: [DaysService],

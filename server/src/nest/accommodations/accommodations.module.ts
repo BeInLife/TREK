@@ -9,6 +9,7 @@ import { DatabaseModule } from '../database/database.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PluginGuardsModule } from '../plugins/host/plugin-guards.module';
+import { McpSharedModule } from '../mcp-shared/mcp-shared.module';
 
 /**
  * Accommodations. One fachlichkeit, one module: the routes used to sit in
@@ -21,7 +22,7 @@ import { PluginGuardsModule } from '../plugins/host/plugin-guards.module';
  * the same reason DaysMcp could drop it.
  */
 @Module({
-  imports: [PermissionsModule, RealtimeModule, PluginGuardsModule, DatabaseModule, PlacesModule, AuthModule],
+  imports: [McpSharedModule, PermissionsModule, RealtimeModule, PluginGuardsModule, DatabaseModule, PlacesModule, AuthModule],
   controllers: [AccommodationsController],
   providers: [AccommodationsService, AccommodationsRpc, AccommodationsMcp],
   exports: [AccommodationsService],

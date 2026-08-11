@@ -14,6 +14,7 @@ import { UpcomingReservationsController } from './upcoming-reservations.controll
 import { AuthModule } from '../auth/auth.module';
 import { AssignmentsModule } from '../assignments/assignments.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { McpSharedModule } from '../mcp-shared/mcp-shared.module';
 
 /**
  * Reservations + accommodations domain (S5 — Phase 2 trip sub-domain).
@@ -24,7 +25,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 @Module({
   // DaysModule: ReservationsMcp injects DaysService for its nine getDay calls.
   // BudgetModule: ReservationsService + ReservationsMcp inject BudgetService (budget-sync seam).
-  imports: [NotificationsModule, DaysModule, AssignmentsModule, PermissionsModule, BudgetModule, AuthModule, RealtimeModule, PluginGuardsModule, ReservationsReadModule, AirtrailCoreModule],
+  imports: [McpSharedModule, NotificationsModule, DaysModule, AssignmentsModule, PermissionsModule, BudgetModule, AuthModule, RealtimeModule, PluginGuardsModule, ReservationsReadModule, AirtrailCoreModule],
   controllers: [ReservationsController, UpcomingReservationsController],
   providers: [ReservationsService, ReservationsMcp, ReservationsRpc],
   // For in-container consumers (ReservationsRpc, TripsService, BookingImportService).

@@ -4,10 +4,11 @@ import {
   TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, errorResult, ok,
 } from '@trek/nest-mcp';
+import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { ADDON_IDS } from '../../addons';
-import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
+import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { CollabService } from './collab.service';
 import { collabFeatureGate } from '../addons/addon-gate';
 import { AddonsService } from '../addons/addons.service';
@@ -64,6 +65,7 @@ export class CollabMcp {
     private readonly collab: CollabService,
     private readonly auth: AuthService,
     readonly addons: AddonsService,
+    private readonly guards: McpToolGuardsService,
   ) {}
 
   // --- COLLAB NOTES ---
@@ -91,9 +93,9 @@ export class CollabMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const note = this.collab.createNote(tripId, ctx.userId, { title, content, category, color, pinned });
-    safeBroadcast(tripId, 'collab:note:created', { note });
+    this.guards.safeBroadcast(tripId, 'collab:note:created', { note });
     return ok({ note });
   }
 
@@ -121,10 +123,10 @@ export class CollabMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const note = this.collab.updateNote(tripId, noteId, { title, content, category, color, pinned });
     if (!note) return errorResult('Note not found.');
-    safeBroadcast(tripId, 'collab:note:updated', { note });
+    this.guards.safeBroadcast(tripId, 'collab:note:updated', { note });
     return ok({ note });
   }
 
@@ -142,10 +144,10 @@ export class CollabMcp {
   async deleteCollabNote({ tripId, noteId }: { tripId: number; noteId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const deleted = this.collab.deleteNote(tripId, noteId);
     if (!deleted) return errorResult('Note not found.');
-    safeBroadcast(tripId, 'collab:note:deleted', { noteId });
+    this.guards.safeBroadcast(tripId, 'collab:note:deleted', { noteId });
     return ok({ success: true });
   }
 
@@ -189,9 +191,9 @@ export class CollabMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const poll = this.collab.createPoll(tripId, ctx.userId, { question, options, multiple, deadline });
-    safeBroadcast(tripId, 'collab:poll:created', { poll });
+    this.guards.safeBroadcast(tripId, 'collab:poll:created', { poll });
     return ok({ poll });
   }
 
@@ -210,10 +212,10 @@ export class CollabMcp {
   async voteCollabPoll({ tripId, pollId, optionIndex }: { tripId: number; pollId: number; optionIndex: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const result = this.collab.votePoll(tripId, pollId, ctx.userId, optionIndex);
     if (result.error) return errorResult(result.error);
-    safeBroadcast(tripId, 'collab:poll:voted', { poll: result.poll });
+    this.guards.safeBroadcast(tripId, 'collab:poll:voted', { poll: result.poll });
     return ok({ poll: result.poll });
   }
 
@@ -231,10 +233,10 @@ export class CollabMcp {
   async closeCollabPoll({ tripId, pollId }: { tripId: number; pollId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const poll = this.collab.closePoll(tripId, pollId);
     if (!poll) return errorResult('Poll not found.');
-    safeBroadcast(tripId, 'collab:poll:closed', { poll });
+    this.guards.safeBroadcast(tripId, 'collab:poll:closed', { poll });
     return ok({ poll });
   }
 
@@ -252,10 +254,10 @@ export class CollabMcp {
   async deleteCollabPoll({ tripId, pollId }: { tripId: number; pollId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const deleted = this.collab.deletePoll(tripId, pollId);
     if (!deleted) return errorResult('Poll not found.');
-    safeBroadcast(tripId, 'collab:poll:deleted', { pollId });
+    this.guards.safeBroadcast(tripId, 'collab:poll:deleted', { pollId });
     return ok({ success: true });
   }
 
@@ -291,10 +293,10 @@ export class CollabMcp {
   async sendCollabMessage({ tripId, text, replyTo }: { tripId: number; text: string; replyTo?: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const result = this.collab.createMessage(tripId, ctx.userId, text, replyTo ?? null);
     if (result.error) return errorResult(result.error);
-    safeBroadcast(tripId, 'collab:message:created', { message: result.message });
+    this.guards.safeBroadcast(tripId, 'collab:message:created', { message: result.message });
     return ok({ message: result.message });
   }
 
@@ -312,10 +314,10 @@ export class CollabMcp {
   async deleteCollabMessage({ tripId, messageId }: { tripId: number; messageId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const result = this.collab.deleteMessage(tripId, messageId, ctx.userId);
     if (result.error) return errorResult(result.error);
-    safeBroadcast(tripId, 'collab:message:deleted', { messageId, username: result.username });
+    this.guards.safeBroadcast(tripId, 'collab:message:deleted', { messageId, username: result.username });
     return ok({ success: true });
   }
 
@@ -334,10 +336,10 @@ export class CollabMcp {
   async reactCollabMessage({ tripId, messageId, emoji }: { tripId: number; messageId: number; emoji: string }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.collab.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('collab_edit', tripId, ctx.userId)) return permissionDenied();
     const result = this.collab.reactMessage(messageId, tripId, ctx.userId, emoji);
     if (!result.found) return errorResult('Message not found.');
-    safeBroadcast(tripId, 'collab:message:reacted', { messageId, reactions: result.reactions });
+    this.guards.safeBroadcast(tripId, 'collab:message:reacted', { messageId, reactions: result.reactions });
     return ok({ reactions: result.reactions });
   }
 

@@ -8,11 +8,12 @@ import { RealtimeModule } from '../realtime/realtime.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { AuthModule } from '../auth/auth.module';
 import { AddonsModule } from '../addons/addons.module';
+import { McpSharedModule } from '../mcp-shared/mcp-shared.module';
 
 /** To-do domain (S3 — Phase 2 trip sub-domain). Registered in AppModule.
  *  Exports TodoService for in-container consumers (TripsService bundle). */
 @Module({
-  imports: [PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule, AddonsModule],
+  imports: [McpSharedModule, PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule, AddonsModule],
   controllers: [TodoController],
   providers: [TodoService, TodoMcp, TodoRpc],
   exports: [TodoService],

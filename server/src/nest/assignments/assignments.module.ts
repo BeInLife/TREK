@@ -8,6 +8,7 @@ import { PluginGuardsModule } from '../plugins/host/plugin-guards.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { AssignmentsMcp } from './assignments.mcp';
 import { AuthModule } from '../auth/auth.module';
+import { McpSharedModule } from '../mcp-shared/mcp-shared.module';
 
 /**
  * Assignments domain (S7 — Phase 2 trip sub-domain). The day-assignments mount
@@ -20,7 +21,7 @@ import { AuthModule } from '../auth/auth.module';
 @Module({
   // DaysModule: AssignmentsMcp injects DaysService for the target-day checks.
   // PermissionsModule: the controllers' TripAccessGuard injects PermissionsService.
-  imports: [AssignmentsDomainModule, DaysModule, PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule],
+  imports: [McpSharedModule, AssignmentsDomainModule, DaysModule, PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule],
   controllers: [DayAssignmentsController, AssignmentOpsController],
   providers: [AssignmentsMcp, ItineraryRpc],
   exports: [AssignmentsDomainModule],

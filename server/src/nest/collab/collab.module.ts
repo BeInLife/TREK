@@ -9,9 +9,10 @@ import { PermissionsModule } from '../permissions/permissions.module';
 import { AuthModule } from '../auth/auth.module';
 import { AddonsModule } from '../addons/addons.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { McpSharedModule } from '../mcp-shared/mcp-shared.module';
 
 @Module({
-  imports: [NotificationsModule, PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule, AddonsModule],
+  imports: [McpSharedModule, NotificationsModule, PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule, AddonsModule],
   controllers: [CollabController],
   providers: [CollabService, CollabMcp, CollabRpc],
   // For in-container consumers (CollabRpc).

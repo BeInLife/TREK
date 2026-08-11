@@ -14,6 +14,7 @@ import { PlacePhotosModule } from '../place-photos/place-photos.module';
 import { QueryHelpersModule } from '../query-helpers/query-helpers.module';
 import { MapsModule } from '../maps/maps.module';
 import { AuthModule } from '../auth/auth.module';
+import { McpSharedModule } from '../mcp-shared/mcp-shared.module';
 
 /**
  * Places domain (S8 — Phase 2 trip sub-domain). Depends on L4 Categories + L5
@@ -24,7 +25,7 @@ import { AuthModule } from '../auth/auth.module';
  * is no places.bridge.ts: nothing outside the container consumes this domain.
  */
 @Module({
-  imports: [PermissionsModule, QueryHelpersModule, MapsModule, AuthModule, AppConfigModule, UnsplashModule, PlacePhotosModule, JourneyDomainModule, RealtimeModule, PluginGuardsModule, AssignmentsDomainModule],
+  imports: [McpSharedModule, PermissionsModule, QueryHelpersModule, MapsModule, AuthModule, AppConfigModule, UnsplashModule, PlacePhotosModule, JourneyDomainModule, RealtimeModule, PluginGuardsModule, AssignmentsDomainModule],
   controllers: [PlacesController],
   providers: [PlacesService, PlacesMcp, PlacesRpc],
   exports: [PlacesService],

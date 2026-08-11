@@ -4,10 +4,11 @@ import {
   TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, errorResult, ok,
 } from '@trek/nest-mcp';
+import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { ADDON_IDS } from '../../addons';
-import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
+import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { TodoService } from './todo.service';
 import { addonGate } from '../addons/addon-gate';
 import { AddonsService } from '../addons/addons.service';
@@ -35,6 +36,7 @@ export class TodoMcp {
     private readonly todos: TodoService,
     private readonly auth: AuthService,
     readonly addons: AddonsService,
+    private readonly guards: McpToolGuardsService,
   ) {}
 
   @Tool({
@@ -77,9 +79,9 @@ export class TodoMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.todos.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const item = this.todos.createItem(tripId, { name, category, due_date, description, assigned_user_id, priority });
-    safeBroadcast(tripId, 'todo:created', { item });
+    this.guards.safeBroadcast(tripId, 'todo:created', { item });
     return ok({ item });
   }
 
@@ -108,7 +110,7 @@ export class TodoMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.todos.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     // Build bodyKeys to signal which nullable fields were explicitly provided
     const bodyKeys: string[] = [];
     if (due_date !== undefined) bodyKeys.push('due_date');
@@ -117,7 +119,7 @@ export class TodoMcp {
     if (priority !== undefined) bodyKeys.push('priority');
     const item = this.todos.updateItem(tripId, itemId, { name, category, due_date, description, assigned_user_id, priority }, bodyKeys);
     if (!item) return errorResult('To-do item not found.');
-    safeBroadcast(tripId, 'todo:updated', { item });
+    this.guards.safeBroadcast(tripId, 'todo:updated', { item });
     return ok({ item });
   }
 
@@ -136,10 +138,10 @@ export class TodoMcp {
   async toggleTodo({ tripId, itemId, checked }: { tripId: number; itemId: number; checked: boolean }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.todos.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const item = this.todos.updateItem(tripId, itemId, { checked: checked ? 1 : 0 }, []);
     if (!item) return errorResult('To-do item not found.');
-    safeBroadcast(tripId, 'todo:updated', { item });
+    this.guards.safeBroadcast(tripId, 'todo:updated', { item });
     return ok({ item });
   }
 
@@ -157,10 +159,10 @@ export class TodoMcp {
   async deleteTodo({ tripId, itemId }: { tripId: number; itemId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.todos.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const deleted = this.todos.deleteItem(tripId, itemId);
     if (!deleted) return errorResult('To-do item not found.');
-    safeBroadcast(tripId, 'todo:deleted', { itemId });
+    this.guards.safeBroadcast(tripId, 'todo:deleted', { itemId });
     return ok({ success: true });
   }
 
@@ -178,7 +180,7 @@ export class TodoMcp {
   async reorderTodos({ tripId, orderedIds }: { tripId: number; orderedIds: number[] }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.todos.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     this.todos.reorderItems(tripId, orderedIds);
     return ok({ success: true });
   }
@@ -214,9 +216,9 @@ export class TodoMcp {
   async setTodoCategoryAssignees({ tripId, categoryName, userIds }: { tripId: number; categoryName: string; userIds: number[] }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.todos.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('packing_edit', tripId, ctx.userId)) return permissionDenied();
     const assignees = this.todos.updateCategoryAssignees(tripId, categoryName, userIds);
-    safeBroadcast(tripId, 'todo:assignees', { category: categoryName, assignees });
+    this.guards.safeBroadcast(tripId, 'todo:assignees', { category: categoryName, assignees });
     return ok({ assignees });
   }
 

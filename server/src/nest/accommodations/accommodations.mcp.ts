@@ -3,10 +3,11 @@ import {
   TOOL_ANNOTATIONS_WRITE, TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, ok,
 } from '@trek/nest-mcp';
+import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { PlacesService } from '../places/places.service';
-import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
+import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { DatabaseService } from '../database/database.service';
 import { AccommodationsService } from './accommodations.service';
 
@@ -32,6 +33,7 @@ export class AccommodationsMcp {
     private readonly db: DatabaseService,
     private readonly places: PlacesService,
     private readonly auth: AuthService,
+    private readonly guards: McpToolGuardsService,
   ) {}
 
   @Tool({
@@ -60,11 +62,11 @@ export class AccommodationsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.accommodations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     const errors = this.accommodations.validateAccommodationRefs(tripId, place_id, start_day_id, end_day_id);
     if (errors.length > 0) return { content: [{ type: 'text' as const, text: errors.map(e => e.message).join(', ') }], isError: true };
     const accommodation = this.accommodations.createAccommodation(tripId, { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes });
-    safeBroadcast(tripId, 'accommodation:created', { accommodation });
+    this.guards.safeBroadcast(tripId, 'accommodation:created', { accommodation });
     return ok({ accommodation });
   }
 
@@ -110,7 +112,7 @@ export class AccommodationsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.accommodations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     const dayErrors = this.accommodations.validateAccommodationRefs(tripId, undefined, start_day_id, end_day_id);
     if (dayErrors.length > 0) return { content: [{ type: 'text' as const, text: dayErrors.map(e => e.message).join(', ') }], isError: true };
     try {
@@ -119,8 +121,8 @@ export class AccommodationsMcp {
         const accommodation = this.accommodations.createAccommodation(tripId, { place_id: place.id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes: accommodation_notes });
         return { place, accommodation };
       });
-      safeBroadcast(tripId, 'place:created', { place: result.place });
-      safeBroadcast(tripId, 'accommodation:created', { accommodation: result.accommodation });
+      this.guards.safeBroadcast(tripId, 'place:created', { place: result.place });
+      this.guards.safeBroadcast(tripId, 'accommodation:created', { accommodation: result.accommodation });
       return ok(result);
     } catch {
       return { content: [{ type: 'text' as const, text: 'Failed to create place and accommodation.' }], isError: true };
@@ -154,11 +156,11 @@ export class AccommodationsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.accommodations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     const existing = this.accommodations.getAccommodation(accommodationId, tripId);
     if (!existing) return { content: [{ type: 'text' as const, text: 'Accommodation not found.' }], isError: true };
     const accommodation = this.accommodations.updateAccommodation(accommodationId, existing, { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes });
-    safeBroadcast(tripId, 'accommodation:updated', { accommodation });
+    this.guards.safeBroadcast(tripId, 'accommodation:updated', { accommodation });
     return ok({ accommodation });
   }
 
@@ -175,10 +177,10 @@ export class AccommodationsMcp {
   async deleteAccommodation({ tripId, accommodationId }: { tripId: number; accommodationId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.accommodations.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.accommodations.getAccommodation(accommodationId, tripId)) return { content: [{ type: 'text' as const, text: 'Accommodation not found.' }], isError: true };
     const { linkedReservationId } = this.accommodations.deleteAccommodation(accommodationId);
-    safeBroadcast(tripId, 'accommodation:deleted', { id: accommodationId, linkedReservationId });
+    this.guards.safeBroadcast(tripId, 'accommodation:deleted', { id: accommodationId, linkedReservationId });
     return ok({ success: true, linkedReservationId });
   }
 

@@ -3,9 +3,10 @@ import {
   TOOL_ANNOTATIONS_WRITE, TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, ok,
 } from '@trek/nest-mcp';
+import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
-import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
+import { noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { DaysService } from './days.service';
 
 function parseId(value: string | string[]): number | null {
@@ -30,6 +31,7 @@ export class DaysMcp {
   constructor(
     private readonly days: DaysService,
     private readonly auth: AuthService,
+    private readonly guards: McpToolGuardsService,
   ) {}
 
   @Tool({
@@ -49,11 +51,11 @@ export class DaysMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.days.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     const current = this.days.getDay(dayId, tripId);
     if (!current) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
     const updated = this.days.update(dayId, current, { title });
-    safeBroadcast(tripId, 'day:updated', { day: updated });
+    this.guards.safeBroadcast(tripId, 'day:updated', { day: updated });
     return ok({ day: updated });
   }
 
@@ -74,9 +76,9 @@ export class DaysMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.days.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     const day = this.days.create(tripId, date, notes);
-    safeBroadcast(tripId, 'day:created', { day });
+    this.guards.safeBroadcast(tripId, 'day:created', { day });
     return ok({ day });
   }
 
@@ -93,12 +95,12 @@ export class DaysMcp {
   async deleteDay({ tripId, dayId }: { tripId: number; dayId: number }, ctx: McpContext) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.days.verifyTripAccess(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('day_edit', tripId, ctx.userId)) return permissionDenied();
     if (!this.days.getDay(dayId, tripId)) return { content: [{ type: 'text' as const, text: 'Day not found.' }], isError: true };
     this.days.remove(dayId);
     // REST parity shape ({ dayId }) — the client reads payload.dayId, so the { id }
     // variant never removed the day from collaborator screens.
-    safeBroadcast(tripId, 'day:deleted', { dayId });
+    this.guards.safeBroadcast(tripId, 'day:deleted', { dayId });
     return ok({ success: true });
   }
 

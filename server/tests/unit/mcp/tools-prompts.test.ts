@@ -76,6 +76,7 @@ import { AuthMcp } from '../../../src/nest/auth/auth.mcp';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
+import { McpToolGuardsService } from '../../../src/nest/mcp-shared/mcp-tool-guards.service';
 import type { AuthService } from '../../../src/nest/auth/auth.service';
 import type { TripsService } from '../../../src/nest/trips/trips.service';
 import type { TodoService } from '../../../src/nest/todo/todo.service';
@@ -94,6 +95,7 @@ const tripsStub = {
 const readModelStub = {
   getTripSummary: (tripId: number, viewerUserId?: number) => mockGetTripSummary(tripId, viewerUserId),
 } as never;
+const promptGuards = new McpToolGuardsService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new RealtimeService());
 const tripsMcp = new TripsMcp(
   tripsStub,
   { listItems: () => [] } as unknown as TodoService,
@@ -103,6 +105,7 @@ const tripsMcp = new TripsMcp(
   undefined as never,
   readModelStub,
   addonsStub,
+  promptGuards,
 );
 
 // The three remaining prompts moved to their domains' @McpController classes:
@@ -111,7 +114,7 @@ const tripsMcp = new TripsMcp(
 const promptDbs = () => new DatabaseService(testDb);
 const authStub = { isDemoUser: () => false } as unknown as AuthService;
 const promptPackingService = new PackingService(promptDbs(), new PermissionsService(promptDbs()), new RealtimeService(), notificationsStub());
-const packingMcp = new PackingMcp(promptPackingService, authStub, addonsStub);
+const packingMcp = new PackingMcp(promptPackingService, authStub, addonsStub, promptGuards);
 const budgetMcp = new BudgetMcp(
   new BudgetService(promptDbs(), new PermissionsService(promptDbs()), new ExchangeRatesService(), new RealtimeService()),
   new ExchangeRatesService(),
@@ -119,6 +122,7 @@ const budgetMcp = new BudgetMcp(
   new RuntimeEnvService(),
   new TripMembershipService(promptDbs()),
   addonsStub,
+  promptGuards,
 );
 // The packing-list / budget-overview prompts live here since the trips.bridge
 // fold; the summary rides the same readModelStub the trip-summary prompt uses.

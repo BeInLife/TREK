@@ -4,13 +4,14 @@ import {
   TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, ok,
 } from '@trek/nest-mcp';
+import { McpToolGuardsService } from '../mcp-shared/mcp-tool-guards.service';
 import { z } from 'zod';
 import { AuthService } from '../auth/auth.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { TripMembersService } from '../trip-members/trip-members.service';
 import { TripReadModelService } from '../trip-read-model/trip-read-model.service';
 import { ADDON_IDS } from '../../addons';
-import { safeBroadcast, MAX_MCP_TRIP_DAYS, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
+import { MAX_MCP_TRIP_DAYS, noAccess, permissionDenied } from '../../mcp/tools/_shared';
 import { canRead, canReadTrips, canDeleteTrips } from '../../mcp/scopes';
 import { TripsService, NotFoundError, ValidationError } from './trips.service';
 import { TodoService } from '../todo/todo.service';
@@ -72,6 +73,7 @@ export class TripsMcp {
     private readonly members: TripMembersService,
     private readonly readModel: TripReadModelService,
     private readonly addons: AddonsService,
+    private readonly guards: McpToolGuardsService,
   ) {}
 
   // --- TRIPS ---
@@ -140,7 +142,7 @@ export class TripsMcp {
   ) {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.trips.canAccessTrip(tripId, ctx.userId)) return noAccess();
-    if (!hasTripPermission('trip_edit', tripId, ctx.userId)) return permissionDenied();
+    if (!this.guards.hasTripPermission('trip_edit', tripId, ctx.userId)) return permissionDenied();
     if (start_date) {
       const d = new Date(start_date + 'T00:00:00Z');
       if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== start_date)
@@ -154,7 +156,7 @@ export class TripsMcp {
     // update() re-anchors the budget before the trip row moves off the old
     // currency (#1543) and then runs the legacy updateTrip core.
     const { updatedTrip } = await this.trips.update(tripId, ctx.userId, { title, description, start_date, end_date, currency, is_archived, cover_image, date_shift_mode }, 'user');
-    safeBroadcast(tripId, 'trip:updated', { trip: updatedTrip });
+    this.guards.safeBroadcast(tripId, 'trip:updated', { trip: updatedTrip });
     return ok({ trip: updatedTrip });
   }
 
@@ -302,7 +304,7 @@ export class TripsMcp {
       return { content: [{ type: 'text' as const, text: 'Only the trip owner can add members.' }], isError: true };
     try {
       const result = this.members.addMember(tripId, identifier, ownerRow.user_id, ctx.userId);
-      safeBroadcast(tripId, 'member:added', { member: result.member });
+      this.guards.safeBroadcast(tripId, 'member:added', { member: result.member });
       return ok({ member: result.member });
     } catch (err) {
       const msg = err instanceof ValidationError || err instanceof NotFoundError ? err.message : 'Failed to add member.';
@@ -327,7 +329,7 @@ export class TripsMcp {
     if (!ownerRow || ownerRow.user_id !== ctx.userId)
       return { content: [{ type: 'text' as const, text: 'Only the trip owner can remove members.' }], isError: true };
     this.members.removeMember(tripId, memberId);
-    safeBroadcast(tripId, 'member:removed', { userId: memberId });
+    this.guards.safeBroadcast(tripId, 'member:removed', { userId: memberId });
     return ok({ success: true });
   }
 
