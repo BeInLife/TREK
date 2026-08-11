@@ -1,5 +1,5 @@
 import {
-  McpController, Prompt, Tool, ResourceTemplate, type McpContext,
+  McpController, Tool, ResourceTemplate, type McpContext,
   TOOL_ANNOTATIONS_READONLY, TOOL_ANNOTATIONS_WRITE,
   TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   demoDenied, errorResult, ok,
@@ -9,7 +9,7 @@ import { RuntimeEnvService } from '../app-config/runtime-env.service';
 import { isDemoUserId } from '../common/demo-write';
 import { ADDON_IDS } from '../../addons';
 import { safeBroadcast, noAccess, hasTripPermission, permissionDenied } from '../../mcp/tools/_shared';
-import { getTripOwner, listMembers, getTripSummary } from '../trips/trips.bridge';
+import { TripMembershipService } from '../trip-membership/trip-membership.service';
 import { DatabaseService } from '../database/database.service';
 import { BudgetService } from './budget.service';
 import { ExchangeRatesService } from './exchange-rates.service';
@@ -28,20 +28,6 @@ const payersSchema = z.array(z.object({
 function parseId(value: string | string[]): number | null {
   const n = Number(Array.isArray(value) ? value[0] : value);
   return Number.isInteger(n) && n > 0 ? n : null;
-}
-
-/**
- * Resolve the equal-split participants for a new budget item. When member_ids is
- * omitted, default to the whole trip (owner + all members), deduped — reproducing
- * the client's own create flow (CostsPanel seeds participants from all members).
- * An explicit empty array means "planning-only, no split" and is passed through.
- */
-function resolveMemberIds(tripId: number, member_ids?: number[]): number[] | undefined {
-  if (member_ids !== undefined) return member_ids;
-  const owner = getTripOwner(tripId);
-  if (!owner) return undefined;
-  const { members } = listMembers(tripId, owner.user_id);
-  return Array.from(new Set([owner.user_id, ...members.map(m => m.id)]));
 }
 
 /**
@@ -71,12 +57,28 @@ export class BudgetMcp {
     private readonly exchangeRates: ExchangeRatesService,
     private readonly db: DatabaseService,
     private readonly env: RuntimeEnvService,
+    private readonly membership: TripMembershipService,
     readonly addons: AddonsService,
   ) {}
 
   /** The AuthService.isDemoUser check without the auth graph (demo-write.ts). */
   private isDemoUser(userId: number): boolean {
     return isDemoUserId(this.env, this.db, userId);
+  }
+
+  /**
+   * Resolve the equal-split participants for a new budget item. When member_ids
+   * is omitted, default to the whole trip (owner + all members), deduped —
+   * reproducing the client's own create flow (CostsPanel seeds participants
+   * from all members). An explicit empty array means "planning-only, no split"
+   * and is passed through. Reads ride the leaf TripMembershipService — the
+   * hydrated member services all live in modules that import this one.
+   */
+  private resolveMemberIds(tripId: number, member_ids?: number[]): number[] | undefined {
+    if (member_ids !== undefined) return member_ids;
+    const ownerId = this.membership.getOwnerId(tripId);
+    if (ownerId === null) return undefined;
+    return Array.from(new Set([ownerId, ...this.membership.listMemberUserIds(tripId)]));
   }
 
   // --- BUDGET ---
@@ -109,7 +111,7 @@ export class BudgetMcp {
     if (this.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.budget.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('budget_edit', tripId, ctx.userId)) return permissionDenied();
-    const members = resolveMemberIds(tripId, member_ids);
+    const members = this.resolveMemberIds(tripId, member_ids);
     const itemData = { category, name, total_price, currency, member_ids: members, payers, expense_date, note };
     // Freeze the live FX rate at entry time so a settled position isn't re-opened
     // when live rates drift (#1445) — same as the REST create path.
@@ -206,7 +208,7 @@ export class BudgetMcp {
     if (!this.budget.verifyTripAccess(tripId, ctx.userId)) return noAccess();
     if (!hasTripPermission('budget_edit', tripId, ctx.userId)) return permissionDenied();
     // Omitted userIds → default to the whole trip, matching create_budget_item.
-    const members = (userIds && userIds.length > 0) ? userIds : resolveMemberIds(tripId, undefined);
+    const members = (userIds && userIds.length > 0) ? userIds : this.resolveMemberIds(tripId, undefined);
     try {
       const item = this.db.transaction(() => {
         const created = this.budget.createBudgetItem(tripId, { category, name, total_price, note, member_ids: members });
@@ -475,46 +477,7 @@ export class BudgetMcp {
     };
   }
 
-  /**
-   * Moved 1:1 from the legacy registrar src/mcp/tools/prompts.ts. The
-   * registration-time `if (isAddonEnabled(BUDGET))` became the same `when` gate
-   * the tools above use, and the trip lookup keeps going through trips.bridge —
-   * injecting TripsService here would close a TripsModule/BudgetModule cycle.
-   */
-  @Prompt({
-    name: 'budget-overview',
-    title: 'Budget Overview',
-    description: 'Get a formatted budget summary for a trip',
-    argsSchema: {
-      tripId: z.number().int().positive().describe('Trip ID'),
-    },
-    when: budgetAddonOn,
-  })
-  async budgetOverviewPrompt({ tripId }: { tripId: number }, ctx: McpContext) {
-    if (!this.budget.verifyTripAccess(tripId, ctx.userId)) {
-      return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'Trip not found or access denied.' } }] };
-    }
-    const summary = getTripSummary(tripId, ctx.userId);
-    if (!summary) {
-      return { messages: [{ role: 'user' as const, content: { type: 'text' as const, text: 'Trip not found.' } }] };
-    }
-    const { trip, budget } = summary;
-    const currency = trip?.currency || 'EUR';
-    const byCategory = (budget?.items || []).reduce((acc: Record<string, number>, item: { category?: string; total_price?: number }) => {
-      const cat = item.category || 'Uncategorized';
-      acc[cat] = (acc[cat] || 0) + (item.total_price || 0);
-      return acc;
-    }, {} as Record<string, number>);
-    const total = Object.values(byCategory).reduce((sum, v) => sum + v, 0);
-    const lines = Object.entries(byCategory)
-      .sort(([, a], [, b]) => b - a)
-      .map(([cat, amount]) => `- ${cat}: ${amount} ${currency}`)
-      .join('\n');
-    const memberCount = Math.max(1, [summary.members?.owner, ...(summary.members?.collaborators || [])].filter(Boolean).length);
-    const perPerson = (total / memberCount).toFixed(2);
-    return {
-      description: `Budget overview for "${trip?.title || tripId}"`,
-      messages: [{ role: 'user' as const, content: { type: 'text' as const, text: `# Budget: ${trip?.title || 'Trip'}\n\n**Total: ${total} ${currency}** (${perPerson} ${currency} per person)\n\n${lines || 'No expenses recorded.'}` } }],
-    };
-  }
+  // The budget-overview prompt moved to trips/trip-prompts.mcp.ts: it reads the
+  // whole-trip summary, and the read model lives above this module (the fold
+  // that deleted trips.bridge).
 }

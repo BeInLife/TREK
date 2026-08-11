@@ -54,12 +54,8 @@ const addonsStub = {
 const { mockGetTripSummary } = vi.hoisted(() => ({
   mockGetTripSummary: vi.fn(),
 }));
-// prompts.ts consumes getTripSummary via the trips bridge since the trip fold.
-vi.mock('../../../src/nest/trips/trips.bridge', () => ({
-  getTripSummary: mockGetTripSummary,
-  getTripOwner: vi.fn(),
-  listMembers: vi.fn(() => ({ members: [] })),
-}));
+// The prompts read the summary through the injected read model (readModelStub
+// below wraps the same controllable mock) — trips.bridge is deleted.
 
 import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
@@ -68,6 +64,8 @@ import { createUser, createTrip, addTripMember, createPackingItem, createBudgetI
 import { createTestRegistry } from '@trek/nest-mcp';
 import { trekMcpAccessPolicy, trekMcpValidateAccess } from '../../../src/mcp/nest-mcp-policy';
 import { TripsMcp } from '../../../src/nest/trips/trips.mcp';
+import { TripPromptsMcp } from '../../../src/nest/trips/trip-prompts.mcp';
+import { TripMembershipService } from '../../../src/nest/trip-membership/trip-membership.service';
 import { PackingMcp } from '../../../src/nest/packing/packing.mcp';
 import { PackingService } from '../../../src/nest/packing/packing.service';
 import { BudgetMcp } from '../../../src/nest/budget/budget.mcp';
@@ -112,18 +110,19 @@ const tripsMcp = new TripsMcp(
 // in-memory DB so the cases below keep asserting real rows.
 const promptDbs = () => new DatabaseService(testDb);
 const authStub = { isDemoUser: () => false } as unknown as AuthService;
-const packingMcp = new PackingMcp(
-  new PackingService(promptDbs(), new PermissionsService(promptDbs()), new RealtimeService(), notificationsStub()),
-  authStub,
-  addonsStub,
-);
+const promptPackingService = new PackingService(promptDbs(), new PermissionsService(promptDbs()), new RealtimeService(), notificationsStub());
+const packingMcp = new PackingMcp(promptPackingService, authStub, addonsStub);
 const budgetMcp = new BudgetMcp(
   new BudgetService(promptDbs(), new PermissionsService(promptDbs()), new ExchangeRatesService(), new RealtimeService()),
   new ExchangeRatesService(),
   promptDbs(),
   new RuntimeEnvService(),
+  new TripMembershipService(promptDbs()),
   addonsStub,
 );
+// The packing-list / budget-overview prompts live here since the trips.bridge
+// fold; the summary rides the same readModelStub the trip-summary prompt uses.
+const tripPromptsMcp = new TripPromptsMcp(tripsStub, readModelStub, promptPackingService, addonsStub);
 const authMcp = new AuthMcp();
 
 beforeAll(() => {
@@ -177,7 +176,7 @@ function buildServer(userId: number, opts: { isStaticToken?: boolean } = {}): Mc
   const server = new McpServer({ name: 'trek-test', version: '1.0.0' });
   // Every prompt is DI-discovered now; attach them the way registerTools does in
   // production, including the isStaticToken flag the notice's `when` gate reads.
-  createTestRegistry([tripsMcp, packingMcp, budgetMcp, authMcp], { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess })
+  createTestRegistry([tripsMcp, tripPromptsMcp, packingMcp, budgetMcp, authMcp], { accessPolicy: trekMcpAccessPolicy, validateAccess: trekMcpValidateAccess })
     .attach(server, { userId, scopes: null, isStaticToken: opts.isStaticToken ?? false });
   return server;
 }

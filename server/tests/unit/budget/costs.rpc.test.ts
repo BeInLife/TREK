@@ -17,12 +17,9 @@ import type { RealtimeService } from '../../../src/nest/realtime/realtime.servic
 import type { DatabaseService } from '../../../src/nest/database/database.service';
 import type { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import type { TripMembershipService } from '../../../src/nest/trip-membership/trip-membership.service';
 import type { RpcRequest, RpcError } from '../../../src/nest/plugins/protocol/envelope';
 import { makeDeps } from '../../helpers/rpc-host-deps';
-
-vi.mock('../../../src/nest/trips/trips.bridge', () => ({
-  listTripsForUser: vi.fn(() => [{ id: 1 }, { id: 2 }]),
-}));
 
 const req = (method: string, params: Record<string, unknown> = {}): RpcRequest => ({ k: 'req', id: 'x', method, params });
 
@@ -44,7 +41,9 @@ function build(opts: { addonOn?: boolean; canEdit?: boolean; missing?: boolean }
     { checkPermission: vi.fn(() => opts.canEdit ?? true) } as unknown as PermissionsService,
     { isAddonEnabled: vi.fn(() => opts.addonOn ?? true) } as unknown as AddonsService,
   );
-  const rpc = new CostsRpc(budget, db, realtime, guards);
+  // The leaf membership read replaced the deleted trips.bridge for listMine.
+  const membership = { listAccessibleTripIds: vi.fn(() => [1, 2]) } as unknown as TripMembershipService;
+  const rpc = new CostsRpc(budget, db, realtime, guards, membership);
   const host = (...grants: string[]) =>
     new PluginRpcHost('p', new Set(grants.length ? grants : ['db:read:costs', 'db:write:costs']), makeDeps(), createTestPluginRegistry([rpc]));
   return { budget, realtime, host };

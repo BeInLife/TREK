@@ -26,8 +26,6 @@ import type { AddonsService } from '../../../src/nest/addons/addons.service';
 import type { RpcRequest, RpcError } from '../../../src/nest/plugins/protocol/envelope';
 import { makeDeps } from '../../helpers/rpc-host-deps';
 
-vi.mock('../../../src/nest/trips/trips.bridge', () => ({ listTripsForUser: vi.fn(() => [{ id: 1 }]) }));
-
 const req = (method: string, params: Record<string, unknown> = {}): RpcRequest => ({ k: 'req', id: 'x', method, params });
 
 /** Records every service call, so "the service was never touched" is checkable. */
@@ -67,7 +65,7 @@ function build(addonOn: boolean) {
     new VacayRpc(spyService(calls, 'vacay'), guards),
     new JournalRpc(spyService(calls, 'journey'), guards),
     new CollectionsRpc(spyService(calls, 'collections'), guards),
-    new CostsRpc(spyService(calls, 'budget'), db, { broadcast: vi.fn() } as never, guards),
+    new CostsRpc(spyService(calls, 'budget'), db, { broadcast: vi.fn() } as never, guards, spyService(calls, 'membership')),
   ]);
   const granted = new Set([
     'db:read:collab', 'db:write:collab', 'db:read:journal', 'db:write:journal',

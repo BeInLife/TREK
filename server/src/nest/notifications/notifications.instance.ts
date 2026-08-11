@@ -9,8 +9,8 @@ import { NotificationsService } from './notifications.service';
 
 /**
  * The out-of-container NotificationsService, for the bridges that hand-build
- * their collaborators (trips.bridge and airtrail.bridge — the permanent
- * cycle-dodges; this file lives exactly as long as either does). The reminder
+ * their collaborators (airtrail.bridge is the last one — trips.bridge died
+ * 2026-08-11; this file lives exactly as long as it does). The reminder
  * crons that used to reach it through a dedicated send bridge inject the
  * container singleton now (ReminderJobsService); that bridge is gone.
  *

@@ -83,7 +83,7 @@ const KML_FIXTURE = path.join(__dirname, '../../fixtures/test.kml');
 const dbs = new DatabaseService(testDb);
 
 /**
- * Same collaborator set the container hands PlacesService (see trips.bridge.ts),
+ * Same collaborator set the container hands PlacesService,
  * built once here so the two construction sites cannot drift apart again. The
  * journey domain is a real instance on the same in-memory DB rather than a stub:
  * its place hooks are fire-and-forget behind a catch, so a missing one would have

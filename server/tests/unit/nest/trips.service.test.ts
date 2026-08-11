@@ -2,8 +2,8 @@
  * Unit tests for the DI-native TripsService — TRIP-SVC-001 through TRIP-SVC-058
  * (001–038 moved 1:1 from the legacy tests/unit/services/tripService.test.ts;
  * the exportICS cases that duplicated the generateDays 010–012 numbering were
- * renumbered to 024–026 with the post-fold quirk-fix commit; 040–041 pin the
- * trips.bridge delegation; 042–050 cover the folded
+ * renumbered to 024–026 with the post-fold quirk-fix commit; 040–041 pinned
+ * the deleted trips.bridge and died with it; 042–050 cover the folded
  * summary/list/create/delete/copy SQL; 051–053 pin the post-fold quirk fixes
  * (transactional deletes, owner display_name)). Uses a real in-memory SQLite
  * DB so SQL logic is exercised faithfully.
@@ -78,7 +78,6 @@ import { PlacePhotoCacheService } from '../../../src/nest/place-photos/place-pho
 import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.service';
 import { TrekPhotosRepository } from '../../../src/nest/photos/trek-photos.repository';
 import { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
-import { getTripOwner, listMembers as bridgeListMembers } from '../../../src/nest/trips/trips.bridge';
 import { QueryHelpersService } from '../../../src/nest/query-helpers/query-helpers.service';
 import fs from 'fs';
 import { notificationsStub } from '../../helpers/notifications';
@@ -89,7 +88,7 @@ import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.se
 const dbs = () => new DatabaseService(testDb);
 const budgetSvc = new BudgetService(dbs(), new PermissionsService(dbs()), new ExchangeRatesService(), new RealtimeService());
 const daysSvc = new DaysService(dbs(), new PermissionsService(dbs()), new RealtimeService(), new QueryHelpersService(dbs()));
-// Same collaborator set the container hands PlacesService (see trips.bridge.ts).
+// Same collaborator set the container hands PlacesService (see places.service.test.ts).
 // Only the read-model aggregation reaches into places here, but the photo cache,
 // Unsplash and journey domain are real instances over the same in-memory DB
 // rather than casts: the place hooks are fire-and-forget behind a catch, so a
@@ -638,27 +637,6 @@ describe('guest members (#1362)', () => {
     expect(() => membersSvc.addMember(trip.id, 'Dora', owner.id, owner.id)).toThrow('User not found');
     // Ownership can never be handed to a guest.
     expect(() => membersSvc.transferOwnership(trip.id, member.id, owner.id)).toThrow('Cannot transfer ownership to a guest');
-  });
-});
-
-// ── trips.bridge delegation (coverage gate) ───────────────────────────────────
-
-describe('trips.bridge delegation', () => {
-  it('TRIP-SVC-040: getTripOwner delegates 1:1', () => {
-    const { user } = createUser(testDb);
-    const trip = createTrip(testDb, user.id);
-    expect(getTripOwner(trip.id)).toEqual({ user_id: user.id });
-    expect(getTripOwner(99999)).toBeUndefined();
-  });
-
-  it('TRIP-SVC-041: listMembers delegates 1:1', () => {
-    const { user: owner } = createUser(testDb);
-    const { user: member } = createUser(testDb);
-    const trip = createTrip(testDb, owner.id);
-    addTripMember(testDb, trip.id, member.id);
-    const result = bridgeListMembers(trip.id, owner.id);
-    expect(result.owner.id).toBe(owner.id);
-    expect(result.members.map(m => m.id)).toEqual([member.id]);
   });
 });
 

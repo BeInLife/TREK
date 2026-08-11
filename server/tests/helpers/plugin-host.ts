@@ -125,7 +125,7 @@ export function createPluginRpcHostFactory(dbs: DatabaseService): PluginRpcHostF
     new AccommodationsRpc(accommodations, realtime, guards),
     new ItineraryRpc(assignments, realtime, guards),
     new TripsRpc(trips, reservations, days, membership, dbs, realtime, guards, accommodations, members),
-    new CostsRpc(budget, dbs, realtime, guards),
+    new CostsRpc(budget, dbs, realtime, guards, membership),
     new ReservationsRpc(reservations, realtime, guards),
     new CollabRpc(collab, realtime, guards),
     new AtlasRpc(atlas, guards),

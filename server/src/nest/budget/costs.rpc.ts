@@ -6,7 +6,7 @@ import { num, schemaMessage } from '../plugins/host/rpc-params';
 import type { PluginRpcContext } from '../plugins/host/rpc-kit/types';
 import { RealtimeService } from '../realtime/realtime.service';
 import { DatabaseService } from '../database/database.service';
-import { listTripsForUser } from '../trips/trips.bridge';
+import { TripMembershipService } from '../trip-membership/trip-membership.service';
 import { ADDON_IDS } from '../../addons';
 import { BudgetService } from './budget.service';
 
@@ -33,6 +33,7 @@ export class CostsRpc {
     private readonly db: DatabaseService,
     private readonly realtime: RealtimeService,
     private readonly guards: PluginGuards,
+    private readonly membership: TripMembershipService,
   ) {}
 
   @PluginMethod('costs.getByTrip', { permission: 'db:read:costs' })
@@ -49,9 +50,11 @@ export class CostsRpc {
     // the same way tripRead refuses one.
     if (ctx.actingUserId === undefined) throw new ForbiddenResource('cost reads require an authenticated user context');
     this.requireBudgetAddon();
-    // Through the bridge, not by injection: see the note on listTripsForUser.
-    const trips = listTripsForUser(ctx.actingUserId);
-    return trips.flatMap((t) => this.budget.listBudgetItems(t.id));
+    // The leaf membership read, not TripsService.list: TripsModule imports this
+    // one, so injecting TripsService here would close a cycle. Same id set,
+    // same newest-first order.
+    const tripIds = this.membership.listAccessibleTripIds(ctx.actingUserId);
+    return tripIds.flatMap((id) => this.budget.listBudgetItems(id));
   }
 
   @PluginMethod('costs.create', { permission: 'db:write:costs' })

@@ -9,6 +9,7 @@ import { PluginGuardsModule } from '../plugins/host/plugin-guards.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { AppConfigModule } from '../app-config/app-config.module';
+import { TripMembershipModule } from '../trip-membership/trip-membership.module';
 import { AddonsModule } from '../addons/addons.module';
 
 /** Budget domain (S4 — Phase 2 trip sub-domain). Registered in AppModule.
@@ -19,7 +20,7 @@ import { AddonsModule } from '../addons/addons.module';
  *  AppConfigModule is @Global in the app graph; the explicit import keeps the
  *  partial e2e TestingModules resolving RuntimeEnvService. */
 @Module({
-  imports: [PermissionsModule, AppConfigModule, RealtimeModule, PluginGuardsModule, AddonsModule],
+  imports: [PermissionsModule, AppConfigModule, RealtimeModule, PluginGuardsModule, AddonsModule, TripMembershipModule],
   controllers: [BudgetController],
   providers: [BudgetService, ExchangeRatesService, BudgetMcp, ExchangeRatesRpc, CostsRpc],
   // For in-container consumers (CostsRpc, TripsService,

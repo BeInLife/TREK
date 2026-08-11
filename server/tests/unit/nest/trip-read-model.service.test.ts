@@ -80,7 +80,7 @@ import { TrekPhotosRepository } from '../../../src/nest/photos/trek-photos.repos
 const dbs = () => new DatabaseService(testDb);
 const budgetSvc = new BudgetService(dbs(), new PermissionsService(dbs()), new ExchangeRatesService(), new RealtimeService());
 const daysSvc = new DaysService(dbs(), new PermissionsService(dbs()), new RealtimeService(), new QueryHelpersService(dbs()));
-// One shared cache instance, as in trips.bridge.ts: the in-flight dedup in
+// One shared cache instance (the PlacePhotoCacheService rule): the in-flight dedup in
 // PlacePhotoCacheService only works while both consumers hold the same object.
 const photoCache = new PlacePhotoCacheService(dbs(), new RuntimeEnvService());
 const placesSvc = new PlacesService(

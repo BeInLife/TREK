@@ -65,6 +65,7 @@ import { AccommodationsService } from '../../src/nest/accommodations/accommodati
 import { AccommodationsMcp } from '../../src/nest/accommodations/accommodations.mcp';
 import { TripMembersService } from '../../src/nest/trip-members/trip-members.service';
 import { TripReadModelService } from '../../src/nest/trip-read-model/trip-read-model.service';
+import { TripPromptsMcp } from '../../src/nest/trips/trip-prompts.mcp';
 import { PlacePhotoCacheService } from '../../src/nest/place-photos/place-photo-cache.service';
 import { RuntimeEnvService } from '../../src/nest/app-config/runtime-env.service';
 import { makeNotificationsService, makeNotificationPreferencesService } from './notifications';
@@ -156,7 +157,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new AuthMcp(),
       new TodoMcp(todoService, authService, addonsService),
       new PackingMcp(packingService, authService, addonsService),
-      new BudgetMcp(budgetService, exchangeRatesService, dbService, new RuntimeEnvService(), addonsService),
+      new BudgetMcp(budgetService, exchangeRatesService, dbService, new RuntimeEnvService(), new TripMembershipService(dbService), addonsService),
       new ReservationsMcp(reservationsService, daysService, budgetService, authService, assignmentsService),
       new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService), authService),
       new DaysMcp(daysService, authService),
@@ -165,6 +166,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new CollabMcp(collabService, authService, addonsService),
       new VacayMcp(new VacayService(dbService, realtimeService, notificationsStub()), authService, addonsService),
       new TripsMcp(tripsService, todoService, collabService, authService, calendarService, membersService, readModelService, addonsService),
+      new TripPromptsMcp(tripsService, readModelService, packingService, addonsService),
       new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService, queryHelpersService, placePhotoCache), authService),
       new MapsMcp(mapsService),
       new PlacesMcp(placesService, mapsService, dbService, authService, journeyDomain),

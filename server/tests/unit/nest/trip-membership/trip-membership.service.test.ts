@@ -68,3 +68,42 @@ describe('joinTripAsMember', () => {
     expect(r.joined).toBe(false);
   });
 });
+
+// The leaf reads that replaced trips.bridge for BudgetMcp/CostsRpc — see the
+// service docblock for why they live on this dependency-free module.
+describe('leaf membership reads', () => {
+  const svc = () => new TripMembershipService(new DatabaseService(testDb));
+
+  it('TRIP-READ-001: getOwnerId answers the owner and null for a missing trip', () => {
+    const { user: owner } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+    expect(svc().getOwnerId(trip.id)).toBe(owner.id);
+    expect(svc().getOwnerId(999999)).toBeNull();
+  });
+
+  it('TRIP-READ-002: listMemberUserIds excludes the owner and follows added_at order', () => {
+    const { user: owner } = createUser(testDb);
+    const { user: m1 } = createUser(testDb);
+    const { user: m2 } = createUser(testDb);
+    const trip = createTrip(testDb, owner.id);
+    testDb.prepare("INSERT INTO trip_members (trip_id, user_id, added_at) VALUES (?, ?, '2026-01-02')").run(trip.id, m2.id);
+    testDb.prepare("INSERT INTO trip_members (trip_id, user_id, added_at) VALUES (?, ?, '2026-01-01')").run(trip.id, m1.id);
+    expect(svc().listMemberUserIds(trip.id)).toEqual([m1.id, m2.id]);
+    expect(svc().listMemberUserIds(999999)).toEqual([]);
+  });
+
+  it('TRIP-READ-003: listAccessibleTripIds unions owned and member trips, newest first', () => {
+    const { user } = createUser(testDb);
+    const { user: other } = createUser(testDb);
+    const owned = createTrip(testDb, user.id);
+    const memberOf = createTrip(testDb, other.id);
+    const foreign = createTrip(testDb, other.id);
+    testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(memberOf.id, user.id);
+    // Distinct created_at so the ORDER BY is actually asserted, not assumed.
+    testDb.prepare("UPDATE trips SET created_at = '2026-01-01' WHERE id = ?").run(owned.id);
+    testDb.prepare("UPDATE trips SET created_at = '2026-01-02' WHERE id = ?").run(memberOf.id);
+    const ids = svc().listAccessibleTripIds(user.id);
+    expect(ids).toEqual([memberOf.id, owned.id]);
+    expect(ids).not.toContain(foreign.id);
+  });
+});
