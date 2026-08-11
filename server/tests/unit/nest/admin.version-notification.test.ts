@@ -53,6 +53,8 @@ import { AuthService } from '../../../src/nest/auth/auth.service';
 import { PasskeyService } from '../../../src/nest/auth/passkey.service';
 import { PackingService } from '../../../src/nest/packing/packing.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
+import { BudgetService } from '../../../src/nest/budget/budget.service';
+import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { NotificationsService } from '../../../src/nest/notifications/notifications.service';
 import { AdminService } from '../../../src/nest/admin/admin.service';
 import { makeNotificationsService, makeNotificationPreferencesService } from '../../helpers/notifications';
@@ -62,7 +64,7 @@ const dbs = new DatabaseService(testDb);
 const realtime = new RealtimeService();
 const permissions = new PermissionsService(dbs);
 const webauthn = new WebauthnConfigService(dbs);
-const userCleanup = new UserCleanupService(dbs);
+const userCleanup = new UserCleanupService(dbs, new BudgetService(dbs, permissions, new ExchangeRatesService(), realtime));
 // Positional and previously wrong: an AtlasService sat in the membership slot
 // and the mailer was missing entirely, so `auth` was built with its last four
 // collaborators shifted by one. Nothing failed, because the version-check path

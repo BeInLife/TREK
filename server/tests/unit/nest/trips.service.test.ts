@@ -120,7 +120,7 @@ const svc = new TripsService(
   new RealtimeService(),
   undefined as never, // unsplash — not exercised here
 );
-const membersSvc = new TripMembersService(dbs(), budgetSvc, new UserCleanupService(dbs()), new PermissionsService(dbs()), new RealtimeService(), notificationsStub());
+const membersSvc = new TripMembersService(dbs(), budgetSvc, new UserCleanupService(dbs(), budgetSvc), new PermissionsService(dbs()), new RealtimeService(), notificationsStub());
 const readModelSvc = new TripReadModelService(
   dbs(), membersSvc, daysSvc, accommodationsSvc, budgetSvc,
   new PackingService(dbs(), new PermissionsService(dbs()), new RealtimeService(), notificationsStub()),
@@ -953,7 +953,7 @@ describe('quirk fixes', () => {
   /** Same frozen connection, for the guest deletion that now lives on the roster. */
   function failingMembers(match: string) {
     return new TripMembersService(
-      failingConnection(match), budgetSvc, new UserCleanupService(dbs()),
+      failingConnection(match), budgetSvc, new UserCleanupService(dbs(), budgetSvc),
       new PermissionsService(dbs()), new RealtimeService(),
       notificationsStub(),
     );

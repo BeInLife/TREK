@@ -87,20 +87,20 @@ export function createMcpTestRegistry(): McpRegistry {
   // dropped and four collaborators took its place, but this call site kept the
   // old shape, so `membership` and `webauthn` held the wrong objects and
   // userCleanup/mailer/tokens were undefined.
+  const realtimeService = new RealtimeService();
+  const exchangeRatesService = new ExchangeRatesService();
+  const budgetService = new BudgetService(dbService, permissionsService, exchangeRatesService, realtimeService);
   const authService = new AuthService(
     dbService,
     permissionsService,
     new TripMembershipService(dbService),
     new WebauthnConfigService(dbService),
-    new UserCleanupService(dbService),
+    new UserCleanupService(dbService, budgetService),
     new MailerService(dbService),
     new EphemeralTokenService(),
   );
-  const realtimeService = new RealtimeService();
   const queryHelpersService = new QueryHelpersService(dbService);
   const daysService = new DaysService(dbService, permissionsService, realtimeService, queryHelpersService);
-  const exchangeRatesService = new ExchangeRatesService();
-  const budgetService = new BudgetService(dbService, permissionsService, exchangeRatesService, realtimeService);
   const todoService = new TodoService(dbService, permissionsService, realtimeService);
   const packingService = new PackingService(dbService, permissionsService, realtimeService, notificationsStub());
   const collabService = new CollabService(dbService, permissionsService, realtimeService, notificationsStub());
@@ -121,7 +121,7 @@ export function createMcpTestRegistry(): McpRegistry {
   );
   const reservationsService = new ReservationsService(dbService, permissionsService, budgetService, realtimeService, notificationsStub());
   const accommodationsService = new AccommodationsService(dbService, permissionsService, realtimeService);
-  const membersService = new TripMembersService(dbService, budgetService, new UserCleanupService(dbService), permissionsService, realtimeService, notificationsStub());
+  const membersService = new TripMembersService(dbService, budgetService, new UserCleanupService(dbService, budgetService), permissionsService, realtimeService, notificationsStub());
   const tripsService = new TripsService(
     dbService,
     reservationsService,
@@ -156,7 +156,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new AuthMcp(),
       new TodoMcp(todoService, authService, addonsService),
       new PackingMcp(packingService, authService, addonsService),
-      new BudgetMcp(budgetService, exchangeRatesService, dbService, authService, addonsService),
+      new BudgetMcp(budgetService, exchangeRatesService, dbService, new RuntimeEnvService(), addonsService),
       new ReservationsMcp(reservationsService, daysService, budgetService, authService, assignmentsService),
       new DayNotesMcp(new DayNotesService(dbService, permissionsService, realtimeService), authService),
       new DaysMcp(daysService, authService),

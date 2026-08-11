@@ -72,6 +72,7 @@ import { PackingMcp } from '../../../src/nest/packing/packing.mcp';
 import { PackingService } from '../../../src/nest/packing/packing.service';
 import { BudgetMcp } from '../../../src/nest/budget/budget.mcp';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
+import { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { AuthMcp } from '../../../src/nest/auth/auth.mcp';
 import { DatabaseService } from '../../../src/nest/database/database.service';
@@ -120,7 +121,7 @@ const budgetMcp = new BudgetMcp(
   new BudgetService(promptDbs(), new PermissionsService(promptDbs()), new ExchangeRatesService(), new RealtimeService()),
   new ExchangeRatesService(),
   promptDbs(),
-  undefined as never,
+  new RuntimeEnvService(),
   addonsStub,
 );
 const authMcp = new AuthMcp();

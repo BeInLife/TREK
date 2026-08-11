@@ -12,6 +12,7 @@ import { AuthMcp } from './auth.mcp';
 import { UserCleanupService } from './user-cleanup.service';
 import { WebauthnConfigService } from './webauthn-config.service';
 import { AppConfigModule } from '../app-config/app-config.module';
+import { BudgetModule } from '../budget/budget.module';
 import { AuditModule } from '../audit/audit.module';
 import { MailerModule } from '../notifications/mailer/mailer.module';
 import { PermissionsModule } from '../permissions/permissions.module';
@@ -31,7 +32,10 @@ import { EphemeralTokenModule } from './ephemeral-token.module';
  * AtlasModule is deliberately absent. getTravelStats was the only reason for it
  * and now belongs to AtlasService; the direction is reversed, so AtlasModule
  * imports AuthModule and atlas.mcp.ts can inject AuthService instead of routing
- * through auth.bridge. AuthService is
+ * through auth.bridge. BudgetModule went the same way: it stopped importing
+ * AuthModule when BudgetMcp's demo guard moved off AuthService, so this module
+ * imports it and UserCleanupService injects BudgetService (which retired
+ * budget.bridge). AuthService is
  * exported for the in-container consumers (the domain *.mcp.ts demo guards,
  * OidcService, PasskeyEnabledGuard); PasskeyService for AdminService's passkey
  * reset; UserCleanupService for the two account-deletion paths (AdminService)
@@ -39,7 +43,7 @@ import { EphemeralTokenModule } from './ephemeral-token.module';
  * through auth.bridge.ts.
  */
 @Module({
-  imports: [EphemeralTokenModule, RateLimitModule, AuditModule, PermissionsModule, TripMembershipModule, MailerModule, AppConfigModule, TokensModule],
+  imports: [EphemeralTokenModule, RateLimitModule, AuditModule, PermissionsModule, TripMembershipModule, MailerModule, AppConfigModule, TokensModule, BudgetModule],
   controllers: [AuthPublicController, AuthController, PasskeyController],
   providers: [AuthService, UserProfileService, RegistrationInvitesService, PasskeyService, UserCleanupService, WebauthnConfigService, AuthMcp],
   exports: [AuthService, RegistrationInvitesService, PasskeyService, UserCleanupService],

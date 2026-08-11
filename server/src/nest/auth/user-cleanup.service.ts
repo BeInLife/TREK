@@ -1,15 +1,10 @@
 import fs from 'node:fs';
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-// budget.bridge, not an injected BudgetService: BudgetModule imports AuthModule
-// (BudgetMcp's demo guard), so AuthModule importing BudgetModule back would
-// close a module cycle — and breaking it the other way would drag
-// BudgetController, BudgetMcp and its trips.bridge/MCP `_shared` chain into
-// every graph that imports AuthModule, including the single-domain e2e
-// TestingModules. Same documented in-container exception as atlas.mcp.ts.
-// The bridge instance runs its SQL over the shared db Proxy, and the re-split
-// keeps no state, so the second BudgetService is behaviourally identical.
-import { removeUserFromBudgetItems } from '../budget/budget.bridge';
+// Injected since BudgetModule dropped its AuthModule import (BudgetMcp's demo
+// guard reads RuntimeEnvService + the users table now), which un-closed the
+// AuthModule -> BudgetModule cycle that used to force budget.bridge here.
+import { BudgetService } from '../budget/budget.service';
 import { pluginsDataRoot } from '../plugins/paths';
 
 /**
@@ -26,7 +21,10 @@ import { pluginsDataRoot } from '../plugins/paths';
  */
 @Injectable()
 export class UserCleanupService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly budget: BudgetService,
+  ) {}
 
   /**
    * Erase a user's PLUGIN-held data on account deletion. Two parts:
@@ -68,7 +66,7 @@ export class UserCleanupService {
   private cleanupUserReferences(userId: number): void {
     this.db.run('UPDATE trip_members SET invited_by = NULL WHERE invited_by = ?', userId);
     this.db.run('UPDATE budget_items SET paid_by_user_id = NULL WHERE paid_by_user_id = ?', userId);
-    removeUserFromBudgetItems(userId);
+    this.budget.removeUserFromBudgetItems(userId);
     this.db.run('DELETE FROM share_tokens WHERE created_by = ?', userId);
     this.db.run('DELETE FROM journey_share_tokens WHERE created_by = ?', userId);
     // Owned journeys cascade-delete their entries/contributors/share_tokens/photos via journey_id FKs

@@ -8,13 +8,18 @@ import { CostsRpc } from './costs.rpc';
 import { PluginGuardsModule } from '../plugins/host/plugin-guards.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { PermissionsModule } from '../permissions/permissions.module';
-import { AuthModule } from '../auth/auth.module';
+import { AppConfigModule } from '../app-config/app-config.module';
 import { AddonsModule } from '../addons/addons.module';
 
 /** Budget domain (S4 — Phase 2 trip sub-domain). Registered in AppModule.
- *  BudgetMcp carries the decorator-registered MCP tools + resources. */
+ *  BudgetMcp carries the decorator-registered MCP tools + resources.
+ *  AuthModule is deliberately absent (BudgetMcp's demo guard reads
+ *  RuntimeEnvService + the users table, not AuthService) — that absence is
+ *  what lets AuthModule import BudgetModule for UserCleanupService.
+ *  AppConfigModule is @Global in the app graph; the explicit import keeps the
+ *  partial e2e TestingModules resolving RuntimeEnvService. */
 @Module({
-  imports: [PermissionsModule, AuthModule, RealtimeModule, PluginGuardsModule, AddonsModule],
+  imports: [PermissionsModule, AppConfigModule, RealtimeModule, PluginGuardsModule, AddonsModule],
   controllers: [BudgetController],
   providers: [BudgetService, ExchangeRatesService, BudgetMcp, ExchangeRatesRpc, CostsRpc],
   // For in-container consumers (CostsRpc, TripsService,

@@ -52,7 +52,7 @@ import { UserCleanupService } from '../../../src/nest/auth/user-cleanup.service'
 
 const dbs = new DatabaseService(testDb);
 const budget = new BudgetService(dbs, new PermissionsService(dbs), new ExchangeRatesService(), new RealtimeService());
-const svc = new UserCleanupService(dbs);
+const svc = new UserCleanupService(dbs, budget);
 
 const installPlugin = (id: string, permissions: string[] | null) => {
   testDb.prepare('INSERT INTO plugins (id, name, version, permissions) VALUES (?, ?, ?, ?)')
@@ -146,7 +146,7 @@ describe('erasePluginUserData', () => {
     const slim = new (require('better-sqlite3'))(':memory:');
     slim.exec('CREATE TABLE users (id INTEGER PRIMARY KEY)');
     slim.prepare('INSERT INTO users (id) VALUES (1)').run();
-    const slimSvc = new UserCleanupService(new DatabaseService(slim));
+    const slimSvc = new UserCleanupService(new DatabaseService(slim), budget);
 
     expect(() => slimSvc.erasePluginUserData(1)).not.toThrow();
 
@@ -215,7 +215,7 @@ describe('deleteUserCompletely', () => {
       return realRun(sql, ...params);
     });
 
-    expect(() => new UserCleanupService(failing).deleteUserCompletely(victim.id)).toThrow('boom');
+    expect(() => new UserCleanupService(failing, budget).deleteUserCompletely(victim.id)).toThrow('boom');
 
     expect(testDb.prepare('SELECT id FROM users WHERE id = ?').get(victim.id)).toBeDefined();
     expect((testDb.prepare('SELECT invited_by FROM trip_members WHERE user_id = ?').get(owner.id) as { invited_by: number | null }).invited_by).toBe(victim.id);

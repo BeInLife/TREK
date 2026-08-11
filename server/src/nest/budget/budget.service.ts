@@ -22,10 +22,9 @@ type SettlementRow = {
  * services/budgetService.ts: identical statements, the `||` falsy-coercion
  * defaults, the COALESCE / CASE WHEN sentinel conventions on update and the
  * post-write re-selects). Trip access, the 'budget_edit' permission and the
- * WebSocket broadcast keep their legacy call paths. Non-Nest consumers (the
- * legacy tripService/userCleanupService and the legacy MCP trips/transports
- * registrars) go through budget.bridge.ts instead of importing this class
- * directly.
+ * WebSocket broadcast keep their legacy call paths. (budget.bridge.ts, the
+ * former non-Nest entry point, is deleted — its last consumer,
+ * UserCleanupService, injects this class now.)
  *
  * Quirk fixes on top of the relocated legacy behavior: every multi-statement
  * write now runs in db.transaction() ("transactions are not optional"),

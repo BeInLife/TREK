@@ -1,4 +1,5 @@
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
+import { DatabaseService } from '../database/database.service';
 import { isDemoEmail } from './demo';
 
 /** The exact 403 body the six upload endpoints have always returned. */
@@ -21,4 +22,15 @@ export const DEMO_WRITE_ERROR = {
  */
 export function isDemoWriteBlocked(env: RuntimeEnvService, email: string | null | undefined): boolean {
   return env.isDemoMode() && isDemoEmail(email);
+}
+
+/**
+ * The user-id flavour of the demo guard — the AuthService.isDemoUser body,
+ * relocated so surfaces that hold only a user id (the *.mcp.ts demo guards)
+ * don't need the whole auth graph for one check.
+ */
+export function isDemoUserId(env: RuntimeEnvService, db: DatabaseService, userId: number): boolean {
+  if (!env.isDemoMode()) return false;
+  const user = db.get<{ email: string }>('SELECT email FROM users WHERE id = ?', userId);
+  return isDemoEmail(user?.email);
 }

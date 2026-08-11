@@ -5,9 +5,9 @@
  * coverage gate. 001–012 pin the fetch/cache behavior (including the parity
  * quirks kept on purpose: `|| 'EUR'` falsy coercion, stale-cache fallback, the
  * `>1 keys` failure heuristic); 019 pins the module-scoped cache shared across
- * instances (the DI singleton and the budget.bridge instance wrap one feed —
- * originally pinned via the exchange-rates.bridge, deleted with the budget
- * fold); 021–022 pin the post-fold quirk fixes (AbortSignal timeout,
+ * instances (the DI singleton and the out-of-container bridge instances wrap
+ * one feed — originally pinned via the exchange-rates.bridge, deleted with the
+ * budget fold); 021–022 pin the post-fold quirk fixes (AbortSignal timeout,
  * response-size cap, logged failures). 013–018 and 020 covered the dead
  * convertWithRates export and were removed with it in the quirk fixes.
  *
@@ -140,12 +140,12 @@ describe('ExchangeRatesService.getRates', () => {
 });
 
 describe('cross-instance cache sharing', () => {
-  it('FX-SVC-019: a second instance (the budget.bridge shape) serves the module-scoped cache', async () => {
+  it('FX-SVC-019: a second instance (the out-of-container bridge shape) serves the module-scoped cache', async () => {
     // Prime the cache through the DI-style instance…
     const primed = await svc.getRates('AUD');
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    // …then a separately-constructed instance (as budget.bridge news up) must
-    // serve the same cached feed instead of refetching.
+    // …then a separately-constructed instance (as the trips/airtrail/auth
+    // bridges new up) must serve the same cached feed instead of refetching.
     expect(await new ExchangeRatesService().getRates('AUD')).toBe(primed);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

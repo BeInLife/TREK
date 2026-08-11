@@ -90,7 +90,7 @@ const placesSvc = new PlacesService(
   new JourneyDomainService(dbs(), new RealtimeService(), new TrekPhotosRepository(dbs())),
 );
 const accommodationsSvc = new AccommodationsService(dbs(), new PermissionsService(dbs()), new RealtimeService());
-const membersSvc = new TripMembersService(dbs(), budgetSvc, new UserCleanupService(dbs()), new PermissionsService(dbs()), new RealtimeService(), notificationsStub());
+const membersSvc = new TripMembersService(dbs(), budgetSvc, new UserCleanupService(dbs(), budgetSvc), new PermissionsService(dbs()), new RealtimeService(), notificationsStub());
 
 const buildReadModel = (database: DatabaseService, roster: TripMembersService = membersSvc) =>
   new TripReadModelService(

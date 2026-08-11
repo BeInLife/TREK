@@ -2,8 +2,8 @@
  * DB-backed unit tests for BudgetService trip-scoping (BUDGET-SVC-DB-001+).
  * Uses a real in-memory SQLite DB so the SQL WHERE clauses are exercised.
  * BUDGET-SVC-DB-001 through 014 moved 1:1 from the legacy
- * tests/unit/services/budgetServiceDb.test.ts; 015–018 pin the budget.bridge
- * delegation (the bridge instance runs over the same mocked db Proxy);
+ * tests/unit/services/budgetServiceDb.test.ts; 015–018 pinned the deleted
+ * budget.bridge's delegation and now pin the same paths on the service;
  * 019–020 pin the post-fold quirk fixes (COALESCE(display_name) on
  * settlements, transactional multi-statement writes).
  */
@@ -41,9 +41,9 @@ const { RATES } = vi.hoisted(() => ({
     EUR: { EUR: 1, USD: 1.1429, RUB: 87.63 },
   } as Record<string, Record<string, number>>,
 }));
-// Constructor-injected since the fold; the class is mocked at the module path so
-// the budget.bridge instance (which news up its own ExchangeRatesService) sees
-// the same deterministic rates as the SUT.
+// Constructor-injected since the fold; the class is mocked at the module path
+// so every separately-constructed instance sees the same deterministic rates
+// as the SUT.
 vi.mock('../../../src/nest/budget/exchange-rates.service', () => ({
   ExchangeRatesService: class {
     async getRates(base: string) {
@@ -60,7 +60,6 @@ import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
-import * as bridge from '../../../src/nest/budget/budget.bridge';
 import { UserCleanupService } from '../../../src/nest/auth/user-cleanup.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { TripMembersService } from '../../../src/nest/trip-members/trip-members.service';
@@ -89,7 +88,7 @@ const dbs = () => new DatabaseService(testDb);
 const membersSvc = new TripMembersService(
   dbs(),
   budget,
-  new UserCleanupService(dbs()),
+  new UserCleanupService(dbs(), budget),
   new PermissionsService(dbs()),
   new RealtimeService(),
   notificationsStub(),
@@ -401,12 +400,10 @@ describe('rebaseTripCurrency', () => {
   });
 });
 
-describe('budget.bridge delegation', () => {
-  // Every bridge export except removeUserFromBudgetItems has been pruned as its
-  // last outside-container consumer migrated (legacy tripService, the trips MCP
-  // registrar, services/userCleanupService, and the create_transport registrar,
-  // which moved into reservations.mcp.ts). 015-018 pin the same behavior on the
-  // service.
+describe('composite service paths (ex budget.bridge delegation)', () => {
+  // budget.bridge is deleted — UserCleanupService injects BudgetService now
+  // that BudgetModule no longer imports AuthModule. 015-018 kept their IDs and
+  // pin the same behavior directly on the service.
   it('BUDGET-SVC-DB-015: listBudgetItems returns the hydrated list', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);

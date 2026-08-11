@@ -2,6 +2,9 @@ import { db } from '../../db/database';
 import { DatabaseService } from '../database/database.service';
 import { PermissionsService } from '../permissions/permissions.service';
 import { TripMembershipService } from '../trip-membership/trip-membership.service';
+import { BudgetService } from '../budget/budget.service';
+import { ExchangeRatesService } from '../budget/exchange-rates.service';
+import { RealtimeService } from '../realtime/realtime.service';
 import { AuthService } from './auth.service';
 import { TokenService } from '../tokens/token.service';
 import { MailerService } from '../notifications/mailer/mailer.service';
@@ -21,7 +24,8 @@ import { EphemeralTokenService } from './ephemeral-token.service';
  * verifyJwtToken is login identity and deliberately stays on AuthService
  * (see token.service.ts), so the whole AuthService collaborator graph below
  * exists to serve that one call. WebauthnConfigService and UserCleanupService
- * are constructed only because AuthService takes them — nothing this file
+ * (with the BudgetService it injects) are constructed only because AuthService
+ * takes them — nothing this file
  * exports reaches either one. The pending-MFA and reset-throttle maps are
  * module-scoped in auth.service.ts, so this instance and the container
  * singleton share one copy.
@@ -36,7 +40,7 @@ const auth = new AuthService(
   permissions,
   new TripMembershipService(dbs),
   new WebauthnConfigService(dbs),
-  new UserCleanupService(dbs),
+  new UserCleanupService(dbs, new BudgetService(dbs, permissions, new ExchangeRatesService(), new RealtimeService())),
   new MailerService(dbs),
   new EphemeralTokenService(),
 );

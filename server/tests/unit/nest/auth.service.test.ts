@@ -69,6 +69,9 @@ import { AuthService } from '../../../src/nest/auth/auth.service';
 import { TokenService } from '../../../src/nest/tokens/token.service';
 import * as authBridge from '../../../src/nest/auth/auth.bridge';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
+import { BudgetService } from '../../../src/nest/budget/budget.service';
+import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
+import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
 import { verifyJwtAndLoadUser } from '../../../src/nest/auth/jwt-verify';
 import { authenticator } from 'otplib';
@@ -98,7 +101,7 @@ const svc = new AuthService(
   new PermissionsService(new DatabaseService(testDb)),
   membershipStub,
   new WebauthnConfigService(new DatabaseService(testDb)),
-  new UserCleanupService(new DatabaseService(testDb)),
+  new UserCleanupService(new DatabaseService(testDb), new BudgetService(new DatabaseService(testDb), new PermissionsService(new DatabaseService(testDb)), new ExchangeRatesService(), new RealtimeService())),
   mailerStub,
   new EphemeralTokenService(),
 );

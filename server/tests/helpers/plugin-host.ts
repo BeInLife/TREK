@@ -108,7 +108,7 @@ export function createPluginRpcHostFactory(dbs: DatabaseService): PluginRpcHostF
   const oauth = new PluginOAuthService(dbs);
   const accommodations = new AccommodationsService(dbs, permissions, realtime);
   const trips = new TripsService(dbs, reservations, days, permissions, budget, vacay, realtime, unsplash);
-  const members = new TripMembersService(dbs, budget, new UserCleanupService(dbs), permissions, realtime, notificationsStub());
+  const members = new TripMembersService(dbs, budget, new UserCleanupService(dbs, budget), permissions, realtime, notificationsStub());
   const guards = new PluginGuards(dbs, permissions, addons);
 
   const registry = createTestPluginRegistry([

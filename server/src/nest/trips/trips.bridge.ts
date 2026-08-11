@@ -64,7 +64,7 @@ const trips = new TripsService(
   realtime,
   new UnsplashService(dbs(), new RuntimeEnvService()),
 );
-const members = new TripMembersService(dbs(), budget, new UserCleanupService(dbs()), permissions, realtime, notificationsInstance());
+const members = new TripMembersService(dbs(), budget, new UserCleanupService(dbs(), budget), permissions, realtime, notificationsInstance());
 const readModel = new TripReadModelService(
   dbs(),
   members,
