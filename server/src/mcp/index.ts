@@ -7,7 +7,6 @@ import { verifyMcpToken, verifyJwtToken } from '../nest/auth/auth.bridge';
 import { getUserByAccessToken } from '../nest/oauth/oauth.bridge';
 import { isAddonEnabled } from '../nest/addons/addons.bridge';
 import { ADDON_IDS } from '../addons';
-import { registerResources } from './resources';
 import { registerTools } from './tools';
 import { McpSession, sessions, revokeUserSessions, revokeUserSessionsForClient, evictOldestSessionForUser } from './sessionManager';
 import { readEnv } from '../app-config';
@@ -356,7 +355,6 @@ export async function mcpHandler(req: Request, res: Response): Promise<void> {
     return STATIC_TOKEN_DEPRECATION_NOTICE;
   };
 
-  registerResources(server, user.id, scopes);
   registerTools(server, user.id, scopes, isStaticToken, getDeprecationNotice);
 
   const transport = new StreamableHTTPServerTransport({

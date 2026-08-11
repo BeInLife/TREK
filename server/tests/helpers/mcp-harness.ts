@@ -13,7 +13,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
 import { Client } from '@modelcontextprotocol/sdk/client/index';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory';
-import { registerResources } from '../../src/mcp/resources';
 import { registerTools } from '../../src/mcp/tools';
 import { setMcpRegistry } from '../../src/mcp/registry-handoff';
 import { createMcpTestRegistry } from './mcp-test-controllers';
@@ -26,7 +25,12 @@ export interface McpHarness {
 
 export interface McpHarnessOptions {
   userId: number;
-  /** Register read-only resources (default: true) */
+  /**
+   * Inert since the journey resources moved onto the nest-mcp registry
+   * (src/mcp/resources.ts is gone): every resource now rides `withTools`,
+   * like tools-vacay.test.ts has always documented. Accepted so the ~26
+   * suites passing it keep compiling; remove opportunistically.
+   */
   withResources?: boolean;
   /** Register read-write tools (default: true) */
   withTools?: boolean;
@@ -39,13 +43,10 @@ export interface McpHarnessOptions {
 }
 
 export async function createMcpHarness(options: McpHarnessOptions): Promise<McpHarness> {
-  const { userId, withResources = true, withTools = true, scopes = null, isStaticToken = false, getDeprecationNotice } = options;
+  const { userId, withTools = true, scopes = null, isStaticToken = false, getDeprecationNotice } = options;
 
   const server = new McpServer({ name: 'trek-test', version: '1.0.0' });
 
-  // registerResources gates the journey resources on the same scope list the
-  // tools use, so the harness has to hand it over as well.
-  if (withResources) registerResources(server, userId, scopes ?? null);
   if (withTools) {
     // In production bootstrap.ts hands the Nest-discovered registry to
     // registerTools after app.init(); the harness has no Nest app, so it

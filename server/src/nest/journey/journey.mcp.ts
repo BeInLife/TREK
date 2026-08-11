@@ -1,5 +1,5 @@
 import {
-  McpController, Tool,
+  McpController, Tool, Resource, ResourceTemplate,
   TOOL_ANNOTATIONS_DELETE, TOOL_ANNOTATIONS_NON_IDEMPOTENT,
   TOOL_ANNOTATIONS_READONLY, TOOL_ANNOTATIONS_WRITE,
   demoDenied, ok, type McpContext,
@@ -18,6 +18,31 @@ const journeyAddonOn = addonGate(ADDON_IDS.JOURNEY);
 
 function notFound(msg: string) {
   return { content: [{ type: 'text' as const, text: msg }], isError: true };
+}
+
+function parseId(value: string | string[]): number | null {
+  const n = Number(Array.isArray(value) ? value[0] : value);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function accessDenied(uri: string) {
+  return {
+    contents: [{
+      uri,
+      mimeType: 'application/json',
+      text: JSON.stringify({ error: 'Trip not found or access denied' }),
+    }],
+  };
+}
+
+function jsonContent(uri: string, data: unknown) {
+  return {
+    contents: [{
+      uri,
+      mimeType: 'application/json',
+      text: JSON.stringify(data, null, 2),
+    }],
+  };
 }
 
 /**
@@ -421,5 +446,70 @@ export class JourneyMcp {
     if (this.auth.isDemoUser(ctx.userId)) return demoDenied();
     if (!this.share.deleteJourneyShareLink(journeyId, ctx.userId)) return notFound('Journey not found or access denied.');
     return ok({ success: true });
+  }
+
+  // --- RESOURCES ---
+  // Ported 1:1 from src/mcp/resources.ts (the last legacy registrar): identical
+  // names, URIs, descriptions and payload shapes. The legacy registration-time
+  // gate `isAddonEnabled(JOURNEY) && canRead(scopes, 'journey')` becomes
+  // `when: journeyAddonOn` + the declarative read marker.
+
+  @Resource({
+    name: 'journeys',
+    uri: 'trek://journeys',
+    description: 'All journeys owned or contributed to by the current user',
+    mimeType: 'application/json',
+    when: journeyAddonOn,
+    access: { group: 'journey', mode: 'read' },
+  })
+  async journeysResource(uri: URL, ctx: McpContext) {
+    return jsonContent(uri.href, this.journey.listJourneys(ctx.userId));
+  }
+
+  @ResourceTemplate({
+    name: 'journey-detail',
+    uriTemplate: 'trek://journeys/{journeyId}',
+    description: 'Single journey with entries, contributors, and trip links',
+    mimeType: 'application/json',
+    when: journeyAddonOn,
+    access: { group: 'journey', mode: 'read' },
+  })
+  async journeyDetailResource(uri: URL, { journeyId }: { journeyId: string | string[] }, ctx: McpContext) {
+    const id = parseId(journeyId);
+    if (id === null) return accessDenied(uri.href);
+    const journey = this.journey.getJourneyFull(id, ctx.userId);
+    if (!journey) return accessDenied(uri.href);
+    return jsonContent(uri.href, journey);
+  }
+
+  @ResourceTemplate({
+    name: 'journey-entries',
+    uriTemplate: 'trek://journeys/{journeyId}/entries',
+    description: 'All entries in a journey (date, text, mood, linked trip)',
+    mimeType: 'application/json',
+    when: journeyAddonOn,
+    access: { group: 'journey', mode: 'read' },
+  })
+  async journeyEntriesResource(uri: URL, { journeyId }: { journeyId: string | string[] }, ctx: McpContext) {
+    const id = parseId(journeyId);
+    if (id === null) return accessDenied(uri.href);
+    if (!this.journey.canAccessJourney(id, ctx.userId)) return accessDenied(uri.href);
+    return jsonContent(uri.href, this.journey.listEntries(id, ctx.userId));
+  }
+
+  @ResourceTemplate({
+    name: 'journey-contributors',
+    uriTemplate: 'trek://journeys/{journeyId}/contributors',
+    description: 'Contributors (owners and collaborators) of a journey',
+    mimeType: 'application/json',
+    when: journeyAddonOn,
+    access: { group: 'journey', mode: 'read' },
+  })
+  async journeyContributorsResource(uri: URL, { journeyId }: { journeyId: string | string[] }, ctx: McpContext) {
+    const id = parseId(journeyId);
+    if (id === null) return accessDenied(uri.href);
+    const journey = this.journey.getJourneyFull(id, ctx.userId);
+    if (!journey) return accessDenied(uri.href);
+    return jsonContent(uri.href, (journey as { contributors?: JourneyContributor[] }).contributors ?? []);
   }
 }
