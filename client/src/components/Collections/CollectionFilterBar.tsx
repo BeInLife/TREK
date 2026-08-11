@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { ChevronDown, Check, Layers, Tag, Tags, CheckSquare, Star, Plus, ArrowDownUp } from 'lucide-react'
+import { ChevronDown, Check, Layers, Tag, CheckSquare, Star, Plus, ArrowDownUp } from 'lucide-react'
 import type { StatusFilter, CollectionSortMode } from '../../store/collectionStore'
 import type { TranslationFn } from '../../types'
 import { getCategoryIcon } from '../shared/categoryIcons'
 import { STATUS_META, STATUS_ORDER } from '../../pages/collections/collectionsModel'
 import type { CategoryOption, LabelOption } from '../../pages/collections/collectionsModel'
+import CollectionLabelFilter from './CollectionLabelFilter'
 
 interface Opt {
   key: string | number
@@ -148,36 +149,26 @@ export default function CollectionFilterBar({
       <Dropdown current={ratingFilter} options={ratingOpts} onSelect={k => onRatingFilter(k as number | 'all')} lead={<Star size={13} />} />
       <Dropdown current={sortMode} options={sortOpts} onSelect={k => onSortMode(k as CollectionSortMode)} lead={<ArrowDownUp size={13} />} />
       {showSelect && (
-        <button type="button" onClick={onToggleSelect} className={`col-filter-btn col-filter-select${selectMode ? ' open' : ''}`} aria-pressed={selectMode}>
-          <CheckSquare size={14} /> <span className="col-filter-lbl">{t('collections.select')}</span>
+        <button
+          type="button"
+          onClick={onToggleSelect}
+          className={`col-filter-btn col-filter-icon col-filter-select${selectMode ? ' on' : ''}`}
+          aria-pressed={selectMode}
+          aria-label={t('collections.select')}
+          title={t('collections.select')}
+        >
+          <CheckSquare size={15} />
         </button>
       )}
       {showLabels && (labelOptions.length > 0 || canManageLabels) && (
-        <div className="col-labelfilter">
-          {labelOptions.map(l => {
-            const on = labelFilter.includes(l.id)
-            return (
-              <button
-                key={l.id}
-                type="button"
-                className={`col-labelchip${on ? ' on' : ''}`}
-                style={{ ['--label' as string]: l.color ?? 'var(--accent)' }}
-                onClick={() => onLabelFilter(on ? labelFilter.filter(id => id !== l.id) : [...labelFilter, l.id])}
-                aria-pressed={on}
-              >
-                <span className="col-labelchip-dot" />
-                <span className="col-filter-lbl">{l.name}</span>
-                {l.count > 0 && <span className="col-filter-count">{l.count}</span>}
-              </button>
-            )
-          })}
-          {canManageLabels && (
-            <button type="button" className="col-filter-btn col-filter-addlabel" onClick={onManageLabels} title={t('collections.labels.manage')}>
-              <Tags size={13} />
-              <span className="col-filter-lbl">{labelOptions.length ? t('collections.labels.manage') : t('collections.labels.add')}</span>
-            </button>
-          )}
-        </div>
+        <CollectionLabelFilter
+          labelOptions={labelOptions}
+          labelFilter={labelFilter}
+          onLabelFilter={onLabelFilter}
+          canManageLabels={canManageLabels}
+          onManageLabels={onManageLabels}
+          t={t}
+        />
       )}
     </div>
   )

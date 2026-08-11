@@ -59,9 +59,11 @@ vi.mock('../components/Collections/CollectionFilterBar', () => ({
 }))
 
 vi.mock('../components/Collections/CollectionMapPanel', () => ({
-  default: (p: { overlay: boolean; places: { id: number }[]; onSelect: (id: number) => void; onDeselect: () => void; onToggleView: () => void; onSearch: (v: string) => void }) => (
+  default: (p: { overlay: boolean; places: { id: number }[]; onSelect: (id: number) => void; onDeselect: () => void; onToggleView: () => void; onSearch: (v: string) => void; onLabelFilter?: (ids: number[]) => void; onManageLabels?: () => void }) => (
     <div data-testid={p.overlay ? 'map-overlay' : 'map-plain'}>
       <span data-testid="map-count">{p.places.length}</span>
+      <span data-testid="map-has-labels">{String(p.onLabelFilter != null)}</span>
+      {p.onManageLabels && <button type="button" onClick={p.onManageLabels}>map-labels</button>}
       <button type="button" onClick={() => p.onSelect(10)}>map-select</button>
       <button type="button" onClick={p.onDeselect}>map-deselect</button>
       <button type="button" onClick={p.onToggleView}>map-toggle</button>
@@ -206,6 +208,7 @@ function makeHook(overrides: Hook = {}): Hook {
     places: [{ id: 10 }],
     visiblePlaces: [{ id: 10 }],
     mappable: [{ id: 10 }],
+    hasMappable: true,
     members: [],
     incomingInvites: [],
     counts: { all: 1, idea: 0, want: 1, visited: 0 },
@@ -340,7 +343,7 @@ describe('CollectionsPage — shell', () => {
   })
 
   it('FE-PAGE-COLLPAGE-007: shows a spinner while the first places load', () => {
-    renderPage({ places: [], visiblePlaces: [], mappable: [], placesLoading: true })
+    renderPage({ places: [], visiblePlaces: [], mappable: [], hasMappable: false, placesLoading: true })
     expect(document.querySelector('.col-spinner')).not.toBeNull()
     expect(screen.queryByTestId('list')).toBeNull()
   })
@@ -348,7 +351,7 @@ describe('CollectionsPage — shell', () => {
 
 describe('CollectionsPage — body branches', () => {
   it('FE-PAGE-COLLPAGE-008: an empty list shows the empty state plus the add CTA', () => {
-    const hook = renderPage({ places: [], visiblePlaces: [], mappable: [] })
+    const hook = renderPage({ places: [], visiblePlaces: [], mappable: [], hasMappable: false })
     expect(screen.getByTestId('empty-collections')).toHaveTextContent('collections.empty.title')
 
     fireEvent.click(screen.getByRole('button', { name: /collections.addPlace/ }))
@@ -356,7 +359,7 @@ describe('CollectionsPage — body branches', () => {
   })
 
   it('FE-PAGE-COLLPAGE-009: a viewer on an empty list gets no add CTA', () => {
-    renderPage({ places: [], visiblePlaces: [], mappable: [], canEdit: false })
+    renderPage({ places: [], visiblePlaces: [], mappable: [], hasMappable: false, canEdit: false })
     expect(screen.getByTestId('empty-collections')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /collections.addPlace/ })).toBeNull()
   })
@@ -384,13 +387,13 @@ describe('CollectionsPage — body branches', () => {
   })
 
   it('FE-PAGE-COLLPAGE-013: places without coordinates keep the list column even on a wide layout', () => {
-    renderPage({ mappable: [] })
+    renderPage({ mappable: [], hasMappable: false })
     expect(screen.getByTestId('list')).toBeInTheDocument()
     expect(screen.queryByTestId('map-overlay')).toBeNull()
   })
 
   it('FE-PAGE-COLLPAGE-014: a filter that matches nothing keeps the filter bar and shows the no-match state', () => {
-    renderPage({ visiblePlaces: [], mappable: [] })
+    renderPage({ visiblePlaces: [], mappable: [], hasMappable: false })
     expect(screen.getByTestId('filterbar')).toBeInTheDocument()
     expect(screen.getByTestId('empty-search')).toHaveTextContent('collections.empty.noMatchTitle')
     expect(screen.queryByTestId('list')).toBeNull()
@@ -555,18 +558,30 @@ describe('CollectionsPage — child wiring', () => {
     expect(hook.setSelectedPlaceId).not.toHaveBeenCalled()
   })
 
-  it('FE-PAGE-COLLPAGE-030: the filter bar drives add-place, label management and select mode', () => {
+  it('FE-PAGE-COLLPAGE-030: the filter bar drives add-place and select mode, the map takes the labels', () => {
     const hook = renderPage()
-    expect(screen.getByTestId('filter-flags')).toHaveTextContent('true|true|true')
+    // Labels ride in the map's top bar while a map is on screen, so the filter
+    // row is told not to draw them a second time.
+    expect(screen.getByTestId('filter-flags')).toHaveTextContent('false|true|true')
+    expect(screen.getByTestId('map-has-labels')).toHaveTextContent('true')
 
     fireEvent.click(screen.getByText('filter-add'))
     expect(hook.setShowAddPlace).toHaveBeenCalledWith(true)
 
-    fireEvent.click(screen.getByText('filter-labels'))
+    fireEvent.click(screen.getByText('map-labels'))
     expect(hook.setShowLabelManager).toHaveBeenCalledWith(true)
 
     fireEvent.click(screen.getByText('filter-select'))
     expect(hook.setSelectMode).toHaveBeenCalledWith(true)
+  })
+
+  it('FE-PAGE-COLLPAGE-030b: without a map the filter row keeps the labels, so they stay reachable', () => {
+    const hook = renderPage({ mappable: [], hasMappable: false })
+    expect(screen.getByTestId('filter-flags')).toHaveTextContent('true|true|true')
+    expect(screen.queryByTestId('map-overlay')).toBeNull()
+
+    fireEvent.click(screen.getByText('filter-labels'))
+    expect(hook.setShowLabelManager).toHaveBeenCalledWith(true)
   })
 
   it('FE-PAGE-COLLPAGE-031: the All-saved union has no labels and no add button in the filter row', () => {
