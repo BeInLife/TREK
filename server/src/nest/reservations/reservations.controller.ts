@@ -15,7 +15,7 @@ import { ReservationsService } from './reservations.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermission, TripAccessGuard } from '../permissions/trip-access.guard';
-import { pushReservationToAirtrail } from '../integrations/airtrail.bridge';
+import { AirtrailLinkService } from '../integrations/airtrail-link.service';
 import {
   ReservationCreateDto,
   ReservationUpdateDto,
@@ -46,7 +46,11 @@ type ReservationBody = Record<string, unknown> & {
 // passes, so the HTTP and MCP paths cannot demand different rights.
 @UseGuards(JwtAuthGuard, TripAccessGuard)
 export class ReservationsController {
-  constructor(private readonly reservations: ReservationsService) {}
+  constructor(
+    private readonly reservations: ReservationsService,
+    // Injected from AirtrailCoreModule — the split that retired airtrail.bridge.
+    private readonly airtrailLink: AirtrailLinkService,
+  ) {}
 
 
 
@@ -113,7 +117,7 @@ export class ReservationsController {
     // Push a locally-edited AirTrail flight back to AirTrail (fire-and-forget,
     // under the importer's credentials — see airtrailSync). #214
     if ((reservation as any)?.external_source === 'airtrail' && (reservation as any)?.sync_enabled) {
-      void pushReservationToAirtrail(Number((reservation as any).id), Number(tripId)).catch(() => {});
+      void this.airtrailLink.pushReservationToAirtrail(Number((reservation as any).id), Number(tripId)).catch(() => {});
     }
     this.reservations.notifyBookingChange(tripId, user.id, body.title || cur.title, body.type || cur.type || '');
     return { reservation };

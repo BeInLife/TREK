@@ -49,6 +49,7 @@ import { DatabaseService } from '../../../src/nest/database/database.service';
 import { PermissionsService } from '../../../src/nest/permissions/permissions.service';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
+import { ReservationsReadRepository } from '../../../src/nest/reservations/reservations-read.repository';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { CalendarService, foldICS } from '../../../src/nest/calendar/calendar.service';
@@ -62,7 +63,7 @@ const budgetSvc = new BudgetService(dbs(), new PermissionsService(dbs()), new Ex
 // Named `svc` so the moved cases below read exactly as they did on TripsService.
 const svc = new CalendarService(
   dbs(),
-  new ReservationsService(dbs(), new PermissionsService(dbs()), budgetSvc, new RealtimeService(), notificationsStub()),
+  new ReservationsService(dbs(), new PermissionsService(dbs()), budgetSvc, new RealtimeService(), notificationsStub(), new ReservationsReadRepository(dbs())),
 );
 
 beforeAll(() => {

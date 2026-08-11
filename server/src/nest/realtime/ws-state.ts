@@ -6,12 +6,13 @@ import { User } from '../../types';
  * The socket registry: rooms, per-socket identity, and the three fan-out
  * primitives.
  *
- * MODULE state, not provider state, and that is load-bearing. The
- * out-of-container bridges and notifications.instance.ts build `new
- * RealtimeService()` by hand, outside the container, because they run outside
- * it. If the rooms lived on a provider instance, those broadcasts would go to
- * an empty map: no error, no log, just a client that stops updating. Same
- * reasoning as the geo throttle cursor and the permissions cache.
+ * MODULE state, not provider state, and that is load-bearing. Out-of-container
+ * code still reaches the rooms: the MCP seam's safeBroadcast imports
+ * src/websocket directly, auth.bridge hand-builds a RealtimeService, and the
+ * no-Nest test harnesses construct more. If the rooms lived on a provider
+ * instance, those broadcasts would go to an empty map: no error, no log, just
+ * a client that stops updating. Same reasoning as the geo throttle cursor and
+ * the permissions cache.
  *
  * The gateway next door owns the connection lifecycle and the handshake and
  * writes into here. This file deliberately knows nothing about auth.

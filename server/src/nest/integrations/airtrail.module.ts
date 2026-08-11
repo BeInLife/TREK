@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AirtrailController } from './airtrail.controller';
-import { AirtrailClient } from './airtrail.client';
-import { AirtrailService } from './airtrail.service';
+import { AirtrailCoreModule } from './airtrail-core.module';
 import { AirtrailSyncService } from './airtrail-sync.service';
 import { AirtrailSyncJob } from './airtrail-sync.job';
 import { AirtrailImportService } from './airtrail-import.service';
@@ -17,18 +16,17 @@ import { ReservationsModule } from '../reservations/reservations.module';
  * /api/trips/:tripId/reservations/import/airtrail.
  *
  * The logic used to be plain functions over the better-sqlite3 singleton in
- * services/airtrail/*, the last thing left in that directory. It is four
- * providers now: the HTTP client, the credential/settings service, the two-way
- * sync and the importer.
- *
- * It imports ReservationsModule because the pull applies remote changes through
- * the real reservation update path. The trigger in the other direction stays a
- * seam on purpose - see airtrail.bridge.ts.
+ * services/airtrail/*, the last thing left in that directory. The client, the
+ * credential/settings service and the link lifecycle (incl. the write-back
+ * push) live in AirtrailCoreModule so ReservationsModule can inject them;
+ * this module holds what genuinely needs ReservationsService — the pull
+ * (remote changes apply through the real reservation update path), its cron
+ * and the importer. That split is what retired airtrail.bridge.
  */
 @Module({
-  imports: [PermissionsModule, AddonsModule, AuditModule, ReservationsModule, SchedulingModule],
+  imports: [AirtrailCoreModule, PermissionsModule, AddonsModule, AuditModule, ReservationsModule, SchedulingModule],
   controllers: [AirtrailController],
-  providers: [AirtrailClient, AirtrailService, AirtrailSyncService, AirtrailSyncJob, AirtrailImportService],
+  providers: [AirtrailSyncService, AirtrailSyncJob, AirtrailImportService],
   exports: [AirtrailSyncService, AirtrailImportService],
 })
 export class AirtrailModule {}

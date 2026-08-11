@@ -293,12 +293,12 @@ function shouldSendToUser(
  * no longer execute the action twice; a handler failure releases the claim).
  * The channel transports and the preference matrix are injected providers
  * since the notifications fold; the channel registry stays a module singleton
- * because notifications.instance.ts and the plugin runtime both reach it from
- * outside the container.
+ * so every separately-constructed instance (the no-Nest test harnesses — the
+ * last production out-of-container consumer, notifications.instance.ts, died
+ * with the bridge fold) sees the channels the plugin runtime pushes in.
  *
- * Non-Nest consumers (the surviving cycle-dodge bridges) go through
- * `notifications.instance.ts`; the plugin RPC host injects this service via
- * `HostSurfaceRpc`. The reminder crons inject it too (ReminderJobsService).
+ * Every production consumer injects this service now: the plugin RPC host via
+ * `HostSurfaceRpc`, the reminder crons via ReminderJobsService.
  */
 @Injectable()
 export class NotificationsService {
@@ -310,10 +310,10 @@ export class NotificationsService {
     private readonly ntfy: NtfyService,
     private readonly prefs: NotificationPreferencesService,
   ) {
-    // The registry is a module singleton shared with notifications.instance.ts
-    // and the plugin runtime, so registering from here means every path that can
-    // dispatch has the built-ins — including the instance the surviving bridges
-    // use, which never runs onModuleInit. registerChannel is an idempotent Map.set.
+    // The registry is a module singleton shared with the plugin runtime and any
+    // separately-constructed instance (which never runs onModuleInit), so
+    // registering from here means every path that can dispatch has the
+    // built-ins. registerChannel is an idempotent Map.set.
     registerBuiltinChannels({ mailer, webhook, ntfy });
   }
 

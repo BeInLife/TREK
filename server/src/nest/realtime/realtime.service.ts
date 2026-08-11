@@ -21,8 +21,9 @@ import { broadcast, broadcastToUser, getOnlineUserIds } from '../../websocket';
  * the functions at construction, and never dereference an export the
  * method wasn't asked for — many test mocks provide `broadcast` only.
  *
- * The service is deliberately dependency-free so module-level bridge code
- * (the airtrail.bridge.ts pattern) can construct it with a bare `new RealtimeService()`.
+ * The service is deliberately dependency-free so out-of-container code (the
+ * auth.bridge graph, the no-Nest test harnesses) can construct it with a bare
+ * `new RealtimeService()`.
  */
 @Injectable()
 export class RealtimeService {

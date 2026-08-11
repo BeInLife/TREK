@@ -35,6 +35,7 @@ import { PlacesMcp } from '../../src/nest/places/places.mcp';
 import { PlacesService } from '../../src/nest/places/places.service';
 import { ReservationsMcp } from '../../src/nest/reservations/reservations.mcp';
 import { ReservationsService } from '../../src/nest/reservations/reservations.service';
+import { ReservationsReadRepository } from '../../src/nest/reservations/reservations-read.repository';
 import { TagsMcp } from '../../src/nest/tags/tags.mcp';
 import { TagsService } from '../../src/nest/tags/tags.service';
 import { SettingsService } from '../../src/nest/settings/settings.service';
@@ -120,7 +121,7 @@ export function createMcpTestRegistry(): McpRegistry {
     placePhotoCache,
     journeyDomain,
   );
-  const reservationsService = new ReservationsService(dbService, permissionsService, budgetService, realtimeService, notificationsStub());
+  const reservationsService = new ReservationsService(dbService, permissionsService, budgetService, realtimeService, notificationsStub(), new ReservationsReadRepository(dbService));
   const accommodationsService = new AccommodationsService(dbService, permissionsService, realtimeService);
   const membersService = new TripMembersService(dbService, budgetService, new UserCleanupService(dbService, budgetService), permissionsService, realtimeService, notificationsStub());
   const tripsService = new TripsService(

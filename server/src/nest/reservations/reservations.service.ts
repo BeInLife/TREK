@@ -3,7 +3,7 @@ import { DatabaseService, type TripAccess } from '../database/database.service';
 import type { TrekWsPayload, TrekWsTripEventName } from '@trek/shared';
 import { RealtimeService } from '../realtime/realtime.service';
 import { PermissionsService } from '../permissions/permissions.service';
-import { avatarUrl } from '../common/avatarUrl';
+import { ReservationsReadRepository, toTraveler } from './reservations-read.repository';
 import type { Reservation, User } from '../../types';
 import { BudgetService } from '../budget/budget.service';
 import { typeToCostCategory } from '@trek/shared';
@@ -136,6 +136,7 @@ export class ReservationsService {
     private readonly budget: BudgetService,
     private readonly realtime: RealtimeService,
     private readonly notifications: NotificationsService,
+    private readonly reads: ReservationsReadRepository,
   ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
@@ -194,17 +195,6 @@ export class ReservationsService {
     return map;
   }
 
-  private loadEndpoints(reservationId: number): ReservationEndpoint[] {
-    return this.db.all<ReservationEndpoint>(
-      'SELECT * FROM reservation_endpoints WHERE reservation_id = ? ORDER BY sequence',
-      reservationId
-    );
-  }
-
-  private toTraveler(r: { user_id: number; username: string; avatar: string | null; is_guest?: number | null }): ReservationTraveler {
-    return { user_id: r.user_id, username: r.username, avatar: r.avatar, is_guest: r.is_guest ?? null, avatar_url: avatarUrl(r) };
-  }
-
   /** Users assignable on a trip: its members (guests included) plus the owner. */
   private assignableUserIds(tripId: string | number): Set<number> {
     const members = this.db.all<{ user_id: number }>('SELECT user_id FROM trip_members WHERE trip_id = ?', tripId);
@@ -226,20 +216,14 @@ export class ReservationsService {
     const map = new Map<number, ReservationTraveler[]>();
     for (const row of rows) {
       const list = map.get(row.reservation_id) ?? [];
-      list.push(this.toTraveler(row));
+      list.push(toTraveler(row));
       map.set(row.reservation_id, list);
     }
     return map;
   }
 
   loadTravelers(reservationId: number | string): ReservationTraveler[] {
-    const rows = this.db.all<ReservationTraveler>(`
-    SELECT rt.user_id, COALESCE(u.display_name, u.username) AS username, u.avatar, u.is_guest
-    FROM reservation_travelers rt
-    JOIN users u ON rt.user_id = u.id
-    WHERE rt.reservation_id = ?
-  `, reservationId);
-    return rows.map(r => this.toTraveler(r));
+    return this.reads.loadTravelers(reservationId);
   }
 
   /**
@@ -430,24 +414,7 @@ export class ReservationsService {
   }
 
   getReservationWithJoins(id: string | number) {
-    const row = this.db.get<ReservationRow>(`
-    SELECT r.*, d.day_number, p.name as place_name, r.assignment_id,
-      ap.place_id as accommodation_place_id, acc_p.name as accommodation_name,
-      ap.start_day_id as accommodation_start_day_id, ap.end_day_id as accommodation_end_day_id
-    FROM reservations r
-    LEFT JOIN days d ON r.day_id = d.id
-    LEFT JOIN places p ON r.place_id = p.id
-    LEFT JOIN day_accommodations ap ON r.accommodation_id = ap.id
-    LEFT JOIN places acc_p ON ap.place_id = acc_p.id
-    WHERE r.id = ?
-  `, id);
-    if (!row) return undefined;
-    row.endpoints = this.loadEndpoints(row.id);
-    row.travelers = this.loadTravelers(row.id);
-    // accommodation_id is a TEXT column; the integer FK reads back as a numeric
-    // string (e.g. "14.0"). Normalize to an int so clients can parse it.
-    row.accommodation_id = row.accommodation_id == null ? null : Math.trunc(Number(row.accommodation_id));
-    return row;
+    return this.reads.getReservationWithJoins(id);
   }
 
   /** The accommodation insert, the reservation insert, the endpoint save and

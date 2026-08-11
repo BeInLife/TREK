@@ -3,14 +3,16 @@ import type { ExternalChannel } from './notification-events';
 /**
  * The live set of notification channels.
  *
- * Deliberately a module singleton and not a provider. Two things read it from
- * outside the container: notifications.instance.ts hands its own
- * NotificationsService to the surviving cycle-dodge bridges
- * (trips/reservations/airtrail/packing), and PluginRuntimeService pushes its
- * channel getter in at onModuleInit. Make this a provider and that instance
+ * Deliberately a module singleton and not a provider: PluginRuntimeService
+ * pushes its channel getter in at onModuleInit, and every
+ * separately-constructed NotificationsService (the no-Nest test harnesses;
+ * CHOVR-015 pins this) must see it. Make this a provider and such an instance
  * gets a second, empty registry - plugin channels would then go quiet with no
  * error anywhere. The built-ins are registered from NotificationsService's
- * constructor, so every path that can dispatch has them.
+ * constructor, so every path that can dispatch has them. (The last production
+ * out-of-container consumer, notifications.instance.ts, died with the bridge
+ * fold - a provider registry is thinkable now, but the harnesses still hang
+ * off the module scope.)
  */
 
 /** Namespace for plugin channel ids, so a plugin can never claim `email`. */

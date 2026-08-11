@@ -16,12 +16,14 @@ vi.mock('../../../src/nest/integrations/airtrail.mapper', () => ({
   entityCode: (e: any) => e?.icao || e?.iata || null,
 }));
 
-import { AirtrailSyncService } from '../../../src/nest/integrations/airtrail-sync.service';
+import { AirtrailLinkService } from '../../../src/nest/integrations/airtrail-link.service';
 import { AirtrailAuthError } from '../../../src/nest/integrations/airtrail.client';
 import type { DatabaseService } from '../../../src/nest/database/database.service';
 import type { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import type { AddonsService } from '../../../src/nest/addons/addons.service';
+import { AirtrailSyncService } from '../../../src/nest/integrations/airtrail-sync.service';
 import type { ReservationsService } from '../../../src/nest/reservations/reservations.service';
+import type { ReservationsReadRepository } from '../../../src/nest/reservations/reservations-read.repository';
 import type { AirtrailClient } from '../../../src/nest/integrations/airtrail.client';
 import type { AirtrailService } from '../../../src/nest/integrations/airtrail.service';
 
@@ -41,7 +43,7 @@ const getAirtrailCredentials = vi.fn();
 let dbGet: (sql: string) => unknown;
 let dbAll: (sql: string) => unknown[];
 
-function makeService(): AirtrailSyncService {
+function makeServices(): { link: AirtrailLinkService; sync: AirtrailSyncService } {
   const db = {
     get: (sql: string) => dbGet(sql),
     all: (sql: string) => dbAll(sql),
@@ -51,17 +53,29 @@ function makeService(): AirtrailSyncService {
     },
   } as unknown as DatabaseService;
 
-  return new AirtrailSyncService(
+  const client = { getFlight, listFlights, saveFlight } as unknown as AirtrailClient;
+  const airtrail = { isAirtrailWriteEnabled, getAirtrailCredentials } as unknown as AirtrailService;
+  // The push and the shared link lifecycle live on AirtrailLinkService since the
+  // core/pull split (which retired airtrail.bridge); the pull delegates to it.
+  const link = new AirtrailLinkService(
     db,
     { broadcast: vi.fn() } as unknown as RealtimeService,
     { isAddonEnabled: vi.fn(() => true) } as unknown as AddonsService,
-    { getReservation, getReservationWithJoins, update: updateReservation } as unknown as ReservationsService,
-    { getFlight, listFlights, saveFlight } as unknown as AirtrailClient,
-    { isAirtrailWriteEnabled, getAirtrailCredentials } as unknown as AirtrailService,
+    { getReservationWithJoins } as unknown as ReservationsReadRepository,
+    client,
+    airtrail,
   );
+  const sync = new AirtrailSyncService(
+    db,
+    link,
+    { getReservation, update: updateReservation } as unknown as ReservationsService,
+    client,
+    airtrail,
+  );
+  return { link, sync };
 }
 
-let svc: AirtrailSyncService;
+let svc: { link: AirtrailLinkService; sync: AirtrailSyncService };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -74,7 +88,7 @@ beforeEach(() => {
     return undefined;
   };
   dbAll = () => [];
-  svc = makeService();
+  svc = makeServices();
 
   getAirtrailCredentials.mockReturnValue({ baseUrl: 'https://at.example', apiKey: 'k', allowInsecureTls: false });
   // GET returns AirTrail-owned detail TREK doesn't model — must survive the writeback.
@@ -96,7 +110,7 @@ beforeEach(() => {
 describe('pushReservationToAirtrail write gate (#1240)', () => {
   it('does nothing — and does not detach — when the owner has not opted in', async () => {
     isAirtrailWriteEnabled.mockReturnValue(false);
-    await svc.pushReservationToAirtrail(5, 9);
+    await svc.link.pushReservationToAirtrail(5, 9);
     expect(getFlight).not.toHaveBeenCalled();
     expect(saveFlight).not.toHaveBeenCalled();
     expect(runSpy).not.toHaveBeenCalled(); // no detach, no hash write — pure no-op
@@ -104,7 +118,7 @@ describe('pushReservationToAirtrail write gate (#1240)', () => {
 
   it('writes back, preserving AirTrail-owned fields, when the owner has opted in', async () => {
     isAirtrailWriteEnabled.mockReturnValue(true);
-    await svc.pushReservationToAirtrail(5, 9);
+    await svc.link.pushReservationToAirtrail(5, 9);
     expect(saveFlight).toHaveBeenCalledTimes(1);
     const payload = saveFlight.mock.calls[0][1] as Record<string, unknown>;
     expect(payload.departureTerminal).toBe('7'); // spread preserved the unmanaged field
@@ -119,7 +133,7 @@ describe('pushReservationToAirtrail write gate (#1240)', () => {
       if (sql.includes('FROM reservations')) return { ...linkedRow };
       return undefined;
     };
-    await svc.pushReservationToAirtrail(5, 9);
+    await svc.link.pushReservationToAirtrail(5, 9);
     // Pushing would rewrite the single AirTrail flight to span the whole route.
     expect(saveFlight).not.toHaveBeenCalled();
     expect(runSpy).toHaveBeenCalledWith(expect.stringContaining('sync_enabled = 0'), [5]);
@@ -133,7 +147,7 @@ describe('pushReservationToAirtrail write gate (#1240)', () => {
       metadata: JSON.stringify({ legs: [{ from: 'BRU', to: 'HEL' }, { from: 'HEL', to: 'JFK' }] }),
       endpoints: [],
     });
-    await svc.pushReservationToAirtrail(5, 9);
+    await svc.link.pushReservationToAirtrail(5, 9);
     expect(saveFlight).not.toHaveBeenCalled();
     expect(runSpy).toHaveBeenCalledWith(expect.stringContaining('sync_enabled = 0'), [5]);
   });
@@ -141,7 +155,7 @@ describe('pushReservationToAirtrail write gate (#1240)', () => {
   it('detaches when the owner key stopped working, rather than retrying forever', async () => {
     isAirtrailWriteEnabled.mockReturnValue(true);
     getFlight.mockRejectedValue(new AirtrailAuthError('invalid key'));
-    await svc.pushReservationToAirtrail(5, 9);
+    await svc.link.pushReservationToAirtrail(5, 9);
     expect(saveFlight).not.toHaveBeenCalled();
     expect(runSpy).toHaveBeenCalledWith(expect.stringContaining('sync_enabled = 0'), [5]);
   });
@@ -149,7 +163,7 @@ describe('pushReservationToAirtrail write gate (#1240)', () => {
   it('detaches when the flight is gone from AirTrail — the same as a remote delete', async () => {
     isAirtrailWriteEnabled.mockReturnValue(true);
     getFlight.mockResolvedValue(null);
-    await svc.pushReservationToAirtrail(5, 9);
+    await svc.link.pushReservationToAirtrail(5, 9);
     expect(saveFlight).not.toHaveBeenCalled();
     expect(runSpy).toHaveBeenCalledWith(expect.stringContaining('sync_enabled = 0'), [5]);
   });
@@ -164,7 +178,7 @@ describe('inbound sync multi-leg guard (#1535)', () => {
     };
     dbAll = (sql: string) =>
       sql.includes('sync_enabled = 1') ? [{ id: 5, trip_id: 9, external_id: '42', external_hash: 'stale' }] : [];
-    svc = makeService();
+    svc = makeServices();
   }
 
   it('detaches instead of flattening when a linked reservation grew extra stops locally', async () => {
@@ -175,7 +189,7 @@ describe('inbound sync multi-leg guard (#1535)', () => {
     listFlights.mockResolvedValue([{ id: 42 }]);
     getReservation.mockReturnValue({ id: 5, metadata: JSON.stringify({}) });
 
-    const { changed } = await svc.runAirtrailSyncForUser(7);
+    const { changed } = await svc.sync.runAirtrailSyncForUser(7);
     expect(updateReservation).not.toHaveBeenCalled();
     expect(runSpy).toHaveBeenCalledWith(expect.stringContaining('sync_enabled = 0'), [5]);
     expect(changed).toBe(1);
@@ -186,7 +200,7 @@ describe('inbound sync multi-leg guard (#1535)', () => {
     listFlights.mockResolvedValue([{ id: 42 }]);
     getReservation.mockReturnValue({ id: 5, metadata: JSON.stringify({}) });
 
-    await svc.runAirtrailSyncForUser(7);
+    await svc.sync.runAirtrailSyncForUser(7);
     expect(updateReservation).toHaveBeenCalledTimes(1);
     expect(runSpy).not.toHaveBeenCalledWith(expect.stringContaining('sync_enabled = 0'), expect.anything());
   });
@@ -194,7 +208,7 @@ describe('inbound sync multi-leg guard (#1535)', () => {
   it('detaches a flight that vanished from AirTrail, keeping the TREK row', async () => {
     withLinkedRow(2);
     listFlights.mockResolvedValue([]); // the linked id is no longer there
-    const { changed } = await svc.runAirtrailSyncForUser(7);
+    const { changed } = await svc.sync.runAirtrailSyncForUser(7);
     expect(updateReservation).not.toHaveBeenCalled();
     expect(runSpy).toHaveBeenCalledWith(expect.stringContaining('sync_enabled = 0'), [5]);
     expect(changed).toBe(1);
@@ -203,7 +217,7 @@ describe('inbound sync multi-leg guard (#1535)', () => {
   it('leaves a disconnected owner alone rather than detaching their rows', async () => {
     withLinkedRow(2);
     getAirtrailCredentials.mockReturnValue(null);
-    const { changed } = await svc.runAirtrailSyncForUser(7);
+    const { changed } = await svc.sync.runAirtrailSyncForUser(7);
     expect(listFlights).not.toHaveBeenCalled();
     expect(runSpy).not.toHaveBeenCalled();
     expect(changed).toBe(0);

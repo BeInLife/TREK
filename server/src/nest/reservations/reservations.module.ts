@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { ReservationsReadModule } from './reservations-read.module';
+import { AirtrailCoreModule } from '../integrations/airtrail-core.module';
 import { BudgetModule } from '../budget/budget.module';
 import { DaysModule } from '../days/days.module';
 import { PermissionsModule } from '../permissions/permissions.module';
@@ -22,7 +24,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 @Module({
   // DaysModule: ReservationsMcp injects DaysService for its nine getDay calls.
   // BudgetModule: ReservationsService + ReservationsMcp inject BudgetService (budget-sync seam).
-  imports: [NotificationsModule, DaysModule, AssignmentsModule, PermissionsModule, BudgetModule, AuthModule, RealtimeModule, PluginGuardsModule],
+  imports: [NotificationsModule, DaysModule, AssignmentsModule, PermissionsModule, BudgetModule, AuthModule, RealtimeModule, PluginGuardsModule, ReservationsReadModule, AirtrailCoreModule],
   controllers: [ReservationsController, UpcomingReservationsController],
   providers: [ReservationsService, ReservationsMcp, ReservationsRpc],
   // For in-container consumers (ReservationsRpc, TripsService, BookingImportService).

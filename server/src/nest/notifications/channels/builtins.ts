@@ -24,8 +24,8 @@ export interface BuiltinChannelDeps {
  *
  * They take their dependencies as an argument rather than importing them,
  * because the registry they land in is a module singleton while the transports
- * are providers. Both NotificationsService instances - the container singleton
- * and the one notifications.instance.ts constructs - register from their
+ * are providers. Every NotificationsService instance - the container singleton
+ * and any separately-constructed one - registers from its
  * constructor, so the registry is populated on every path that can dispatch.
  * It used to happen through a side-effect import in the preferences service,
  * which meant the built-ins existed only because somebody happened to import

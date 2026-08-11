@@ -14,6 +14,7 @@ import { PluginOAuthService } from '../../src/nest/plugins/oauth/plugin-oauth.se
 import { BudgetService } from '../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../src/nest/budget/exchange-rates.service';
 import { ReservationsService } from '../../src/nest/reservations/reservations.service';
+import { ReservationsReadRepository } from '../../src/nest/reservations/reservations-read.repository';
 import { TagsService } from '../../src/nest/tags/tags.service';
 import { CategoriesService } from '../../src/nest/categories/categories.service';
 import { TodoService } from '../../src/nest/todo/todo.service';
@@ -90,7 +91,7 @@ export function createPluginRpcHostFactory(dbs: DatabaseService): PluginRpcHostF
   const todos = new TodoService(dbs, permissions, realtime);
   const packing = new PackingService(dbs, permissions, realtime, notificationsStub());
   const files = new FilesService(dbs, permissions, realtime, new EphemeralTokenService());
-  const reservations = new ReservationsService(dbs, permissions, budget, realtime, notificationsStub());
+  const reservations = new ReservationsService(dbs, permissions, budget, realtime, notificationsStub(), new ReservationsReadRepository(dbs));
   const collab = new CollabService(dbs, permissions, realtime, notificationsStub());
   const vacay = new VacayService(dbs, realtime, notificationsStub());
   const days = new DaysService(dbs, permissions, realtime, queryHelpers);

@@ -376,21 +376,22 @@ gate-verifiable, worth re-checking after every phase:
   `node-cron` out of `package.json`. `index.ts` no longer boots any cron and its
   `shutdown()` rides `nestApp.close()`. The db-boot airport backfill was already
   gone (`9c46f31c`); ws/MCP wiring remain its hand-booted seams.
-- 🟡 (re-checked 2026-08-11, after the bridge fold) **8** `*.bridge.ts` files
-  remain, each shrunk to the exports its consumers import and carrying a
-  truthful header. The honest split: **5 pinned by one seam**, the
-  pre-`app.init()` MCP/OAuth mount (`oauth`, `audit`, `addons`, `auth`,
-  `permissions` — these die together if that mount ever moves behind the
-  container), and **3 verified-permanent cycle-dodges** (trips ←
-  budget.mcp/packing.mcp/costs.rpc — TripsModule/TripReadModelModule/
-  TripMembersModule all import the budget/packing domains; assignments ←
-  places.mcp — DaysModule → PlacesModule → AssignmentsModule → DaysModule;
-  airtrail ← reservations.controller). The 2026-08-10 endgame executed: the 4
-  dead ones deleted (`8e4261ed`), `journey.bridge` + `src/mcp/resources.ts`
-  retired with the journey-resource migration, `budget.bridge` deleted
-  (UserCleanupService injects BudgetService; BudgetModule dropped AuthModule),
-  and the backup-restore / systemNotices in-container edges folded
-  (`permissions-cache.ts`, threaded `addonEnabled`).
+- 🟡 (re-checked 2026-08-11, after the bridge fold) **5** `*.bridge.ts` files
+  remain — `oauth`, `audit`, `addons`, `auth`, `permissions` — each shrunk to
+  the exports its consumers import, all pinned by the ONE remaining seam (the
+  pre-`app.init()` MCP/OAuth mount) and all dying together if that mount ever
+  moves behind the container. The 2026-08-10 endgame executed and then some:
+  the 4 dead ones deleted (`8e4261ed`); `journey.bridge` +
+  `src/mcp/resources.ts` retired with the journey-resource migration;
+  `budget.bridge` deleted (UserCleanupService injects BudgetService);
+  the backup-restore / systemNotices in-container edges folded
+  (`permissions-cache.ts`, threaded `addonEnabled`); and the three
+  "verified-permanent" cycle-dodges eliminated by restructuring rather than
+  forwardRef — `trips.bridge` via leaf TripMembership reads + prompt
+  relocation, `assignments.bridge` via an `AssignmentsDomainModule` split,
+  `airtrail.bridge` via `ReservationsReadRepository` + `AirtrailLinkService`
+  in `AirtrailCoreModule`. `notifications.instance.ts` died with the last of
+  them.
 - ✅ (2026-08-11) `src/mcp/resources.ts` gone — the 4 journey resources are
   decorator-registered on `journey.mcp.ts`; `journey.bridge` died with it.
 - ❌ The `db` proxy is still imported outside DatabaseModule:

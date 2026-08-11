@@ -18,6 +18,7 @@ import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { BudgetService } from '../../../src/nest/budget/budget.service';
 import { ExchangeRatesService } from '../../../src/nest/budget/exchange-rates.service';
 import { ReservationsService } from '../../../src/nest/reservations/reservations.service';
+import { ReservationsReadRepository } from '../../../src/nest/reservations/reservations-read.repository';
 import type { AirtrailClient } from '../../../src/nest/integrations/airtrail.client';
 import type { AirtrailService } from '../../../src/nest/integrations/airtrail.service';
 import { notificationsStub } from '../../helpers/notifications';
@@ -41,6 +42,7 @@ function makeImportService(): AirtrailImportService {
       new BudgetService(dbs(), permissions, new ExchangeRatesService(), realtime),
       realtime,
       notificationsStub(),
+      new ReservationsReadRepository(dbs()),
     ),
     { listFlights } as unknown as AirtrailClient,
     {

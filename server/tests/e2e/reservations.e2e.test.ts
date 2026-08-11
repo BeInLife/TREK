@@ -41,14 +41,6 @@ vi.mock('../../src/db/database', () => ({
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn() }));
 const { notificationSend } = vi.hoisted(() => ({ notificationSend: vi.fn().mockResolvedValue(undefined) }));
-// ReservationsService injects NotificationsService now instead of reaching the
-// bridge through a lazy import, so the e2e app resolves the real provider out of
-// its own container — the module mock above never sees the send. The override
-// below is what intercepts it.
-vi.mock('../../src/nest/notifications/notifications.instance', () => ({
-  notificationsInstance: () => ({ send: notificationSend }),
-}));
-
 import { PermissionsService } from '../../src/nest/permissions/permissions.service';
 
 // Since the permissions DI migration, the check is a spy on the container's

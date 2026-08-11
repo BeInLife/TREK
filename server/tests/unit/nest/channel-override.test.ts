@@ -27,13 +27,17 @@ import { createTables } from '../../../src/db/schema';
 import { runMigrations } from '../../../src/db/migrations';
 import { resetTestDb } from '../../helpers/test-db';
 import { createUser, createAdmin, setAppSetting, setNotificationChannels } from '../../helpers/factories';
-// The send dispatcher is DI-native since the notifications fold; drive it
-// through the same outside-container entry point the surviving cycle-dodge
-// bridges (trips/reservations/airtrail/packing) use.
-import { notificationsInstance } from '../../../src/nest/notifications/notifications.instance';
+// The send dispatcher is DI-native since the notifications fold
+// (notifications.instance.ts died with the last cycle-dodge bridge); a
+// hand-constructed instance still shares the module-scoped channel registry,
+// which is exactly what CHOVR-015 pins.
 import type { NotificationPayload } from '../../../src/nest/notifications/notifications.service';
+import { makeNotificationsService } from '../../helpers/notifications';
 
-const send = (payload: NotificationPayload) => notificationsInstance().send(payload);
+// One instance, built at module load like the old import-time singleton: its
+// constructor is what registers the built-in channels the registry cases read.
+const notifications = makeNotificationsService(new DatabaseService(testDb));
+const send = (payload: NotificationPayload) => notifications.send(payload);
 import { NtfyService } from '../../../src/nest/notifications/transports/ntfy.service';
 import { WebhookService } from '../../../src/nest/notifications/transports/webhook.service';
 import { DatabaseService } from '../../../src/nest/database/database.service';
@@ -214,16 +218,15 @@ describe('a live plugin channel needs no second opt-in', () => {
  * The seam itself, end to end.
  *
  * PluginRuntimeService pushes its channel getter into the registry at
- * onModuleInit; notifications.instance.ts constructs its own
- * NotificationsService for the surviving cycle-dodge bridges
- * (trips/reservations/airtrail/packing). Both only meet because the registry is
+ * onModuleInit; a separately-constructed NotificationsService (as every
+ * no-Nest harness builds) only sees it because the registry is
  * a module singleton. Make it a provider and that instance gets an empty one —
  * plugin channels then go quiet with no error anywhere, which is exactly the
  * kind of failure nothing else here would catch. Every case above sets the
  * source by hand; this one goes through the runtime.
  */
 describe('the plugin channel source reaches the outside-container instance', () => {
-  it('CHOVR-015 — a channel the runtime publishes is delivered by notificationsInstance().send', async () => {
+  it('CHOVR-015 — a channel the runtime publishes is delivered by a separately built instance', async () => {
     const { user } = createUser(testDb, { username: 'recipient' });
     setNotificationChannels(testDb, 'none');
     const delivered: Array<{ userId: number; title: string }> = [];
