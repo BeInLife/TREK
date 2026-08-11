@@ -59,8 +59,8 @@ function CollectionsPageDesktop(): React.ReactElement {
   // + detail come into view alongside the map.
   const onMapSelect = (id: number) => { openPlace(id); if (c.view === 'map') c.setView('list') }
 
-  const desktopSplit = c.isWide && mappable.length > 0
-  const mapShown = mappable.length > 0 && (c.view === 'map' || c.isWide)
+  const desktopSplit = c.isWide && c.hasMappable
+  const mapShown = c.hasMappable && (c.view === 'map' || c.isWide)
   const mapOverlay = c.isWide && mapShown // the map carries the toggle + search
   const canAddPlace = typeof c.activeId === 'number' && c.canEdit // a real list you can edit
 
@@ -79,6 +79,11 @@ function CollectionsPageDesktop(): React.ReactElement {
   )
   const mapPanel = (overlay: boolean) => (
     <CollectionMapPanel
+      labelOptions={isRealList ? c.labelOptions : []}
+      labelFilter={c.labelFilter}
+      onLabelFilter={isRealList ? c.setLabelFilter : undefined}
+      canManageLabels={canManageLabels}
+      onManageLabels={() => c.setShowLabelManager(true)}
       places={mappable}
       selectedPlaceId={c.selectedPlaceId}
       onSelect={onMapSelect}
@@ -109,7 +114,7 @@ function CollectionsPageDesktop(): React.ReactElement {
       onSortMode={c.setSortMode}
       canAddPlace={canAddPlace}
       onAddPlace={() => c.setShowAddPlace(true)}
-      showLabels={isRealList}
+      showLabels={isRealList && !mapShown}
       labelOptions={c.labelOptions}
       labelFilter={c.labelFilter}
       onLabelFilter={c.setLabelFilter}
@@ -151,7 +156,7 @@ function CollectionsPageDesktop(): React.ReactElement {
         <div className="col-split-map">{mapPanel(true)}</div>
       </div>
     )
-  } else if (c.view === 'map' && mappable.length > 0) {
+  } else if (c.view === 'map' && c.hasMappable) {
     body = <div className="col-mapwrap">{mapPanel(false)}</div>
   } else {
     body = listColumn
@@ -212,7 +217,7 @@ function CollectionsPageDesktop(): React.ReactElement {
                     <button type="button" className="col-rail-toggle" onClick={() => c.setMobileRailOpen(true)}>
                       <Bookmark size={15} /> {t('collections.title')}
                     </button>
-                    {!c.isWide && mappable.length > 0 && (
+                    {!c.isWide && c.hasMappable && (
                       <div className="col-viewseg" role="group" aria-label={t('collections.title')}>
                         <button type="button" aria-pressed={c.view === 'list'} onClick={() => c.setView('list')} aria-label={t('collections.view.list')} title={t('collections.view.list')} className={c.view === 'list' ? 'on' : ''}>
                           <ListIcon size={16} />
