@@ -922,6 +922,41 @@ describe('AtlasPage', () => {
     });
   });
 
+  describe('FE-PAGE-ATLAS-051: bucket search results escape the panel that clips them', () => {
+    it('renders the result list outside the overflow-hidden desktop panel (#1899)', async () => {
+      server.use(
+        http.post('/api/maps/search', () => HttpResponse.json({
+          places: [
+            { name: 'Amsterdam', address: 'Amsterdam, North Holland, Netherlands', lat: 52.37, lng: 4.89 },
+            { name: 'New Amsterdam Island', address: 'French Southern and Antarctic Lands, France', lat: -37.8, lng: 77.5 },
+            { name: 'City of Amsterdam', address: 'North Holland, Netherlands', lat: 52.35, lng: 4.9 },
+          ],
+        })),
+      );
+
+      const user = userEvent.setup();
+      render(<AtlasPage />);
+
+      await waitFor(() => expect(screen.getAllByText('Bucket List').length).toBeGreaterThan(0));
+      await user.click(screen.getAllByText('Bucket List')[0]);
+      await waitFor(() => expect(screen.getAllByRole('button', { name: /add place/i }).length).toBeGreaterThan(0));
+      await user.click(screen.getAllByRole('button', { name: /add place/i })[0]);
+
+      const nameInput = await screen.findByPlaceholderText(/name \(country, city, place\.\.\.\)/i);
+      await user.type(nameInput, 'Amsterdam{Enter}');
+
+      // The first hit must be present — it is the one the panel used to swallow.
+      const firstHit = await screen.findByText('Amsterdam, North Holland, Netherlands');
+      const list = firstHit.closest('button')!.parentElement as HTMLElement;
+
+      // Portalled straight onto the body, so no ancestor's overflow can clip it.
+      expect(list.style.position).toBe('fixed');
+      expect(list.parentElement).toBe(document.body);
+      expect(list.closest('.overflow-hidden')).toBeNull();
+      expect(screen.getByText('City of Amsterdam')).toBeInTheDocument();
+    });
+  });
+
   describe('FE-PAGE-ATLAS-033: GeoJSON with unvisited country covers onEachFeature else branch', () => {
     it('loads map with visited FR and unvisited DE, covering both onEachFeature branches', async () => {
       const geoJsonFRandDE = {
@@ -1291,7 +1326,7 @@ describe('AtlasPage', () => {
         () => {
           const els = screen.queryAllByText('Tokyo');
           // Filter to those that are inside the search results dropdown (not the input itself)
-          const resultEl = els.find((el) => el.tagName !== 'INPUT' && el.closest('div[style*="position: absolute"]'));
+          const resultEl = els.find((el) => el.tagName !== 'INPUT' && el.closest('div[style*="position: fixed"]'));
           if (!resultEl) throw new Error('Tokyo result not found in dropdown');
           return resultEl;
         },
@@ -1571,12 +1606,12 @@ describe('AtlasPage', () => {
       await user.type(nameInput, 'Paris');
       fireEvent.keyDown(nameInput, { key: 'Enter' });
 
-      // Wait for Paris result in the dropdown (absolute-positioned list)
+      // Wait for Paris result in the dropdown (portalled, fixed-position list)
       const parisBtn = await waitFor(
         () => {
           const btns = Array.from(document.querySelectorAll('button'));
           const btn = btns.find(
-            (b) => b.textContent?.includes('Paris') && b.closest('[style*="position: absolute"]'),
+            (b) => b.textContent?.includes('Paris') && b.closest('[style*="position: fixed"]'),
           );
           if (!btn) throw new Error('Paris dropdown result not found');
           return btn;
