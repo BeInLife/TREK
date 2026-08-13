@@ -57,4 +57,64 @@ describe('MobileShell', () => {
 
     delete window.__addToast;
   });
+
+  // #1809: iOS Safari only minimises its address bar when the document scrolls,
+  // so the phone shell must not sit a scroll container between the two.
+  it('FE-MOB-MSHELL-005: the phone shell owns no scroll container and grows with the document', () => {
+    const { container } = render(
+      <MobileShell isPhone><p>page body</p></MobileShell>,
+      { initialEntries: ['/dashboard'] },
+    );
+
+    const root = container.querySelector('.m-root') as HTMLElement;
+    // svh, not dvh: dvh grows while the toolbar retracts.
+    expect(root.className).toContain('min-h-svh');
+    expect(root.className).not.toContain('h-dvh');
+    expect(root.querySelector(':scope > .overflow-y-auto')).toBeNull();
+
+    const content = screen.getByText('page body').parentElement as HTMLElement;
+    expect(content.className).toContain('flex-1');
+    expect(content.className).not.toContain('overflow');
+  });
+
+  it('FE-MOB-MSHELL-006: paints background and screen gradient on a viewport-sized layer', () => {
+    const { container } = render(
+      <MobileShell isPhone><p>page body</p></MobileShell>,
+      { initialEntries: ['/dashboard'] },
+    );
+
+    const root = container.querySelector('.m-root') as HTMLElement;
+    const layer = root.querySelector('[aria-hidden="true"]') as HTMLElement;
+    expect(layer).toBeInTheDocument();
+    expect(layer.className).toContain('fixed');
+    expect(layer.className).toContain('inset-0');
+    expect(layer.className).toContain('var(--m-scr)');
+    expect(layer.className).toContain('var(--m-bg)');
+    expect(root.className).not.toContain('var(--m-bg)');
+    expect(layer.className).toContain('-z-10');
+  });
+
+  it('FE-MOB-MSHELL-006b: the content wrapper is not a stacking context', () => {
+    // A positioned wrapper with a z-index traps every fixed overlay a screen
+    // renders inside it: the vacay view/edit FAB (z-50) went underneath the dock
+    // (z-40) when this carried `relative z-10`. The screens rely on their own
+    // z-index competing with the chrome, so this has to stay unpositioned.
+    render(<MobileShell isPhone><p>page body</p></MobileShell>, { initialEntries: ['/dashboard'] });
+
+    const content = screen.getByText('page body').parentElement as HTMLElement;
+    expect(content.className).toContain('flex-1');
+    expect(content.className).not.toMatch(/(^|\s)(relative|absolute|fixed|sticky)(\s|$)/);
+    expect(content.className).not.toMatch(/z-\[?\d/);
+  });
+
+  it('FE-MOB-MSHELL-007: the desktop branch keeps its own scroller', () => {
+    render(
+      <MobileShell isPhone={false}><p>page body</p></MobileShell>,
+      { initialEntries: ['/dashboard'] },
+    );
+
+    const content = screen.getByText('page body').parentElement as HTMLElement;
+    expect(content.className).toContain('overflow-y-auto');
+    expect(content.className).toContain('md:overflow-visible');
+  });
 });

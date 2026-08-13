@@ -2,7 +2,7 @@ import { Body, Controller, Get, HttpCode, HttpException, Post, Put, Req, UseGuar
 import type { Request } from 'express';
 import { MASKED_SETTING_VALUE } from '@trek/shared';
 import type { User } from '../../types';
-import { SettingsService } from './settings.service';
+import { SettingsService, isAdminOnlyLlmSetting } from './settings.service';
 import { SettingUpsertDto, SettingsBulkDto } from './settings.dto';
 import { AdminDefaultUserSettingsDto } from '../admin/admin.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -18,11 +18,36 @@ import { CurrentUser } from '../auth/current-user.decorator';
  * the DTO classes in settings.dto.ts + the global ZodValidationPipe (400 with
  * the standard `{ error }` envelope on mismatch — this replaced the legacy
  * bespoke 'Key is required' / 'Settings object is required' checks).
+ *
+ * One key group is authorized rather than merely validated: the LLM endpoint
+ * settings answer 403 here for everyone, admins included, because they are
+ * instance configuration and live on their own admin routes (#1772).
  */
 @Controller('api/settings')
 @UseGuards(JwtAuthGuard)
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
+
+  /**
+   * #1772: the write half of the rule that the endpoint is instance
+   * configuration. There is no key allow-list on this route, so anyone could
+   * otherwise park an `llm_base_url` (or `llm_provider: 'local'`) in their own
+   * settings row. The resolver ignores such a row anyway; refusing it here
+   * means the caller finds out instead of silently saving something that never
+   * takes effect.
+   *
+   * Admins are not exempt: they set the instance endpoint on the addon, or via
+   * PUT /api/admin/default-user-settings, both of which are separate routes
+   * behind AdminGuard. A personal row would be a second, invisible place for
+   * the same value.
+   */
+  private assertMayWriteLlmEndpoint(settings: Record<string, unknown>) {
+    for (const [key, value] of Object.entries(settings)) {
+      if (isAdminOnlyLlmSetting(key, value)) {
+        throw new HttpException({ error: 'Admin access required' }, 403);
+      }
+    }
+  }
 
   @Get()
   list(@CurrentUser() user: User) {
@@ -31,6 +56,7 @@ export class SettingsController {
 
   @Put()
   upsert(@CurrentUser() user: User, @Body() body: SettingUpsertDto) {
+    this.assertMayWriteLlmEndpoint({ [body.key]: body.value });
     // The client echoes a redacted secret back unchanged — treat as a no-op.
     if (body.value === MASKED_SETTING_VALUE) {
       return { success: true, key: body.key, unchanged: true };
@@ -42,6 +68,7 @@ export class SettingsController {
   @Post('bulk')
   @HttpCode(200) // Express answers bulk with res.json (200), not the POST-default 201.
   bulk(@CurrentUser() user: User, @Body() body: SettingsBulkDto) {
+    this.assertMayWriteLlmEndpoint(body.settings);
     try {
       const updated = this.settings.bulkUpsertSettings(user.id, body.settings);
       return { success: true, updated };
