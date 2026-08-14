@@ -667,6 +667,360 @@ describe('exportICS', () => {
     expect(ics).toContain('DTSTART;TZID=Europe/Paris:20250602T090000');
     expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Europe/Paris');
   });
+
+  it('CAL-032: an all-day booking with an end date spans the whole range', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Festival Trip' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Music Festival', type: 'event' });
+    // A date-only start/end pair is what the booking import writes for an all-day
+    // multi-day event. Without a DTEND the RFC reads the event as a single day, so
+    // the booking collapsed onto its first day (#1869).
+    testDb
+      .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
+      .run('2026-08-26', '2026-08-30', reservation.id);
+
+    const { ics } = svc.exportICS(trip.id);
+
+    // DTEND is exclusive, so the day after the last day of the booking.
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260826\r\nDTEND;VALUE=DATE:20260831');
+  });
+
+  it('CAL-033: a timed end time on an all-day booking still yields a VALUE=DATE DTEND', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Mixed Precision' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Cottage', type: 'other' });
+    // Mixing DTSTART;VALUE=DATE with a date-time DTEND violates RFC 5545 §3.8.2.2
+    // (both ends must share a value type), so only the date part may be used.
+    testDb
+      .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
+      .run('2026-08-26', '2026-08-30T11:00', reservation.id);
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260826\r\nDTEND;VALUE=DATE:20260831');
+    expect(ics).not.toContain('DTEND:20260830T110000');
+  });
+
+  it('CAL-034: an end date before the start date emits no DTEND', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Backwards' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Swapped Dates', type: 'event' });
+    // Clients either drop an event whose DTEND precedes its DTSTART or render it
+    // with zero duration; leaving the end out keeps the single-day fallback.
+    testDb
+      .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
+      .run('2026-08-26', '2026-08-20', reservation.id);
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260826');
+    expect(ics).not.toContain('DTEND');
+  });
+
+  it('CAL-035: a clock-only end time on an all-day booking emits no DTEND', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Half Timed' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Workshop', type: 'other' });
+    // Relative "Day N" trips store a bare clock time; there is no date to anchor it
+    // to, so it cannot become the end of an all-day range.
+    testDb
+      .prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
+      .run('2026-08-26', '11:00', reservation.id);
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260826');
+    expect(ics).not.toContain('DTEND');
+  });
+});
+
+// ── Accommodations in the feed (#1586) ───────────────────────────────────────
+
+describe('accommodations', () => {
+  /** A stay with its linked hotel reservation, the shape createAccommodation writes. */
+  const createStay = (
+    tripId: number,
+    opts: {
+      start: string | null;
+      end?: string | null;
+      check_in?: string | null;
+      check_in_end?: string | null;
+      check_out?: string | null;
+      title?: string;
+      withReservation?: boolean;
+      lat?: number;
+      lng?: number;
+    },
+  ) => {
+    const place = createPlace(testDb, tripId, {
+      name: opts.title ?? 'Hotel Bellevue',
+      lat: opts.lat ?? 48.8566,
+      lng: opts.lng ?? 2.3522,
+    });
+    testDb.prepare('UPDATE places SET address = ? WHERE id = ?').run('1 Rue de Rivoli', place.id);
+    const startDay = createDay(testDb, tripId, { date: opts.start ?? undefined });
+    const endDay = opts.end === undefined
+      ? startDay
+      : createDay(testDb, tripId, { date: opts.end ?? undefined });
+    const stayId = testDb.prepare(`
+      INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id, check_in, check_in_end, check_out)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      tripId, place.id, startDay.id, endDay.id,
+      opts.check_in ?? null, opts.check_in_end ?? null, opts.check_out ?? null,
+    ).lastInsertRowid as number;
+
+    if (opts.withReservation !== false) {
+      testDb.prepare(`
+        INSERT INTO reservations (trip_id, day_id, title, reservation_time, status, type, accommodation_id)
+        VALUES (?, ?, ?, ?, 'confirmed', 'hotel', ?)
+      `).run(tripId, startDay.id, opts.title ?? 'Hotel Bellevue', opts.start, String(stayId));
+    }
+    return { stayId, placeId: place.id };
+  };
+
+  it('CAL-025: a stay covers every night as one all-day event, not just the arrival day', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Paris' });
+    createStay(trip.id, { start: '2026-07-07', end: '2026-07-12' });
+
+    const { ics } = svc.exportICS(trip.id);
+
+    // DTEND is exclusive, so the day after checkout.
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260707\r\nDTEND;VALUE=DATE:20260713');
+    expect(ics).toContain('SUMMARY:Hotel Bellevue');
+  });
+
+  it('CAL-026: check-in and check-out become their own timed events in the stay zone', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Paris' });
+    createStay(trip.id, {
+      start: '2026-07-07', end: '2026-07-12',
+      check_in: '15:00', check_in_end: '22:00', check_out: '11:00',
+    });
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('SUMMARY:Check-in: Hotel Bellevue');
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T150000');
+    expect(ics).toContain('DTEND;TZID=Europe/Paris:20260707T220000');
+    expect(ics).toContain('SUMMARY:Check-out: Hotel Bellevue');
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260712T110000');
+    expect(ics).toContain('LOCATION:1 Rue de Rivoli');
+    expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Europe/Paris');
+  });
+
+  it('CAL-027: a stay without times emits the all-day range and nothing else', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Paris' });
+    createStay(trip.id, { start: '2026-07-07', end: '2026-07-12' });
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).not.toContain('Check-in');
+    expect(ics).not.toContain('Check-out');
+  });
+
+  it('CAL-028: a stay whose end day lost its date falls back to the arrival day', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Paris' });
+    createStay(trip.id, { start: '2026-07-07', end: null, check_out: '11:00' });
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260707\r\nDTEND;VALUE=DATE:20260708');
+    expect(ics).toContain('SUMMARY:Check-out: Hotel Bellevue');
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T110000');
+  });
+
+  it('CAL-029: a stay with no reservation still contributes its check-in event', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Paris' });
+    createStay(trip.id, { start: '2026-07-07', end: '2026-07-09', check_in: '15:00', withReservation: false });
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('SUMMARY:Check-in: Hotel Bellevue');
+    // No stay event without a reservation to carry it — the accommodation itself
+    // has no title, notes or confirmation of its own to show.
+    expect(ics).not.toContain('DTEND;VALUE=DATE:20260710');
+  });
+
+  it('CAL-030: a hotel reservation without a stay keeps its old single-day event', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Paris' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Airbnb', type: 'hotel' });
+    testDb.prepare('UPDATE reservations SET reservation_time=? WHERE id=?').run('2026-07-07', reservation.id);
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260707');
+    expect(ics).not.toContain('DTEND;VALUE=DATE');
+  });
+
+  it('CAL-031: a dateless stay is skipped instead of emitting a broken event', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Someday' });
+    createStay(trip.id, { start: null, end: null, check_in: '15:00', check_out: '11:00' });
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).not.toContain('Check-in');
+    expect(ics).not.toContain('Check-out');
+    expect(ics).not.toContain('DTSTART;VALUE=DATE:');
+  });
+
+  it('CAL-036: two bookings on one stay emit the check-in/check-out markers once', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Paris' });
+    const { stayId } = createStay(trip.id, {
+      start: '2026-07-07', end: '2026-07-12', check_in: '15:00', check_out: '11:00',
+    });
+    // Nothing stops a second booking from pointing at the same accommodation. The
+    // markers are keyed by the stay, so joining the reservations in fanned the stay
+    // out into two VEVENTs carrying the same UID, and clients then show whichever
+    // one they saw last (#1869).
+    testDb.prepare(`
+      INSERT INTO reservations (trip_id, title, reservation_time, status, type, accommodation_id)
+      VALUES (?, 'Bellevue second room', NULL, 'confirmed', 'hotel', ?)
+    `).run(trip.id, String(stayId));
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics.match(/UID:trek-checkin-\d+@trek/g)).toHaveLength(1);
+    expect(ics.match(/UID:trek-checkout-\d+@trek/g)).toHaveLength(1);
+    // The lowest booking id names the markers, so the title cannot flip between
+    // exports. The second booking keeps its own event (its UID is its own).
+    expect(ics).toContain('SUMMARY:Check-in: Hotel Bellevue\r\n');
+    expect(ics).not.toContain('Check-in: Bellevue second room');
+    expect(ics).toContain('SUMMARY:Bellevue second room');
+  });
+});
+
+// ── Car rental pickup/drop-off in the feed (#1721) ──────────────────────────
+
+describe('car rentals', () => {
+  const insertEndpoint = (
+    reservationId: number,
+    role: string,
+    sequence: number,
+    name: string,
+    lat: number,
+    lng: number,
+    timezone: string | null,
+    local_time: string | null,
+    local_date: string | null,
+  ) => {
+    testDb.prepare(
+      'INSERT INTO reservation_endpoints (reservation_id, role, sequence, name, code, lat, lng, timezone, local_time, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(reservationId, role, sequence, name, null, lat, lng, timezone, local_time, local_date);
+  };
+
+  it('CAL-037: a rental with from/to endpoints produces a pickup and a drop-off event at the right local times and zones', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Hertz Rental', type: 'car' });
+    testDb.prepare('UPDATE reservations SET reservation_time=NULL, reservation_end_time=NULL, location=? WHERE id=?')
+      .run('Hertz Downtown', reservation.id);
+    insertEndpoint(reservation.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00', '2026-07-07');
+    insertEndpoint(reservation.id, 'to', 1, 'Berlin Office', 52.5, 13.4, 'Europe/Berlin', '10:30', '2026-07-14');
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('SUMMARY:Pickup: Hertz Rental');
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
+    expect(ics).toContain('SUMMARY:Drop-off: Hertz Rental');
+    expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20260714T103000');
+    expect(ics).toContain('LOCATION:Hertz Downtown');
+    expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Europe/Paris');
+    expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:Europe/Berlin');
+  });
+
+  it('CAL-038: role-less endpoints fall back to first/last by sequence', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Avis Rental', type: 'car' });
+    testDb.prepare('UPDATE reservations SET reservation_time=NULL, reservation_end_time=NULL WHERE id=?').run(reservation.id);
+    // Neither endpoint carries a from/to role — an older import shape.
+    insertEndpoint(reservation.id, 'stop', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00', '2026-07-07');
+    insertEndpoint(reservation.id, 'stop', 1, 'Berlin Office', 52.5, 13.4, 'Europe/Berlin', '10:30', '2026-07-14');
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('SUMMARY:Pickup: Avis Rental');
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
+    expect(ics).toContain('SUMMARY:Drop-off: Avis Rental');
+    expect(ics).toContain('DTSTART;TZID=Europe/Berlin:20260714T103000');
+  });
+
+  it('CAL-039: a rental with only reservation_time/reservation_end_time still produces both events', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
+    const place = createPlace(testDb, trip.id, { name: 'Rental Desk', lat: 48.8566, lng: 2.3522 });
+    const reservation = createReservation(testDb, trip.id, { title: 'Budget Rental', type: 'car' });
+    testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=?, place_id=? WHERE id=?')
+      .run('2026-07-07T09:00', '2026-07-14T10:30', place.id, reservation.id);
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('SUMMARY:Pickup: Budget Rental');
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
+    expect(ics).toContain('SUMMARY:Drop-off: Budget Rental');
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260714T103000');
+  });
+
+  it('CAL-040: a rental with a single endpoint does not emit a bogus second event', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Sixt Rental', type: 'car' });
+    testDb.prepare('UPDATE reservations SET reservation_time=NULL, reservation_end_time=NULL WHERE id=?').run(reservation.id);
+    // Only the pickup was geocoded — the common shape for a partially-imported
+    // booking. The lone endpoint must not be reused as the drop-off too.
+    insertEndpoint(reservation.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00', '2026-07-07');
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('SUMMARY:Pickup: Sixt Rental');
+    expect(ics).not.toContain('Drop-off');
+  });
+
+  it('CAL-041: a rental with no usable clock emits no window events and its existing behaviour is unchanged', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Untimed Rental', type: 'car' });
+    testDb.prepare('UPDATE reservations SET reservation_time=NULL, reservation_end_time=NULL WHERE id=?').run(reservation.id);
+    // A date but no clock — the pre-existing "untimed transport" all-day
+    // fallback still applies and must be unaffected by the new marker events.
+    insertEndpoint(reservation.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', null, '2026-07-07');
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).not.toContain('Pickup');
+    expect(ics).not.toContain('Drop-off');
+    expect(ics).toContain('SUMMARY:Untimed Rental');
+    expect(ics).toContain('DTSTART;VALUE=DATE:20260707');
+  });
+
+  it('CAL-042: a clock that already carries seconds keeps its zone', () => {
+    // The booking import stores what KItinerary hands it, which is "10:00:00".
+    // fmtDateTime's time-only branch appended "00" regardless, so the value came
+    // out 17 characters long, dtLine refused to attach the TZID and the event
+    // went out floating — the #1453 regression by another route.
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id, { title: 'Road Trip' });
+    const reservation = createReservation(testDb, trip.id, { title: 'Seconds Rental', type: 'car' });
+    testDb.prepare('UPDATE reservations SET reservation_time=?, reservation_end_time=? WHERE id=?')
+      .run('2026-07-07T09:00:00', '18:30:00', reservation.id);
+    insertEndpoint(reservation.id, 'from', 0, 'Paris Office', 48.8566, 2.3522, 'Europe/Paris', '09:00:00', '2026-07-07');
+    insertEndpoint(reservation.id, 'to', 1, 'Lyon Office', 45.764, 4.8357, 'Europe/Paris', '18:30:00', '2026-07-07');
+
+    const { ics } = svc.exportICS(trip.id);
+
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T090000');
+    expect(ics).toContain('DTSTART;TZID=Europe/Paris:20260707T183000');
+    // No 17-character value anywhere: that is what silently drops the zone.
+    expect(ics).not.toMatch(/DTSTART[^\r\n]*\d{8}T\d{8}/);
+  });
 });
 
 describe('folded quirk branches', () => {

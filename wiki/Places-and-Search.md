@@ -79,6 +79,14 @@ Type or paste a `lat, lng` pair (e.g. `48.8566, 2.3522`) into the **Latitude** f
 
 Two inline warnings are shown when editing times: one if the end time is set to a value before or equal to the start time, and one if the times overlap with another place already assigned to the same day.
 
+## Costs for a place
+
+With the [Costs/Budget addon](Budget-Tracking) enabled, the place form carries the same **Costs** block that bookings and transports have. **Create expense** saves the place and then opens the Costs editor for a new expense linked to it — the museum ticket, the guided tour, the entry fee. Once linked, the block shows that expense with edit and remove actions.
+
+The expense belongs to the **place**, not to a day. Putting the same place on several days does not multiply it: you bought the ticket once. If you really pay each time, add a second expense from the Costs tab.
+
+Deleting the place deletes its linked expense too, the same way deleting a booking does.
+
 ## Custom place image
 
 By default a place's thumbnail is fetched automatically (from Google/OpenStreetMap when the place was imported or matched, otherwise a category icon). To use your own photo instead, open the place's detail panel and click its round thumbnail — pick an image and it becomes that place's thumbnail everywhere (list, map marker, itinerary, PDF export and shared trips). A small remove button on the thumbnail clears the custom image and restores the automatic default. Accepted formats are JPG, PNG, GIF and WebP (HEIC is converted automatically), up to 20 MB.
@@ -90,6 +98,8 @@ The same control is available on saved places in [Collections](Collections#place
 Drag a `.gpx`, `.kml`, or `.kmz` file onto the Places sidebar to import all waypoints or features at once. You can also import a saved-list share URL using the **Import list** button in the sidebar header — both Google Maps and Naver Maps list URLs are supported.
 
 Imported tracks each get their own line colour so multiple routes stay apart on the map; you can override it per track from the place details. See [Map Features](Map-Features) for the details.
+
+Importing the same list again does not duplicate what is already in the trip. A place is recognised by the provider id it was imported with (Google place id, Google feature id, or OSM id) before its name or its coordinates are considered, so renaming a place in TREK — or moving its pin — does not make it come back as a second copy on the next import.
 
 > **Admin:** Google Maps API key is set in [User-Settings](User-Settings). Without it, OSM search is used automatically.
 

@@ -1393,6 +1393,26 @@ describe('CostsPanel — expense modal', () => {
     expect(posted).toMatchObject({ name: 'Hotel Astoria', category: 'accommodation', total_price: 240, reservation_id: 12 })
     expect(onSaved).toHaveBeenCalled()
   })
+
+  it('FE-W5COSTS-038b: a prefill from a place links the expense to that place (#1298)', async () => {
+    const user = userEvent.setup()
+    let posted: Record<string, unknown> | null = null
+    server.use(http.post('/api/trips/1/budget', async ({ request }) => {
+      posted = await request.json() as Record<string, unknown>
+      return HttpResponse.json({ item: dinner() })
+    }))
+    render(
+      <ExpenseModal tripId={1} base="EUR" people={tripMembers} me={1} editing={null}
+        prefill={{ name: 'Louvre', category: 'activities', amount: 34, placeId: 7 }}
+        onClose={() => {}} onSaved={vi.fn()} />
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Add expense' }))
+
+    await waitFor(() => expect(posted).toBeTruthy());
+    expect(posted).toMatchObject({ name: 'Louvre', category: 'activities', total_price: 34, place_id: 7 })
+    expect(posted).not.toHaveProperty('reservation_id')
+  })
 })
 
 describe('CostsPanel — remaining paths', () => {
@@ -1742,13 +1762,15 @@ describe('CostsPanel — split maths', () => {
     expect(splitEqualShares(10, [{ user_id: 1 }, { user_id: 2 }, { user_id: 3 }], 1)).toEqual({ 1: 3.33, 2: 3.34, 3: 3.33 })
   })
 
-  it('FE-W5COSTS-041: ticket items nobody is assigned to still count toward the total', () => {
+  it('FE-W5COSTS-041: a receipt line nobody is assigned to is carried by everyone on the receipt', () => {
     const items: TicketItem[] = [
       { id: 'a', name: 'Apples', price: '10', participants: new Set([1, 2]) },
       { id: 'b', name: 'Service', price: '5', participants: new Set() },
       { id: 'c', name: 'Cake', price: 'x', participants: new Set([2]) },
     ]
 
-    expect(calculateTicketShares(items)).toEqual({ shares: { 1: 5, 2: 5 }, total: 15 })
+    // The service line used to count toward the total without landing on anyone,
+    // so the shares stayed a permanent 5.00 short of it (#1382).
+    expect(calculateTicketShares(items)).toEqual({ shares: { 1: 7.5, 2: 7.5 }, total: 15 })
   })
 })

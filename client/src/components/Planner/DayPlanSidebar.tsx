@@ -5,6 +5,7 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
 import { avatarSrc } from '../../utils/avatarSrc'
 import { ChevronDown, ChevronRight, ChevronUp, Compass, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Trash2, Car, Lock, Hotel, Footprints, Route as RouteIcon, Bookmark, TramFront, Zap } from 'lucide-react'
+import { type PickedPlace } from './TransitSearchPanel'
 import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
 import { calculateRouteWithLegs, optimizeRoute, generateGoogleMapsUrl, generateCoMapsUrl, type NamedWaypoint } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
@@ -99,6 +100,12 @@ interface DayPlanSidebarProps {
   onAddTransport?: (dayId: number) => void
   /** Opens the public-transit route search for a day (#1065). */
   onPlanTransit?: (dayId: number) => void
+  /**
+   * Opens the public-transit search pre-filled for a single leg (#1281 follow-up):
+   * the leg's origin and destination endpoints plus the origin's departure time,
+   * so "public transport" becomes an option on any connector, not just the day header.
+   */
+  onPlanTransitLeg?: (leg: { dayId: number; from: PickedPlace; to: PickedPlace; time: string | null }) => void
   /** Opens the journey view for a saved transit entry (#1065). */
   onOpenTransit?: (reservation: Reservation) => void
   onEditTransport?: (reservation: Reservation) => void
@@ -148,6 +155,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
   onRouteRefresh,
   onAddTransport,
   onPlanTransit,
+  onPlanTransitLeg,
   onOpenTransit,
   onEditTransport,
   onEditReservation,
@@ -203,7 +211,6 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
   const [lockedIds, setLockedIds] = useState(new Set())
   const [lockHoverId, setLockHoverId] = useState(null)
   const [undoHover, setUndoHover] = useState(false)
-  const [icsHover, setIcsHover] = useState(false)
   const [hoveredAssignmentId, setHoveredAssignmentId] = useState<number | null>(null)
   // Transit rows fold their itinerary out inline (#1065).
   const [expandedTransitIds, setExpandedTransitIds] = useState<Set<number>>(new Set())
@@ -977,6 +984,7 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     onRouteRefresh,
     onAddTransport,
     onPlanTransit,
+    onPlanTransitLeg,
     onOpenTransit,
     onEditTransport,
     expandedTransitIds,
@@ -1025,8 +1033,6 @@ function useDayPlanSidebar(props: DayPlanSidebarProps) {
     setLockHoverId,
     undoHover,
     setUndoHover,
-    icsHover,
-    setIcsHover,
     hoveredAssignmentId,
     setHoveredAssignmentId,
     dropTargetKey,
@@ -1151,6 +1157,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
     onRouteRefresh,
     onAddTransport,
     onPlanTransit,
+    onPlanTransitLeg,
     onOpenTransit,
     onEditTransport,
     expandedTransitIds,
@@ -1199,8 +1206,6 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
     setLockHoverId,
     undoHover,
     setUndoHover,
-    icsHover,
-    setIcsHover,
     hoveredAssignmentId,
     setHoveredAssignmentId,
     dropTargetKey,
@@ -1284,11 +1289,71 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
     })
   }
 
-  // Open the mode menu at the clicked connector: every route profile plus a
-  // "use day default" entry that clears the per-leg override.
-  const openLegModeMenu = (e: React.MouseEvent, assignmentId: number, dayId: number) => {
+  // A connector's endpoints carry only coordinates (RouteSegment.from/to, both
+  // [lat, lng]); resolve them back to the NAMES the transit search shows by indexing
+  // every located place, hotel and booking endpoint on the trip. Name is a property
+  // of a coordinate, so a trip-wide index is fine; a connector only renders when both
+  // ends are located, so a coordinate that misses the index is rare (nameless pick).
+  const transitNameIndex = useMemo(() => {
+    const m = new Map<string, string>()
+    const put = (lat?: number | null, lng?: number | null, name?: string | null) => {
+      if (lat == null || lng == null || !name) return
+      const k = `${lat},${lng}`
+      if (!m.has(k)) m.set(k, name)
+    }
+    for (const list of Object.values(assignments)) {
+      for (const a of list) put(a.place?.lat, a.place?.lng, a.place?.name)
+    }
+    for (const acc of accommodations) put(acc.place_lat, acc.place_lng, acc.place_name)
+    for (const r of reservations) {
+      for (const ep of (r.endpoints || [])) put(ep.lat, ep.lng, ep.name)
+    }
+    return m
+  }, [assignments, accommodations, reservations])
+
+  // The leg's departure time must be resolved WITHIN its day: the same located POI can
+  // be revisited on another day at a different time (a supported pattern), so a
+  // trip-wide coordinate index would return the wrong day's time. Scope to this day's
+  // assignments (and the reservations that touch it) so a revisit keeps its own time.
+  const originDepartureTime = (originKey: string, dayId: number): string | null => {
+    for (const a of assignments[String(dayId)] ?? []) {
+      if (a.place?.lat != null && a.place?.lng != null && `${a.place.lat},${a.place.lng}` === originKey) return a.place.place_time ?? null
+    }
+    for (const r of reservations) {
+      if (r.day_id !== dayId && r.end_day_id !== dayId) continue
+      for (const ep of (r.endpoints || [])) {
+        if (ep.lat != null && ep.lng != null && `${ep.lat},${ep.lng}` === originKey) return ep.local_time ?? null
+      }
+    }
+    return null
+  }
+
+  // Build the "public transport" prefill for a leg from its RouteSegment: MOTIS is
+  // driven off the coordinates, the names come from the index and the departure time
+  // from the origin's own day. Accepts 'H:mm' or 'HH:mm[:ss]', normalised to 'HH:mm'.
+  const buildTransitLeg = (seg: RouteSegment | undefined, dayId: number): { from: PickedPlace; to: PickedPlace; time: string | null } | null => {
+    if (!seg?.from || !seg?.to) return null
+    const pick = (c: [number, number]): PickedPlace => ({ name: transitNameIndex.get(`${c[0]},${c[1]}`) || '', lat: c[0], lng: c[1] })
+    const rawTime = originDepartureTime(`${seg.from[0]},${seg.from[1]}`, dayId)
+    const m = rawTime ? /^(\d{1,2}):(\d{2})/.exec(rawTime) : null
+    return { from: pick(seg.from), to: pick(seg.to), time: m ? `${m[1].padStart(2, '0')}:${m[2]}` : null }
+  }
+
+  // The extra connector-menu entry (#1281 follow-up): search public transit for this
+  // leg instead of drawing a road route. Only when a handler is wired (day has dates).
+  const transitLegMenuItem = (dayId: number, seg?: RouteSegment) => {
+    if (!onPlanTransitLeg) return []
+    const leg = buildTransitLeg(seg, dayId)
+    if (!leg) return []
+    return [{ label: t('transit.title'), icon: TramFront, onClick: () => onPlanTransitLeg({ dayId, from: leg.from, to: leg.to, time: leg.time }) }]
+  }
+
+  // Open the mode menu at the clicked connector: every route profile, the optional
+  // "public transport" entry, plus a "use day default" entry that clears the override.
+  const openLegModeMenu = (e: React.MouseEvent, assignmentId: number, dayId: number, seg?: RouteSegment) => {
     ctxMenu.open(e, [
       ...routeProfileOptions.map(o => ({ label: o.label, icon: modeIcon(o.key), onClick: () => setLegMode(assignmentId, dayId, o.key) })),
+      ...transitLegMenuItem(dayId, seg),
       { divider: true },
       { label: t('dayplan.transportMode.useDefault'), icon: RotateCcw, onClick: () => setLegMode(assignmentId, dayId, null) },
     ])
@@ -1310,9 +1375,10 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
     })
   }
 
-  const openIncomingLegModeMenu = (e: React.MouseEvent, assignmentId: number, dayId: number) => {
+  const openIncomingLegModeMenu = (e: React.MouseEvent, assignmentId: number, dayId: number, seg?: RouteSegment) => {
     ctxMenu.open(e, [
       ...routeProfileOptions.map(o => ({ label: o.label, icon: modeIcon(o.key), onClick: () => setIncomingLegMode(assignmentId, dayId, o.key) })),
+      ...transitLegMenuItem(dayId, seg),
       { divider: true },
       { label: t('dayplan.transportMode.useDefault'), icon: RotateCcw, onClick: () => setIncomingLegMode(assignmentId, dayId, null) },
     ])
@@ -1334,8 +1400,6 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
         t={t}
         locale={locale}
         toast={toast}
-        icsHover={icsHover}
-        setIcsHover={setIcsHover}
         expandedDays={expandedDays}
         setExpandedDays={setExpandedDays}
         onUndo={onUndo}
@@ -1664,7 +1728,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                     const targetId = hotelLegs[day.id]?.top?.targetId
                     const connector = <HotelRouteConnector seg={hotelLegs[day.id]!.top!.seg} name={hotelLegs[day.id]!.top!.name} profile={routeProfile} placement="top" />
                     return canEditDays && targetId != null ? (
-                      <div role="button" tabIndex={0} title={t('dayplan.transportMode.change')} onClick={e => openIncomingLegModeMenu(e, targetId, day.id)} style={{ cursor: 'pointer' }}>
+                      <div role="button" tabIndex={0} title={t('dayplan.transportMode.change')} onClick={e => openIncomingLegModeMenu(e, targetId, day.id, hotelLegs[day.id]!.top!.seg)} style={{ cursor: 'pointer' }}>
                         {connector}
                       </div>
                     ) : connector
@@ -1906,33 +1970,38 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                                 const confirmed = res.status === 'confirmed'
                                 const hasEndpoints = onToggleConnection && (res.endpoints || []).length >= 2
                                 const active = hasEndpoints ? visibleConnectionIds.includes(res.id) : false
+                                // The status, the time and the flight/train number used to sit in one
+                                // pill strung together on a middle dot, which read as one run-on
+                                // sentence. They are separate chips now: same tint so they still
+                                // belong together, own outline so the eye can take them one at a time.
+                                const RI = RES_ICONS[res.type] || Ticket
+                                const tint = confirmed ? 'bg-[rgba(22,163,74,0.1)] text-[#16a34a]' : 'bg-[rgba(217,119,6,0.1)] text-[#d97706]'
+                                const chip: React.CSSProperties = {
+                                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                                  padding: '1px 6px', borderRadius: 5,
+                                  fontSize: 'calc(9px * var(--fs-scale-caption, 1))', fontWeight: 600,
+                                  whiteSpace: 'nowrap',
+                                }
+                                const { time: st } = splitReservationDateTime(res.reservation_time)
+                                const { time: et } = splitReservationDateTime(res.reservation_end_time)
+                                const timeLabel = st || et
+                                  ? `${st ? formatTime(st, locale, timeFormat) : ''}${et ? ` – ${formatTime(et, locale, timeFormat)}` : ''}`
+                                  : ''
+                                let meta: any = {}
+                                try { meta = typeof res.metadata === 'string' ? JSON.parse(res.metadata || '{}') : (res.metadata || {}) } catch { meta = {} }
+                                const carrierLabel = meta
+                                  ? (meta.airline && meta.flight_number ? `${meta.airline} ${meta.flight_number}` : meta.flight_number || meta.train_number || '')
+                                  : ''
                                 return (
-                                  <div style={{ marginTop: 3, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                    <div className={confirmed ? 'bg-[rgba(22,163,74,0.1)] text-[#16a34a]' : 'bg-[rgba(217,119,6,0.1)] text-[#d97706]'} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 5, fontSize: 'calc(9px * var(--fs-scale-caption, 1))', fontWeight: 600,
-                                    }}>
-                                      {(() => { const RI = RES_ICONS[res.type] || Ticket; return <RI size={8} /> })()}
+                                  // No wrapping: the time belongs to the status it qualifies, so the
+                                  // chips stay on one line even when the row gets narrow.
+                                  <div style={{ marginTop: 3, display: 'inline-flex', alignItems: 'center', gap: 3, flexWrap: 'nowrap' }}>
+                                    <div className={tint} style={chip}>
+                                      <RI size={8} />
                                       <span className="hidden sm:inline">{confirmed ? t('planner.resConfirmed') : t('planner.resPending')}</span>
-                                      {(() => {
-                                        const { time: st } = splitReservationDateTime(res.reservation_time)
-                                        const { time: et } = splitReservationDateTime(res.reservation_end_time)
-                                        if (!st && !et) return null
-                                        return (
-                                          <span style={{ fontWeight: 400 }}>
-                                            {st ? formatTime(st, locale, timeFormat) : ''}
-                                            {et ? ` – ${formatTime(et, locale, timeFormat)}` : ''}
-                                          </span>
-                                        )
-                                      })()}
-                                      {(() => {
-                                        let meta: any = {}
-                                        try { meta = typeof res.metadata === 'string' ? JSON.parse(res.metadata || '{}') : (res.metadata || {}) } catch { meta = {} }
-                                        if (!meta) return null
-                                        if (meta.airline && meta.flight_number) return <span style={{ fontWeight: 400 }}>{meta.airline} {meta.flight_number}</span>
-                                        if (meta.flight_number) return <span style={{ fontWeight: 400 }}>{meta.flight_number}</span>
-                                        if (meta.train_number) return <span style={{ fontWeight: 400 }}>{meta.train_number}</span>
-                                        return null
-                                      })()}
                                     </div>
+                                    {timeLabel && <span className={tint} style={{ ...chip, fontWeight: 500 }}>{timeLabel}</span>}
+                                    {carrierLabel && <span className={tint} style={{ ...chip, fontWeight: 500 }}>{carrierLabel}</span>}
                                     {hasEndpoints && (
                                       <button
                                         type="button"
@@ -2034,7 +2103,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                           </div>
                           {daySchedule.byAssignment[day.id]?.[assignment.id]?.map(si => <PluginDayScheduleRow key={`${si.pluginId}:${si.id}`} item={si} />)}
                           {routeLegs[day.id]?.[assignment.id] && (canEditDays ? (
-                            <div role="button" tabIndex={0} title={t('dayplan.transportMode.change')} onClick={e => openLegModeMenu(e, assignment.id, day.id)} style={{ cursor: 'pointer' }}>
+                            <div role="button" tabIndex={0} title={t('dayplan.transportMode.change')} onClick={e => openLegModeMenu(e, assignment.id, day.id, routeLegs[day.id]![assignment.id])} style={{ cursor: 'pointer' }}>
                               <RouteConnector seg={routeLegs[day.id]![assignment.id]} profile={routeProfile} />
                             </div>
                           ) : (
@@ -2273,7 +2342,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                             const nextPlaceId = merged.slice(idx + 1).find(i => i.type === 'place' && i.data.place?.lat && i.data.place?.lng)?.data.id
                             const connector = <RouteConnector seg={routeLegs[day.id]![res.id]} profile={routeProfile} />
                             return canEditDays && nextPlaceId != null ? (
-                              <div role="button" tabIndex={0} title={t('dayplan.transportMode.change')} onClick={e => openIncomingLegModeMenu(e, Number(nextPlaceId), day.id)} style={{ cursor: 'pointer' }}>
+                              <div role="button" tabIndex={0} title={t('dayplan.transportMode.change')} onClick={e => openIncomingLegModeMenu(e, Number(nextPlaceId), day.id, routeLegs[day.id]![res.id])} style={{ cursor: 'pointer' }}>
                                 {connector}
                               </div>
                             ) : connector
@@ -2407,7 +2476,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                     const targetId = hotelLegs[day.id]?.bottom?.targetId
                     const connector = <HotelRouteConnector seg={hotelLegs[day.id]!.bottom!.seg} name={hotelLegs[day.id]!.bottom!.name} profile={routeProfile} placement="bottom" />
                     return canEditDays && targetId != null ? (
-                      <div role="button" tabIndex={0} title={t('dayplan.transportMode.change')} onClick={e => openLegModeMenu(e, targetId, day.id)} style={{ cursor: 'pointer' }}>
+                      <div role="button" tabIndex={0} title={t('dayplan.transportMode.change')} onClick={e => openLegModeMenu(e, targetId, day.id, hotelLegs[day.id]!.bottom!.seg)} style={{ cursor: 'pointer' }}>
                         {connector}
                       </div>
                     ) : connector

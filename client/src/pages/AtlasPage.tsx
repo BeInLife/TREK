@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from '../i18n'
 import Navbar from '../components/Layout/Navbar'
 import apiClient from '../api/client'
@@ -6,7 +7,7 @@ import CustomSelect from '../components/shared/CustomSelect'
 import EmptyState from '../components/shared/EmptyState'
 import { Globe, MapPin, Briefcase, Calendar, Flag, PanelLeftOpen, PanelLeftClose, X, Star, Plus, Trash2, Search } from 'lucide-react'
 import type { TranslationFn } from '../types'
-import { A2_TO_A3, countryCodeToFlag, withCountryMarkedVisited, type AtlasCountry, type AtlasStats, type AtlasData, type CountryDetail } from './atlas/atlasModel'
+import { A2_TO_A3, countryCodeToFlag, findBucketDuplicate, isBucketDuplicateError, withCountryMarkedVisited, type AtlasCountry, type AtlasStats, type AtlasData, type CountryDetail } from './atlas/atlasModel'
 import { continentForCountry } from '@trek/shared'
 import { useAtlas } from './atlas/useAtlas'
 import AtlasCountrySearch from './atlas/AtlasCountrySearch'
@@ -392,10 +393,20 @@ function AtlasPageDesktop(): React.ReactElement {
                   </button>
                   <button onClick={async () => {
                     const targetDate = bucketMonth > 0 && bucketYear > 0 ? `${bucketYear}-${String(bucketMonth).padStart(2, '0')}` : null
+                    // #1898: one entry per target date. The dialog stays open on a
+                    // duplicate so another month can be picked right away.
+                    if (findBucketDuplicate(bucketList, { name: confirmAction.name, country_code: confirmAction.code, target_date: targetDate, lat: null, lng: null })) {
+                      toast.error(t('atlas.bucketDuplicate'))
+                      return
+                    }
                     try {
                       const r = await apiClient.post('/addons/atlas/bucket-list', { name: confirmAction.name, country_code: confirmAction.code, target_date: targetDate })
                       setBucketList(prev => [r.data.item, ...prev])
                     } catch (err) {
+                      if (isBucketDuplicateError(err)) {
+                        toast.error(t('atlas.bucketDuplicate'))
+                        return
+                      }
                       toast.error(getApiErrorMessage(err, t('common.error')))
                     }
                     setBucketMonth(0); setBucketYear(0)
@@ -470,6 +481,7 @@ interface SidebarContentProps {
 function SidebarContent({ data, stats, countries, selectedCountry, countryDetail, resolveName, onTripClick, onUnmarkCountry, bucketList, bucketTab, setBucketTab, showBucketAdd, setShowBucketAdd, bucketForm, setBucketForm, onAddBucket, onDeleteBucket, onSearchBucket, onSelectBucketPoi, bucketSearchResults, setBucketSearchResults, bucketPoiMonth, setBucketPoiMonth, bucketPoiYear, setBucketPoiYear, bucketSearching, bucketSearch, setBucketSearch, t, dark }: SidebarContentProps): React.ReactElement {
   const { language } = useTranslation()
   const statsContentRef = useRef<HTMLDivElement>(null)
+  const bucketSearchRowRef = useRef<HTMLDivElement>(null)
   const [statsWidth, setStatsWidth] = useState<number | undefined>(undefined)
   useEffect(() => {
     const el = statsContentRef.current
@@ -556,8 +568,8 @@ function SidebarContent({ data, stats, countries, selectedCountry, countryDetail
     {showBucketAdd ? (
       <div style={{ padding: '8px 16px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         {/* Search or manual name */}
-        <div style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', gap: 4 }}>
+        <div>
+          <div ref={bucketSearchRowRef} style={{ display: 'flex', gap: 4 }}>
             <input type="text" value={bucketForm.name || bucketSearch}
               onChange={e => { const v = e.target.value; if (bucketForm.name) setBucketForm({ ...bucketForm, name: v }); else setBucketSearch(v) }}
               onKeyDown={e => { if (e.key === 'Enter' && !bucketForm.name) onSearchBucket(); else if (e.key === 'Enter') onAddBucket(); if (e.key === 'Escape') setShowBucketAdd(false) }}
@@ -581,15 +593,36 @@ function SidebarContent({ data, stats, countries, selectedCountry, countryDetail
               </button>
             )}
           </div>
-          {bucketSearchResults.length > 0 && (
-            <div className="bg-surface-card border border-edge" style={{ position: 'absolute', bottom: '100%', left: 0, right: 0, zIndex: 50, marginBottom: 4, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', maxHeight: 160, overflowY: 'auto' }}>
+          {/* Portalled to the body: the panel that hosts this form clips its
+              overflow, which used to swallow the top of the list (#1899). */}
+          {bucketSearchResults.length > 0 && createPortal(
+            <div className="bg-surface-card border border-edge" style={{
+              position: 'fixed',
+              ...(() => {
+                const rect = bucketSearchRowRef.current?.getBoundingClientRect()
+                if (!rect) return { left: 0, top: 0, width: 240, maxHeight: 160 }
+                const above = rect.top - 12
+                const below = window.innerHeight - rect.bottom - 12
+                const openUp = above >= below
+                return {
+                  left: rect.left,
+                  width: rect.width,
+                  // Never taller than the room on that side, so the list scrolls
+                  // instead of running off the edge of the viewport.
+                  maxHeight: Math.min(160, openUp ? above : below),
+                  ...(openUp ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
+                }
+              })(),
+              zIndex: 99999, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.12)', overflowY: 'auto',
+            }}>
               {bucketSearchResults.slice(0, 6).map((r, i) => (
                 <button key={i} onClick={() => onSelectBucketPoi(r)} className="border-b border-edge-faint" style={{ display: 'flex', flexDirection: 'column', gap: 1, width: '100%', padding: '6px 10px', borderTop: 'none', borderLeft: 'none', borderRight: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
                   <span className="text-content" style={{ fontSize: 'calc(12px * var(--fs-scale-body, 1))', fontWeight: 500 }}>{r.name}</span>
                   {r.address && <span className="text-content-faint" style={{ fontSize: 'calc(10px * var(--fs-scale-caption, 1))' }}>{r.address}</span>}
                 </button>
               ))}
-            </div>
+            </div>,
+            document.body
           )}
         </div>
         {/* Selected place indicator */}

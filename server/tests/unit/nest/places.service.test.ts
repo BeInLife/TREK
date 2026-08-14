@@ -393,6 +393,51 @@ describe('remove', () => {
     expect(remaining[0].id).toBe(p1.id);
   });
 
+  it('PLACE-SVC-019c — the linked expense goes with the place (#1298)', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const place = createPlace(testDb, trip.id, { name: 'Louvre' }) as any;
+    const other = createPlace(testDb, trip.id, { name: 'Orsay', lat: 48.86, lng: 2.3266 }) as any;
+    const linked = Number(testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'Tickets', 34, ?)").run(trip.id, place.id).lastInsertRowid);
+    const untouched = Number(testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'Other tickets', 12, ?)").run(trip.id, other.id).lastInsertRowid);
+    const standalone = Number(testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price) VALUES (?, 'Coffee', 3)").run(trip.id).lastInsertRowid);
+
+    // Read the link before the delete — that is what the controller broadcasts.
+    expect(svc.linkedExpenseIds(trip.id, [place.id])).toEqual([linked]);
+    expect(svc.remove(String(trip.id), String(place.id))).toBe(true);
+
+    const rows = testDb.prepare('SELECT id FROM budget_items ORDER BY id').all() as { id: number }[];
+    expect(rows.map(r => r.id)).toEqual([untouched, standalone]);
+  });
+
+  it('PLACE-SVC-019d — removeMany takes the expense of every deleted place with it', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const a = createPlace(testDb, trip.id, { name: 'A' }) as any;
+    const b = createPlace(testDb, trip.id, { name: 'B', lat: 48.86, lng: 2.3266 }) as any;
+    const keep = createPlace(testDb, trip.id, { name: 'C', lat: 48.87, lng: 2.34 }) as any;
+    for (const p of [a, b, keep]) {
+      testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'x', 1, ?)").run(trip.id, p.id);
+    }
+
+    expect(svc.linkedExpenseIds(trip.id, [a.id, b.id])).toHaveLength(2);
+    svc.removeMany(String(trip.id), [a.id, b.id]);
+
+    const rows = testDb.prepare('SELECT place_id FROM budget_items').all() as { place_id: number }[];
+    expect(rows.map(r => r.place_id)).toEqual([keep.id]);
+  });
+
+  it('PLACE-SVC-019e — linkedExpenseIds ignores places of another trip and an empty list', () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+    const other = createTrip(testDb, user.id);
+    const place = createPlace(testDb, other.id, { name: 'Elsewhere' }) as any;
+    testDb.prepare("INSERT INTO budget_items (trip_id, name, total_price, place_id) VALUES (?, 'x', 1, ?)").run(other.id, place.id);
+
+    expect(svc.linkedExpenseIds(trip.id, [place.id])).toEqual([]);
+    expect(svc.linkedExpenseIds(trip.id, [])).toEqual([]);
+  });
+
   it('PLACE-SVC-019b — reclaims the photo cache for the deleted place', () => {
     removeIfUnreferencedSpy.mockClear();
     const { user } = createUser(testDb);
@@ -663,6 +708,58 @@ describe('importGoogleList', () => {
     expect(result.skipped).toBe(1);
     expect(row.google_place_id).toBeNull();
     expect(row.google_ftid).toBe('0x882bf179e806d471:0x8591dde29c821a93');
+  });
+
+  it('PLACE-SVC-028d — a renamed place is not re-imported as a twin (#1550)', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    const listPayload = [
+      [null, null, null, null, 'My Test List', null, null, null, [
+        [null, [null, null, null, null, '878 Weber St N', [null, null, 43.5118527, -80.5542617], ['-8634542354666695567', '-8822026229683971437']], "St. Jacobs Farmers' Market"],
+      ]],
+    ];
+    const respond = () => vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => 'prefix\n' + JSON.stringify(listPayload),
+    }));
+    const url = 'https://www.google.com/maps/placelists/list/ABC123DEF456';
+
+    respond();
+    const first = await svc.importGoogleList(String(trip.id), url) as any;
+    expect(first.places).toHaveLength(1);
+
+    // What the reporter does: rename it to something they can actually read, and
+    // move it far enough that the coordinate fallback would not save us either.
+    testDb.prepare('UPDATE places SET name = ?, lat = ?, lng = ? WHERE id = ?')
+      .run('Saturday market', 43.6, -80.6, first.places[0].id);
+
+    respond();
+    const second = await svc.importGoogleList(String(trip.id), url) as any;
+    expect(second.places).toHaveLength(0);
+    expect(second.skipped).toBe(1);
+    expect(testDb.prepare('SELECT COUNT(*) c FROM places WHERE trip_id = ?').get(trip.id)).toEqual({ c: 1 });
+  });
+
+  it('PLACE-SVC-028e — two places at the same coordinates still both import', async () => {
+    const { user } = createUser(testDb);
+    const trip = createTrip(testDb, user.id);
+
+    // A bar and a diner in one building: same spot, different feature ids.
+    const listPayload = [
+      [null, null, null, null, 'One Building', null, null, null, [
+        [null, [null, null, null, null, 'Same street 1', [null, null, 52.52, 13.405], ['1', '2']], 'Rooftop Bar'],
+        [null, [null, null, null, null, 'Same street 1', [null, null, 52.52, 13.405], ['3', '4']], 'Ground Floor Diner'],
+      ]],
+    ];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => 'prefix\n' + JSON.stringify(listPayload),
+    }));
+
+    const result = await svc.importGoogleList(String(trip.id), 'https://www.google.com/maps/placelists/list/ABC123DEF456') as any;
+    expect(result.places).toHaveLength(2);
+    expect(result.skipped).toBe(0);
   });
 
   it('PLACE-SVC-029 — returns error when list items array is empty', async () => {

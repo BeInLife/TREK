@@ -10,7 +10,7 @@ const collection: TranslationStrings = {
   'collections.role.editor': 'Editor',
   'collections.role.admin': 'Administrador',
   'collections.picker.allLists': 'Todas as listas',
-  'collections.select': 'Selecionar',
+  'collections.select': 'Escolher',
   'collections.selectAll': 'Selecionar tudo',
   'collections.deselectAll': 'Desmarcar tudo',
   'collections.moveToList': 'Mover para lista',
@@ -96,6 +96,13 @@ const collection: TranslationStrings = {
   'collections.status.visited': 'Visitado',
   'collections.status.filterAll': 'Todos',
   'collections.status.cycleHint': 'toque para alterar',
+
+  'collections.markVisited': 'Marcar como visitado',
+  'collections.markVisitedAll': 'Visitado em todas',
+  'collections.markVisitedSelection': 'Marcar como visitado nas suas listas',
+  'collections.markVisitedNone': 'Nenhum desses lugares está salvo em uma lista',
+  'collections.markedVisited': 'Marcado como visitado',
+  'collections.markedVisitedTrip': '{count} lugares marcados como visitados',
 
   'collections.copyToTrip': 'Copiar para viagem',
   'collections.copyToTripTitle': 'Copiar para viagem',

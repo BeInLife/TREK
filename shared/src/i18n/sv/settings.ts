@@ -350,11 +350,13 @@ const settings: TranslationStrings = {
   'settings.airtrail.test.failed': 'Anslutning misslyckades',
   'settings.aiParsing.title': 'AI-analys',
   'settings.aiParsing.hint':
-    'Använd din egen AI-modell för att extrahera bokningar från uppladdade filer. Detta gäller endast när din administratör inte har konfigurerat en modell för hela instansen.',
+    'Välj den AI-modell som används för att extrahera bokningar från uppladdade filer. Detta gäller endast när din administratör inte har konfigurerat en modell för hela instansen.',
   'settings.aiParsing.provider': 'Leverantör',
   'settings.aiParsing.providerLocal': 'Lokal (Ollama)',
   'settings.aiParsing.providerOpenai': 'OpenAI',
   'settings.aiParsing.providerAnthropic': 'Anthropic',
+  'settings.aiParsing.localAdminOnly':
+    'En lokal slutpunkt (Ollama) ställs in en gång för hela instansen i administratörsinställningarna. Du kan fortfarande använda din egen OpenAI- eller Anthropic-nyckel här.',
   'settings.aiParsing.model': 'Modell',
   'settings.aiParsing.baseUrl': 'Bas-URL',
   'settings.aiParsing.baseUrlHint': 'Var modellen körs — en lokal Ollama-server eller en OpenAI-kompatibel slutpunkt.',

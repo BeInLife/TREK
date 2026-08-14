@@ -241,7 +241,7 @@ export function useTripPlanner() {
   // Public transit (#1065): open the TransportModal in its Automated mode, seed
   // the search (change-route), and show the journey view for a saved entry.
   const [transportModalAutomated, setTransportModalAutomated] = useState<boolean>(false)
-  const [transitPrefill, setTransitPrefill] = useState<{ from?: { name: string; lat: number; lng: number } | null; to?: { name: string; lat: number; lng: number } | null } | null>(null)
+  const [transitPrefill, setTransitPrefill] = useState<{ from?: { name: string; lat: number; lng: number } | null; to?: { name: string; lat: number; lng: number } | null; time?: string | null } | null>(null)
   const [transitJourney, setTransitJourney] = useState<Reservation | null>(null)
 
   // The bottom-nav "+" is context-aware per tab: on the Bookings / Transports tabs
@@ -545,6 +545,7 @@ export function useTripPlanner() {
         }
       }
       toast.success(t('trip.toast.placeUpdated'))
+      return { id: editingPlace.id }
     } else {
       const place = await tripActions.addPlace(tripId, data)
       if (pendingFiles?.length > 0 && place?.id) {
@@ -562,6 +563,9 @@ export function useTripPlanner() {
           await tripActions.deletePlace(tripId, capturedId)
         })
       }
+      // Handed back so the form can link an expense to a place that did not
+      // exist a moment ago (#1298), the same way the booking modals work.
+      return place?.id ? { id: place.id } : undefined
     }
   }, [editingPlace, editingAssignmentId, tripId, toast, pushUndo])
 

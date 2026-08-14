@@ -147,11 +147,19 @@ export class CalendarService {
     const trip = this.db.prepare('SELECT * FROM trips WHERE id = ?').get(tripId) as any;
     if (!trip) throw new NotFoundError('Trip not found');
 
+    // A hotel keeps its dates on the linked stay, not on the reservation: the
+    // booking form writes reservation_time = NULL for type 'hotel' and lets
+    // day_accommodations carry start day, end day and the check-in/out clock.
+    // Joining them here is what lets a stay span its whole range (#1586).
     const reservations = this.db
       .prepare(
-        `SELECT r.*, pl.lat AS place_lat, pl.lng AS place_lng
+        `SELECT r.*, pl.lat AS place_lat, pl.lng AS place_lng,
+                sd.date AS stay_start_date, ed.date AS stay_end_date
          FROM reservations r
          LEFT JOIN places pl ON r.place_id = pl.id
+         LEFT JOIN day_accommodations a ON r.accommodation_id = a.id
+         LEFT JOIN days sd ON a.start_day_id = sd.id
+         LEFT JOIN days ed ON a.end_day_id = ed.id
          WHERE r.trip_id = ?`,
       )
       .all(tripId) as any[];
@@ -174,10 +182,15 @@ export class CalendarService {
         // Pad to 15 chars (YYYYMMDDTHHMMSS) — add missing seconds
         return raw.length === 13 ? raw + '00' : raw;
       }
-      // Time-only: combine with reference date
+      // Time-only: combine with reference date. Pad the same way the branch above
+      // does rather than unconditionally, because the value can already carry
+      // seconds ("10:00:00" is what the booking import stores). Appending
+      // regardless made it 17 characters, which fails dtLine's shape check, drops
+      // the TZID and leaves a floating time in the feed (#1453 again).
       if (refDate && d.match(/^\d{2}:\d{2}/)) {
         const datePart = refDate.split('T')[0];
-        return `${datePart}T${d.replace(/:/g, '')}00`.replace(/-/g, '');
+        const raw = `${datePart}T${d.replace(/:/g, '')}`.replace(/-/g, '');
+        return raw.length === 13 ? raw + '00' : raw;
       }
       return d.replace(/[-:]/g, '');
     };
@@ -302,6 +315,23 @@ export class CalendarService {
     // both ends in the subscribed feed (#1453). Hotels/restaurants have no
     // endpoints and fall through to reservation_time.
     const buildReservationTimeLines = (r: any): string | null => {
+      // A stay wins over everything below: it is the only source that knows how
+      // long the booking lasts. Emitted as an all-day range over every night, so
+      // the hotel sits above the day in a subscribed calendar instead of
+      // appearing once on the arrival day (#1586).
+      // end_day_id is the CHECK-OUT day, and the block is meant to cover it too:
+      // a 26th-to-30th booking should read as a five-day block, not as the four
+      // nights it contains. DTEND is exclusive, so it is check-out plus one day.
+      // Dropping that +1 hides the departure day; it is not a stray off-by-one
+      // (#1869).
+      if (isDate(r.stay_start_date)) {
+        const lastDay = isDate(r.stay_end_date) && r.stay_end_date >= r.stay_start_date
+          ? r.stay_end_date
+          : r.stay_start_date;
+        return `DTSTART;VALUE=DATE:${fmtDate(r.stay_start_date)}\r\n` +
+          `DTEND;VALUE=DATE:${fmtDate(addDays(lastDay, 1))}\r\n`;
+      }
+
       const eps = endpointsMap.get(r.id);
       const ordered = eps && eps.length > 0 ? [...eps].sort((a, b) => a.sequence - b.sequence) : null;
       const first = ordered?.[0];
@@ -341,6 +371,18 @@ export class CalendarService {
             if (endDt.length >= 15) out += dtLine('DTEND', r.reservation_end_time, zone, r.reservation_time);
           }
           return out;
+        }
+        // Date-only start. RFC 5545 makes a DATE event without DTEND exactly one
+        // day long, so a booking that does record an end date still collapsed
+        // onto its first day (#1869); an all-day multi-day event coming through
+        // the booking import (kitinerary-mapper passes date-only start/end
+        // straight through) is the common shape. Same rule as the stay branch:
+        // DTEND is exclusive, hence the end day plus one. Only the date part is
+        // used, because DTSTART;VALUE=DATE and a timed DTEND may not be mixed.
+        const endDatePart = r.reservation_end_time ? String(r.reservation_end_time).split('T')[0] : '';
+        if (isDate(endDatePart) && endDatePart >= r.reservation_time) {
+          return `DTSTART;VALUE=DATE:${fmtDate(r.reservation_time)}\r\n` +
+            `DTEND;VALUE=DATE:${fmtDate(addDays(endDatePart, 1))}\r\n`;
         }
         return `DTSTART;VALUE=DATE:${fmtDate(r.reservation_time)}\r\n`;
       }
@@ -387,6 +429,134 @@ export class CalendarService {
       if (r.location) ev += `LOCATION:${esc(r.location)}\r\n`;
       ev += `END:VEVENT\r\n`;
       events.push(ev);
+    }
+
+    // Check-in and check-out as their own timed events, when the stay records the
+    // clock (#1586). They are separate from the all-day stay above on purpose: an
+    // all-day event cannot carry a time, and "be there at 15:00" is the part a
+    // subscriber actually wants a reminder for. Emitted per stay rather than per
+    // reservation so a stay whose reservation was deleted still shows them.
+    // The reservation is read through a subquery rather than a LEFT JOIN: nothing
+    // stops two bookings from pointing at the same accommodation, and a join fans
+    // the stay out into one row per booking. Since the check-in/check-out UIDs are
+    // keyed by the stay, that emitted the same UID twice and clients then pick one
+    // of the duplicates at random (#1869). Lowest id wins so the title is stable
+    // across exports.
+    const stays = this.db.prepare(`
+      SELECT a.id, a.check_in, a.check_in_end, a.check_out,
+             sd.date AS start_date, ed.date AS end_date,
+             p.name AS place_name, p.address AS place_address, p.lat AS place_lat, p.lng AS place_lng,
+             (SELECT r.title FROM reservations r
+               WHERE r.accommodation_id = a.id
+               ORDER BY r.id ASC LIMIT 1) AS reservation_title
+      FROM day_accommodations a
+      LEFT JOIN days sd ON a.start_day_id = sd.id
+      LEFT JOIN days ed ON a.end_day_id = ed.id
+      LEFT JOIN places p ON a.place_id = p.id
+      WHERE a.trip_id = ?
+      ORDER BY a.id ASC
+    `).all(tripId) as any[];
+
+    for (const stay of stays) {
+      const name = stay.reservation_title || stay.place_name || 'Accommodation';
+      const zone = resolveTimeZone(stay.place_lat, stay.place_lng);
+      // No end day (the day row was removed) → check out on the arrival day.
+      const checkOutDate = isDate(stay.end_date) ? stay.end_date : stay.start_date;
+
+      const marker = (
+        kind: 'checkin' | 'checkout',
+        date: string,
+        time: string,
+        summary: string,
+        endTime?: string | null,
+      ) => {
+        const ref = `${date}T00:00`;
+        let ev = `BEGIN:VEVENT\r\nUID:${uid(stay.id, kind)}\r\nDTSTAMP:${now}\r\n`;
+        ev += dtLine('DTSTART', time, zone, ref);
+        if (isTime(endTime)) ev += dtLine('DTEND', endTime!, zone, ref);
+        ev += `SUMMARY:${esc(summary)}\r\n`;
+        if (stay.place_address) ev += `LOCATION:${esc(stay.place_address)}\r\n`;
+        ev += `END:VEVENT\r\n`;
+        events.push(ev);
+      };
+
+      if (isDate(stay.start_date) && isTime(stay.check_in)) {
+        marker('checkin', stay.start_date, stay.check_in, `Check-in: ${name}`, stay.check_in_end);
+      }
+      if (isDate(checkOutDate) && isTime(stay.check_out)) {
+        marker('checkout', checkOutDate, stay.check_out, `Check-out: ${name}`);
+      }
+    }
+
+    // Pickup and drop-off as their own timed events — the car-rental analogue
+    // of check-in/check-out above (last unported piece of #1721). Additive,
+    // same as the check-in/check-out markers are additive to the all-day stay
+    // range: the rental's existing single-block event (from the endpoint or
+    // reservation_time branch of buildReservationTimeLines, above) is untouched.
+    // "YYYY-MM-DD", full ISO, or a bare "HH:MM" → date/time parts. Endpoints
+    // already carry local_date/local_time separately; reservation_time and
+    // reservation_end_time (the last-resort fallback below) are combined
+    // strings, and reservation_end_time is frequently just a bare clock
+    // alongside the reservation's own date.
+    const dateOf = (s: string | null | undefined): string | null => {
+      if (!s) return null;
+      const d = s.includes('T') ? s.split('T')[0] : s;
+      return isDate(d) ? d : null;
+    };
+    const timeOf = (s: string | null | undefined): string | null => {
+      if (!s) return null;
+      const t = s.includes('T') ? s.split('T')[1] : s;
+      return t && isTime(t) ? t : null;
+    };
+
+    for (const r of reservations) {
+      if (r.type !== 'car') continue;
+
+      // Sides come from the endpoint role first: import can drop one endpoint
+      // (failed geocoding), and a surviving return endpoint must not masquerade
+      // as the pickup. Positional first/last by sequence is only a fallback
+      // when neither role is present at all, and only once there's more than
+      // one endpoint, so a lone endpoint is never treated as both sides.
+      const eps = endpointsMap.get(r.id);
+      const ordered = eps && eps.length > 0 ? [...eps].sort((a, b) => a.sequence - b.sequence) : [];
+      const roleFrom = ordered.find(e => e.role === 'from');
+      const roleTo = ordered.find(e => e.role === 'to');
+      const noRoles = !roleFrom && !roleTo;
+      const pickupEp = roleFrom ?? (noRoles && ordered.length > 1 ? ordered[0] : undefined);
+      const dropEp = roleTo ?? (noRoles && ordered.length > 1 ? ordered[ordered.length - 1] : undefined);
+
+      const carMarker = (kind: 'pickup' | 'dropoff', summary: string, date: string, time: string, zone: string | null) => {
+        let ev = `BEGIN:VEVENT\r\nUID:${uid(r.id, kind)}\r\nDTSTAMP:${now}\r\n`;
+        ev += dtLine('DTSTART', time, zone, `${date}T00:00`);
+        ev += `SUMMARY:${esc(summary)}\r\n`;
+        if (r.location) ev += `LOCATION:${esc(r.location)}\r\n`;
+        ev += `END:VEVENT\r\n`;
+        events.push(ev);
+      };
+
+      // Per side: the chosen endpoint when it has a usable date and clock,
+      // else reservation_time (pickup) / reservation_end_time (drop-off) —
+      // imports frequently carry only that window. A side with no usable date
+      // and clock from either source emits nothing.
+      const pickupUsable = pickupEp && isDate(pickupEp.local_date) && isTime(pickupEp.local_time);
+      const pickupDate = pickupUsable ? pickupEp!.local_date : dateOf(r.reservation_time);
+      const pickupTime = pickupUsable ? pickupEp!.local_time : timeOf(r.reservation_time);
+      if (isDate(pickupDate) && isTime(pickupTime)) {
+        const zone = pickupUsable
+          ? (pickupEp!.timezone || resolveTimeZone(pickupEp!.lat, pickupEp!.lng))
+          : resolveTimeZone(r.place_lat, r.place_lng);
+        carMarker('pickup', `Pickup: ${r.title}`, pickupDate!, pickupTime!, zone);
+      }
+
+      const dropUsable = dropEp && isDate(dropEp.local_date) && isTime(dropEp.local_time);
+      const dropDate = dropUsable ? dropEp!.local_date : (dateOf(r.reservation_end_time) || dateOf(r.reservation_time));
+      const dropTime = dropUsable ? dropEp!.local_time : timeOf(r.reservation_end_time);
+      if (isDate(dropDate) && isTime(dropTime)) {
+        const zone = dropUsable
+          ? (dropEp!.timezone || resolveTimeZone(dropEp!.lat, dropEp!.lng))
+          : resolveTimeZone(r.place_lat, r.place_lng);
+        carMarker('dropoff', `Drop-off: ${r.title}`, dropDate!, dropTime!, zone);
+      }
     }
 
     // Every referenced zone gets a VTIMEZONE. They are emitted before the first

@@ -105,6 +105,7 @@ function buildHook(over: Record<string, unknown> = {}): Record<string, unknown> 
     mapRef: { current: null }, fullMapRef: { current: null },
     activeLocationId: null, handleMarkerClick: vi.fn(), handleLocationClick: vi.fn(),
     mapEntries: [], sidebarMapItems: [], tripDates: new Set<string>(), isMobile: false,
+    feedEdge: { atTop: true, atBottom: true }, scrollFeedTo: vi.fn(),
     loadJourney: vi.fn(), updateEntry: vi.fn(async () => {}), deleteEntry: vi.fn(async () => {}),
     reorderEntries: vi.fn(async () => {}), uploadPhotos: vi.fn(async () => ({ succeeded: [], failed: [] })),
     deletePhoto: vi.fn(async () => {}),
@@ -154,11 +155,13 @@ describe('JourneyDetailPage wiring', () => {
     expect(hook.navigate).toHaveBeenCalledWith('/journey');
   });
 
-  it('FE-JRN-DETWIRE-004: the download button lazy-loads the PDF book renderer', async () => {
+  it('FE-JRN-DETWIRE-004: the download button lazy-loads the PDF book renderer with the app language', async () => {
     const { hook } = setup();
-    const buttons = screen.getAllByRole('button');
-    fireEvent.click(buttons[1]);
-    await waitFor(() => expect(mocks.downloadPdf).toHaveBeenCalledWith(hook.current));
+    fireEvent.click(screen.getByRole('button', { name: 'journey.pdf.saveAsPdf' }));
+    await waitFor(() => expect(mocks.downloadPdf).toHaveBeenCalledWith(
+      hook.current,
+      { t: expect.any(Function), locale: 'en' },
+    ));
   });
 
   it('FE-JRN-DETWIRE-005: the eye toggle flips hide_skeletons and persists the preference', async () => {
@@ -407,9 +410,9 @@ describe('JourneyDetailPage wiring', () => {
 
   it('FE-JRN-DETWIRE-024: the floating mobile bar switches views, goes back and opens settings', () => {
     const { hook } = setup({ isMobile: true });
-    // The hero keeps its own back button in the DOM (hidden via class) — the
-    // floating bar is the first one.
-    fireEvent.click(screen.getAllByRole('button', { name: 'journey.detail.backToJourney' })[0]);
+    // The hero is unmounted below 1024px, so the bar owns these labels alone.
+    expect(screen.queryByRole('heading', { name: 'Japan 2026' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'journey.detail.backToJourney' }));
     expect(hook.navigate).toHaveBeenCalledWith('/journey');
 
     fireEvent.click(screen.getAllByRole('button', { name: /journey.share.gallery/ })[0]);
@@ -421,9 +424,12 @@ describe('JourneyDetailPage wiring', () => {
     expect(hook.setShowSettings).toHaveBeenCalledWith(true);
   });
 
-  it('FE-JRN-DETWIRE-025: a non-owner sees a spacer instead of the mobile settings button', () => {
+  it('FE-JRN-DETWIRE-025: a non-owner gets the mobile bar without the settings button', () => {
     setup({ isMobile: true, canEditJourney: false });
     expect(screen.queryByRole('button', { name: 'journey.settings.title' })).not.toBeInTheDocument();
+    // Export and the suggestions switch are not owner-only.
+    expect(screen.getByRole('button', { name: 'journey.pdf.saveAsPdf' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'journey.skeletons.hide' })).toBeInTheDocument();
   });
 
   it('FE-JRN-DETWIRE-026: the fullscreen mobile entry view wires edit, delete and photos', () => {
@@ -457,5 +463,72 @@ describe('JourneyDetailPage wiring', () => {
   it('FE-JRN-DETWIRE-028: a cover image is layered behind the hero gradient', () => {
     setup({ current: buildDetail({ cover_image: 'covers/j.jpg' }) });
     expect(document.querySelector('img[src="/uploads/covers/j.jpg"]')).toBeInTheDocument();
+  });
+
+  // ── Jump buttons (#1088) ──────────────────────────────────────────────────
+
+  it('FE-JRN-DETWIRE-029: a feed with nowhere to jump shows no buttons', () => {
+    setup({ feedEdge: { atTop: true, atBottom: true } });
+    expect(screen.queryByLabelText('journey.detail.jumpToTop')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('journey.detail.jumpToLast')).not.toBeInTheDocument();
+  });
+
+  it('FE-JRN-DETWIRE-030: each button appears only when that direction is available', () => {
+    const { unmount } = setup({ feedEdge: { atTop: false, atBottom: true } });
+    expect(screen.getByLabelText('journey.detail.jumpToTop')).toBeInTheDocument();
+    expect(screen.queryByLabelText('journey.detail.jumpToLast')).not.toBeInTheDocument();
+    unmount();
+
+    setup({ feedEdge: { atTop: true, atBottom: false } });
+    expect(screen.queryByLabelText('journey.detail.jumpToTop')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('journey.detail.jumpToLast')).toBeInTheDocument();
+  });
+
+  it('FE-JRN-DETWIRE-031: the buttons scroll the feed to the matching end', () => {
+    const { hook } = setup({ feedEdge: { atTop: false, atBottom: false } });
+
+    fireEvent.click(screen.getByLabelText('journey.detail.jumpToTop'));
+    expect(hook.scrollFeedTo).toHaveBeenCalledWith('top');
+
+    fireEvent.click(screen.getByLabelText('journey.detail.jumpToLast'));
+    expect(hook.scrollFeedTo).toHaveBeenLastCalledWith('bottom');
+  });
+
+  it('FE-JRN-DETWIRE-032: the phone layout has its own chrome and gets no jump buttons', () => {
+    setup({ isMobile: true, feedEdge: { atTop: false, atBottom: false } });
+    expect(screen.queryByLabelText('journey.detail.jumpToTop')).not.toBeInTheDocument();
+  });
+
+  // ── Book export + suggestions below 1024px (#1848) ────────────────────────
+
+  it('FE-JRN-DETWIRE-033: the mobile bar exports the book with the app language', async () => {
+    const { hook } = setup({ isMobile: true });
+    fireEvent.click(screen.getByRole('button', { name: 'journey.pdf.saveAsPdf' }));
+    await waitFor(() => expect(mocks.downloadPdf).toHaveBeenCalledWith(
+      hook.current,
+      { t: expect.any(Function), locale: 'en' },
+    ));
+  });
+
+  it('FE-JRN-DETWIRE-034: the mobile bar toggle flips hide_skeletons and persists it', async () => {
+    const update = vi.spyOn(journeyApi, 'updatePreferences').mockResolvedValue({});
+    const { hook } = setup({ isMobile: true });
+
+    fireEvent.click(screen.getByRole('button', { name: 'journey.skeletons.hide' }));
+
+    expect(hook.setHideSkeletons).toHaveBeenCalledWith(true);
+    await waitFor(() => expect(update).toHaveBeenCalledWith(7, { hide_skeletons: true }));
+  });
+
+  it('FE-JRN-DETWIRE-035: with suggestions hidden the mobile toggle offers to show them again', () => {
+    setup({ isMobile: true, hideSkeletons: true });
+    expect(screen.getByRole('button', { name: 'journey.skeletons.show' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'journey.skeletons.hide' })).not.toBeInTheDocument();
+  });
+
+  it('FE-JRN-DETWIRE-036: both actions stay reachable on the mobile gallery tab', () => {
+    setup({ isMobile: true, view: 'gallery' });
+    expect(screen.getByRole('button', { name: 'journey.pdf.saveAsPdf' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'journey.skeletons.hide' })).toBeInTheDocument();
   });
 });
