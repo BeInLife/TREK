@@ -16,6 +16,7 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.filesNext': '下一個檔案',
   'mobileTrip.filesPrev': '上一個檔案',
   'mobileTrip.googleMaps': 'Google Maps',
+  'mobileTrip.coMaps': 'CoMaps',
   'mobileTrip.icsDownload': '下載 .ics',
   'mobileTrip.icsSubscribe': '訂閱行事曆',
   'mobileTrip.icsSubscribeSub': '在你的行事曆應用程式中自動更新',

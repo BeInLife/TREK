@@ -1,4 +1,3 @@
-// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getNavigationTargets, showsAppleMaps } from './placeNavigation'
 import type { Place } from '../../types'
@@ -31,7 +30,7 @@ afterEach(() => { vi.restoreAllMocks() })
 describe('getNavigationTargets', () => {
   it('FE-PLANNER-NAV-001: offers every app that can resolve a place with coordinates', () => {
     const targets = getNavigationTargets(place())
-    expect(targets.map(t => t.id)).toEqual(['google', 'waze', 'apple', 'osm'])
+    expect(targets.map(t => t.id)).toEqual(['google', 'waze', 'apple', 'osm', 'comaps'])
     expect(targets[0].label).toBe('Google Maps')
   })
 
@@ -59,7 +58,7 @@ describe('getNavigationTargets', () => {
   it('FE-PLANNER-NAV-004b: an Android phone does not, because nobody there wants it', () => {
     const restore = withUserAgent('Mozilla/5.0 (Linux; Android 15; Pixel 9)')
     try {
-      expect(getNavigationTargets(place()).map(t => t.id)).toEqual(['google', 'waze', 'osm'])
+      expect(getNavigationTargets(place()).map(t => t.id)).toEqual(['google', 'waze', 'osm', 'comaps'])
     } finally { restore() }
   })
 
@@ -67,7 +66,7 @@ describe('getNavigationTargets', () => {
     const restore = withUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)')
     try {
       const targets = getNavigationTargets(place())
-      expect(targets.map(t => t.id)).toEqual(['google', 'waze', 'apple', 'osm'])
+      expect(targets.map(t => t.id)).toEqual(['google', 'waze', 'apple', 'osm', 'comaps'])
       // q next to ll labels the pin rather than searching blindly.
       expect(targets[2].url).toBe('https://maps.apple.com/?q=Stephansdom&ll=48.2038,16.3616')
     } finally { restore() }
@@ -88,6 +87,13 @@ describe('getNavigationTargets', () => {
     expect(targets.map(t => t.id)).toEqual(['google', 'osm'])
   })
 
+  it('FE-PLANNER-NAV-007b: CoMaps needs the position, so a place without one loses it', () => {
+    // CoMaps drops a pin from `ll` and only labels it with `n` — a name alone
+    // has nothing to attach to, the same reason Waze and Apple Maps drop out.
+    const targets = getNavigationTargets(place({ lat: null, lng: null, name: 'Stephansdom' }))
+    expect(targets.map(t => t.id)).not.toContain('comaps')
+  })
+
   it('FE-PLANNER-NAV-008: no place at all yields nothing', () => {
     expect(getNavigationTargets(null)).toEqual([])
     expect(getNavigationTargets(place({ lat: null, lng: null, name: '' }))).toEqual([])
@@ -95,7 +101,7 @@ describe('getNavigationTargets', () => {
 
   it('FE-PLANNER-NAV-009: a nameless place still reaches every app, just without a label', () => {
     const targets = getNavigationTargets(place({ name: '' }))
-    expect(targets.map(t => t.id)).toEqual(['google', 'waze', 'apple', 'osm'])
+    expect(targets.map(t => t.id)).toEqual(['google', 'waze', 'apple', 'osm', 'comaps'])
     expect(targets.find(t => t.id === 'waze')!.url).toBe('https://waze.com/ul?ll=48.2038,16.3616&navigate=yes')
   })
 })

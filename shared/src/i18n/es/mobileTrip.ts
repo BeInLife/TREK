@@ -16,6 +16,7 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.filesNext': 'Archivo siguiente',
   'mobileTrip.filesPrev': 'Archivo anterior',
   'mobileTrip.googleMaps': 'Google Maps',
+  'mobileTrip.coMaps': 'CoMaps',
   'mobileTrip.icsDownload': 'Descargar .ics',
   'mobileTrip.icsSubscribe': 'Suscribirse al calendario',
   'mobileTrip.icsSubscribeSub': 'Se actualiza automáticamente en tu app de calendario',

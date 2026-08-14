@@ -16,6 +16,7 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.filesNext': '次のファイル',
   'mobileTrip.filesPrev': '前のファイル',
   'mobileTrip.googleMaps': 'Google Maps',
+  'mobileTrip.coMaps': 'CoMaps',
   'mobileTrip.icsDownload': '.ics をダウンロード',
   'mobileTrip.icsSubscribe': 'カレンダーを購読',
   'mobileTrip.icsSubscribeSub': 'カレンダーアプリで自動的に更新されます',

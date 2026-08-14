@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  CalendarDays, Car, Footprints, Hotel, Pencil, Plus, RotateCcw,
+  CalendarDays, Car, Compass, Footprints, Hotel, Pencil, Plus, RotateCcw,
   Route as RouteIcon, TramFront, Zap,
 } from 'lucide-react'
 import type { WeatherResult } from '@trek/shared'
@@ -14,7 +14,7 @@ import { useDayNotes } from '../../../../hooks/useDayNotes'
 import { RES_ICONS, getNoteIcon } from '../../../../components/Planner/DayPlanSidebar.constants'
 import { getDayBookendHotels, isDayInAccommodationRange } from '../../../../utils/dayOrder'
 import { splitReservationDateTime } from '../../../../utils/formatters'
-import { dayGoogleMapsUrl, optimizeDayOrder } from '../lib/dayRoute'
+import { dayCoMapsUrl, dayGoogleMapsUrl, optimizeDayOrder } from '../lib/dayRoute'
 import { splitNoteTime } from '../lib/dayNotes'
 import { weatherIconFor } from '../plan/planTimelineModel'
 import type { Assignment, DayNote, Reservation } from '../../../../types'
@@ -182,6 +182,16 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
     if (url) window.open(url, '_blank', 'noopener,noreferrer')
   }
 
+  // The same day in CoMaps, for navigating it offline (#1904).
+  const openInCoMaps = () => {
+    if (!day) return
+    const url = dayCoMapsUrl(
+      day, planner.days, dayAssignments, planner.tripAccommodations, optimizeFromAccommodation !== false,
+      day.default_transport_mode ?? planner.routeProfile,
+    )
+    if (url) window.open(url, '_blank', 'noopener,noreferrer')
+  }
+
   const addAccommodation = () => {
     if (!day) return
     shell.openSheet('accommodation', { dayId: day.id })
@@ -325,6 +335,16 @@ export default function MDaySheet({ planner, shell }: MTripSheetsProps) {
                       <path d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
                     </svg>
                     {t('planner.openGoogleMaps')}
+                  </button>
+                )}
+                {routable && (
+                  <button
+                    type="button"
+                    onClick={openInCoMaps}
+                    className={`flex items-center gap-[5px] rounded-full px-3 py-[7px] text-[0.75rem] font-semibold text-m-ink ${INNER_CLS}`}
+                  >
+                    <Compass size={13} strokeWidth={2} />
+                    {t('planner.openCoMaps')}
                   </button>
                 )}
                 {canEditDays && dayAssignments.length >= 3 && (

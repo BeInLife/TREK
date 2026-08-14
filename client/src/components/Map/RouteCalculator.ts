@@ -116,6 +116,42 @@ export function generateGoogleMapsUrl(places: Waypoint[]): string | null {
   return `https://www.google.com/maps/dir/${stops}`
 }
 
+/** A stop that can carry its name into a deep link that has somewhere to put one. */
+export type NamedWaypoint = Waypoint & { name?: string | null }
+
+/** TREK's route profiles in CoMaps' vocabulary; a plugin profile has no equivalent and drives. */
+function coMapsRouteType(profile: RouteProfileKey): string {
+  if (profile === 'walking') return 'pedestrian'
+  if (profile === 'cycling') return 'bicycle'
+  return 'vehicle'
+}
+
+/**
+ * Open a day's stops in CoMaps for offline navigation (#1904).
+ *
+ * CoMaps has two links and they trade against each other. `route` builds real
+ * turn-by-turn in the given travel mode but takes a start and a destination and
+ * nothing between them; `map` takes any number of named pins but routes nothing.
+ * So a two-stop day goes as a route — everything it has fits, mode included —
+ * and a longer one goes as pins, because handing over the whole day and letting
+ * CoMaps route leg by leg beats quietly dropping the middle of someone's plan.
+ * A day that needs the full itinerary as one navigable track has the GPX export.
+ *
+ * https rather than `cm://` for the same reason as `getCoMapsUrlForPlace`.
+ */
+export function generateCoMapsUrl(places: NamedWaypoint[], profile: RouteProfileKey = 'driving'): string | null {
+  const valid = places.filter((p) => p.lat != null && p.lng != null)
+  if (valid.length === 0) return null
+  const label = (p: NamedWaypoint) => encodeURIComponent(p.name?.trim() || `${p.lat},${p.lng}`)
+  if (valid.length === 2) {
+    const [from, to] = valid
+    return `https://comaps.at/route?sll=${from.lat},${from.lng}&saddr=${label(from)}`
+      + `&dll=${to.lat},${to.lng}&daddr=${label(to)}&type=${coMapsRouteType(profile)}`
+  }
+  const pins = valid.map((p) => `ll=${p.lat},${p.lng}&n=${label(p)}`).join('&')
+  return `https://comaps.at/map?v=1&${pins}`
+}
+
 // Squared planar distance — enough for nearest-neighbor comparisons and cheaper than a full haversine.
 function sqDist(a: Waypoint, b: Waypoint): number {
   return (a.lat - b.lat) ** 2 + (a.lng - b.lng) ** 2

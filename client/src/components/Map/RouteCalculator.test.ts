@@ -9,6 +9,7 @@ import {
   calculateSegments,
   optimizeRoute,
   generateGoogleMapsUrl,
+  generateCoMapsUrl,
   parsePluginProfile,
   withHotelBookends,
 } from './RouteCalculator'
@@ -570,5 +571,45 @@ describe('calculateRouteWithLegs cache eviction', () => {
     server.use(http.get(`${FOSSGIS.driving}/:coords`, () => { hits++; return HttpResponse.json(buildLegsResponse()) }))
     await calculateRouteWithLegs(freshWaypoints())
     expect(hits).toBe(1)
+  })
+})
+
+// ── generateCoMapsUrl ─────────────────────────────────────────────────────────
+
+describe('generateCoMapsUrl', () => {
+  const eiffel = { lat: 48.8584, lng: 2.2945, name: 'Eiffel Tower' }
+  const louvre = { lat: 48.8606, lng: 2.3376, name: 'Louvre' }
+  const notre = { lat: 48.8530, lng: 2.3499, name: 'Notre-Dame' }
+
+  it('FE-COMP-ROUTECALCULATOR-016: no stops, no link', () => {
+    expect(generateCoMapsUrl([])).toBeNull()
+  })
+
+  it('FE-COMP-ROUTECALCULATOR-017: two stops build a real route, mode included', () => {
+    expect(generateCoMapsUrl([eiffel, louvre], 'walking')).toBe(
+      'https://comaps.at/route?sll=48.8584,2.2945&saddr=Eiffel%20Tower'
+      + '&dll=48.8606,2.3376&daddr=Louvre&type=pedestrian',
+    )
+  })
+
+  it('FE-COMP-ROUTECALCULATOR-018: TREK profiles map onto CoMaps travel modes', () => {
+    expect(generateCoMapsUrl([eiffel, louvre], 'driving')).toContain('type=vehicle')
+    expect(generateCoMapsUrl([eiffel, louvre], 'cycling')).toContain('type=bicycle')
+    // A plugin router has no CoMaps equivalent, so it falls back rather than
+    // sending a mode CoMaps would reject.
+    expect(generateCoMapsUrl([eiffel, louvre], 'plugin:ev/fast')).toContain('type=vehicle')
+  })
+
+  it('FE-COMP-ROUTECALCULATOR-019: three stops go as pins, because a route link would drop the middle', () => {
+    const url = generateCoMapsUrl([eiffel, louvre, notre])!
+    expect(url).toBe(
+      'https://comaps.at/map?v=1&ll=48.8584,2.2945&n=Eiffel%20Tower'
+      + '&ll=48.8606,2.3376&n=Louvre&ll=48.853,2.3499&n=Notre-Dame',
+    )
+  })
+
+  it('FE-COMP-ROUTECALCULATOR-020: a single stop is a pin, and a nameless one is labelled by position', () => {
+    expect(generateCoMapsUrl([{ lat: 48.85, lng: 2.35 }]))
+      .toBe('https://comaps.at/map?v=1&ll=48.85,2.35&n=48.85%2C2.35')
   })
 })

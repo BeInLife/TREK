@@ -4,10 +4,10 @@ declare global { interface Window { __dragData: DragDataPayload | null } }
 
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react'
 import { avatarSrc } from '../../utils/avatarSrc'
-import { ChevronDown, ChevronRight, ChevronUp, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Trash2, Car, Lock, Hotel, Footprints, Route as RouteIcon, Bookmark, TramFront, Zap } from 'lucide-react'
+import { ChevronDown, ChevronRight, ChevronUp, Compass, Navigation, RotateCcw, ExternalLink, Clock, Pencil, GripVertical, Ticket, Plus, FileText, Trash2, Car, Lock, Hotel, Footprints, Route as RouteIcon, Bookmark, TramFront, Zap } from 'lucide-react'
 import { type PickedPlace } from './TransitSearchPanel'
 import { assignmentsApi, reservationsApi, daysApi } from '../../api/client'
-import { calculateRouteWithLegs, optimizeRoute, generateGoogleMapsUrl } from '../Map/RouteCalculator'
+import { calculateRouteWithLegs, optimizeRoute, generateGoogleMapsUrl, generateCoMapsUrl, type NamedWaypoint } from '../Map/RouteCalculator'
 import PlaceAvatar from '../shared/PlaceAvatar'
 import ConfirmDialog from '../shared/ConfirmDialog'
 import { useContextMenu, ContextMenu } from '../shared/ContextMenu'
@@ -1446,6 +1446,28 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
             (transferMorning.place_lat !== transferEvening.place_lat || transferMorning.place_lng !== transferEvening.place_lng)
           )
           const routeToolsRoutable = da.length >= 2 || (loc != null && hasRouteBookend) || hasHotelTransfer
+          /**
+           * The day's located stops in planned order, bookended by the accommodation
+           * the same way the drawn map route is (routeBookends is null when "optimize
+           * from accommodation" is off), so hotels aren't dropped from an exported
+           * route (#1372) — but only when the leg is real: no hotel prepended before an
+           * early check-in-day stop, none appended after a post-check-out stop (#1465).
+           * Names ride along for the deep links that can label a pin with one.
+           */
+          const dayExportStops = (): NamedWaypoint[] => {
+            const dayStops = getDayAssignments(day.id).filter(a => a.place?.lat != null && a.place?.lng != null)
+            const stops = dayStops.map(a => ({ lat: a.place!.lat!, lng: a.place!.lng!, name: a.place!.name }))
+            const first = dayStops[0] ? { isPlace: true, time: dayStops[0].place?.place_time ?? null } : undefined
+            const lastAssignment = dayStops[dayStops.length - 1]
+            const last = lastAssignment ? { isPlace: true, time: lastAssignment.place?.place_time ?? null } : undefined
+            const drawMorning = !!routeBookends && shouldDrawMorningLeg(routeBookends, day, first)
+            const drawEvening = !!routeBookends && shouldDrawEveningLeg(routeBookends, day, last)
+            const morning = drawMorning && routeBookends?.morning?.place_lat != null && routeBookends?.morning?.place_lng != null
+              ? { lat: routeBookends.morning.place_lat, lng: routeBookends.morning.place_lng, name: routeBookends.morning.place_name } : null
+            const evening = drawEvening && routeBookends?.evening?.place_lat != null && routeBookends?.evening?.place_lng != null
+              ? { lat: routeBookends.evening.place_lat, lng: routeBookends.evening.place_lng, name: routeBookends.evening.place_name } : null
+            return [...(morning ? [morning] : []), ...stops, ...(evening ? [evening] : [])]
+          }
           // Is this day's inline route currently on? Mobile toggles it per day (its
           // own expandedRouteDayIds entry); desktop uses the global Route toggle on
           // the selected day (#1374).
@@ -2537,24 +2559,7 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                         {/* Open the day's stops as a route in Google Maps (planned order). #1255 */}
                         <button
                           onClick={() => {
-                            // Bookend the Google Maps route with the day's accommodation the
-                            // same way the drawn map route does (routeBookends is null when
-                            // "optimize from accommodation" is off), so hotels aren't dropped
-                            // from the exported route (#1372) — but only when the leg is real:
-                            // no hotel prepended before an early check-in-day stop, none appended
-                            // after a post-check-out stop (#1465).
-                            const dayStops = getDayAssignments(day.id).filter(a => a.place?.lat != null && a.place?.lng != null)
-                            const stops = dayStops.map(a => ({ lat: a.place!.lat!, lng: a.place!.lng! }))
-                            const firstStop = dayStops[0] ? { isPlace: true, time: dayStops[0].place?.place_time ?? null } : undefined
-                            const lastAssignment = dayStops[dayStops.length - 1]
-                            const lastStop = lastAssignment ? { isPlace: true, time: lastAssignment.place?.place_time ?? null } : undefined
-                            const drawMorning = !!routeBookends && shouldDrawMorningLeg(routeBookends, day, firstStop)
-                            const drawEvening = !!routeBookends && shouldDrawEveningLeg(routeBookends, day, lastStop)
-                            const morning = drawMorning && routeBookends?.morning?.place_lat != null && routeBookends?.morning?.place_lng != null
-                              ? { lat: routeBookends.morning.place_lat, lng: routeBookends.morning.place_lng } : null
-                            const evening = drawEvening && routeBookends?.evening?.place_lat != null && routeBookends?.evening?.place_lng != null
-                              ? { lat: routeBookends.evening.place_lat, lng: routeBookends.evening.place_lng } : null
-                            const url = generateGoogleMapsUrl([...(morning ? [morning] : []), ...stops, ...(evening ? [evening] : [])])
+                            const url = generateGoogleMapsUrl(dayExportStops())
                             if (url) window.open(url, '_blank', 'noopener,noreferrer')
                           }}
                           aria-label={t('planner.openGoogleMaps')}
@@ -2572,6 +2577,25 @@ const DayPlanSidebar = React.memo(function DayPlanSidebar(props: DayPlanSidebarP
                             <path d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
                             <path d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
                           </svg>
+                        </button>
+                        {/* The same day, handed to CoMaps for offline navigation (#1904). The
+                            day's own travel mode rides along, so the route it builds walks
+                            when the plan walks. */}
+                        <button
+                          onClick={() => {
+                            const url = generateCoMapsUrl(dayExportStops(), day.default_transport_mode ?? routeProfile)
+                            if (url) window.open(url, '_blank', 'noopener,noreferrer')
+                          }}
+                          aria-label={t('planner.openCoMaps')}
+                          title={t('planner.openCoMaps')}
+                          className="bg-transparent text-content-secondary"
+                          style={{
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            padding: '6px 10px', borderRadius: 8, border: '1px solid var(--border-faint)',
+                            cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
+                          }}
+                        >
+                          <Compass size={14} strokeWidth={2} />
                         </button>
                         <button onClick={() => handleOptimize(day.id)} className="bg-surface-hover text-content-secondary" style={{
                           flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,

@@ -1,10 +1,11 @@
 import type { AssignmentPlace, Place } from '../../types'
+import { getCoMapsUrlForPlace } from './placeCoMaps'
 import { getGoogleMapsUrlForPlace } from './placeGoogleMaps'
 import { getOpenStreetMapUrlForPlace } from './placeOpenStreetMap'
 
 type PlaceLike = Pick<Place | AssignmentPlace, 'name' | 'address' | 'lat' | 'lng' | 'google_place_id' | 'google_ftid'>
 
-export type NavigationAppId = 'google' | 'waze' | 'apple' | 'osm'
+export type NavigationAppId = 'google' | 'waze' | 'apple' | 'osm' | 'comaps'
 
 export interface NavigationTarget {
   id: NavigationAppId
@@ -85,6 +86,11 @@ export function getNavigationTargets(
 
   const osmUrl = getOpenStreetMapUrlForPlace(place)
   if (osmUrl) targets.push({ id: 'osm', label: 'OpenStreetMap', url: osmUrl })
+
+  // Last, beside the OSM entry it shares a map source with: CoMaps is the offline
+  // end of this list, the one that still works with no signal.
+  const coMapsUrl = getCoMapsUrlForPlace(place)
+  if (coMapsUrl) targets.push({ id: 'comaps', label: 'CoMaps', url: coMapsUrl })
 
   return targets
 }

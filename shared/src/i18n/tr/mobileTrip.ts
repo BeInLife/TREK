@@ -16,6 +16,7 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.filesNext': 'Sonraki dosya',
   'mobileTrip.filesPrev': 'Önceki dosya',
   'mobileTrip.googleMaps': 'Google Maps',
+  'mobileTrip.coMaps': 'CoMaps',
   'mobileTrip.icsDownload': '.ics indir',
   'mobileTrip.icsSubscribe': 'Takvime abone ol',
   'mobileTrip.icsSubscribeSub': 'Takvim uygulamanızda otomatik güncellenir',
