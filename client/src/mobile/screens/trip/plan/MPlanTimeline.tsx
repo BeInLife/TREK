@@ -1,6 +1,6 @@
 import { useState, type MouseEvent } from 'react'
 import {
-  ArrowRight, ArrowUpRight, BedDouble, CalendarRange, ChevronRight, LogIn, LogOut,
+  ArrowRight, ArrowUpRight, BedDouble, CalendarRange, ChevronRight, Compass, LogIn, LogOut,
   MapPin, Pencil, PencilLine, Route, Ticket, TrainFront, Undo2,
   Car, Footprints, Zap, RotateCcw,
 } from 'lucide-react'
@@ -186,6 +186,7 @@ export default function MPlanTimeline({ planner, shell }: MPlanTimelineProps) {
             <PlanAction icon={TrainFront} label={t('mobileTrip.addTransportShort')} onClick={tl.addTransport} />
             <PlanAction icon={Route} label={t('dayplan.optimize')} onClick={() => void tl.optimize()} />
             <PlanAction icon={ArrowUpRight} label={t('mobileTrip.googleMaps')} onClick={tl.exportGoogleMaps} />
+            <PlanAction icon={Compass} label={t('mobileTrip.coMaps')} onClick={tl.exportCoMaps} />
           </div>
         )}
       </div>

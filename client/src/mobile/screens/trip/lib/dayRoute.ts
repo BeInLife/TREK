@@ -1,4 +1,7 @@
-import { generateGoogleMapsUrl, optimizeRoute } from '../../../../components/Map/RouteCalculator'
+import {
+  generateCoMapsUrl, generateGoogleMapsUrl, optimizeRoute,
+  type NamedWaypoint, type RouteProfileKey,
+} from '../../../../components/Map/RouteCalculator'
 import {
   getAccommodationAnchors, getDayBookendHotels, shouldDrawEveningLeg, shouldDrawMorningLeg,
 } from '../../../../utils/dayOrder'
@@ -54,9 +57,33 @@ export function optimizeDayOrder(
 }
 
 /**
- * Google-Maps directions URL over the day's located stops, bookended by the
- * morning/evening accommodation exactly like the drawn route.
+ * The day's located stops in planned order, bookended by the morning/evening
+ * accommodation exactly like the drawn route. Names ride along for the deep
+ * links that can label a pin with one.
  */
+export function dayExportStops(
+  day: Day,
+  days: Day[],
+  dayAssignments: Assignment[],
+  accommodations: Accommodation[],
+  bookendFromAccommodation: boolean,
+): NamedWaypoint[] {
+  const located = dayAssignments.filter(a => a.place?.lat != null && a.place?.lng != null)
+  const stops = located.map(a => ({ lat: a.place!.lat!, lng: a.place!.lng!, name: a.place!.name }))
+  const bookends = bookendFromAccommodation ? getDayBookendHotels(day, days, accommodations) : null
+  const firstStop = located[0] ? { isPlace: true, time: located[0].place?.place_time ?? null } : undefined
+  const last = located[located.length - 1]
+  const lastStop = last ? { isPlace: true, time: last.place?.place_time ?? null } : undefined
+  const morning = bookends && shouldDrawMorningLeg(bookends, day, firstStop)
+    && bookends.morning?.place_lat != null && bookends.morning?.place_lng != null
+    ? { lat: bookends.morning.place_lat, lng: bookends.morning.place_lng, name: bookends.morning.place_name } : null
+  const evening = bookends && shouldDrawEveningLeg(bookends, day, lastStop)
+    && bookends.evening?.place_lat != null && bookends.evening?.place_lng != null
+    ? { lat: bookends.evening.place_lat, lng: bookends.evening.place_lng, name: bookends.evening.place_name } : null
+  return [...(morning ? [morning] : []), ...stops, ...(evening ? [evening] : [])]
+}
+
+/** Google-Maps directions URL over the day's bookended stops. */
 export function dayGoogleMapsUrl(
   day: Day,
   days: Day[],
@@ -64,17 +91,22 @@ export function dayGoogleMapsUrl(
   accommodations: Accommodation[],
   bookendFromAccommodation: boolean,
 ): string | null {
-  const located = dayAssignments.filter(a => a.place?.lat != null && a.place?.lng != null)
-  const stops = located.map(a => ({ lat: a.place!.lat!, lng: a.place!.lng! }))
-  const bookends = bookendFromAccommodation ? getDayBookendHotels(day, days, accommodations) : null
-  const firstStop = located[0] ? { isPlace: true, time: located[0].place?.place_time ?? null } : undefined
-  const last = located[located.length - 1]
-  const lastStop = last ? { isPlace: true, time: last.place?.place_time ?? null } : undefined
-  const morning = bookends && shouldDrawMorningLeg(bookends, day, firstStop)
-    && bookends.morning?.place_lat != null && bookends.morning?.place_lng != null
-    ? { lat: bookends.morning.place_lat, lng: bookends.morning.place_lng } : null
-  const evening = bookends && shouldDrawEveningLeg(bookends, day, lastStop)
-    && bookends.evening?.place_lat != null && bookends.evening?.place_lng != null
-    ? { lat: bookends.evening.place_lat, lng: bookends.evening.place_lng } : null
-  return generateGoogleMapsUrl([...(morning ? [morning] : []), ...stops, ...(evening ? [evening] : [])]) || null
+  return generateGoogleMapsUrl(
+    dayExportStops(day, days, dayAssignments, accommodations, bookendFromAccommodation),
+  ) || null
+}
+
+/** The same stops handed to CoMaps for offline navigation, in the day's travel mode (#1904). */
+export function dayCoMapsUrl(
+  day: Day,
+  days: Day[],
+  dayAssignments: Assignment[],
+  accommodations: Accommodation[],
+  bookendFromAccommodation: boolean,
+  profile: RouteProfileKey,
+): string | null {
+  return generateCoMapsUrl(
+    dayExportStops(day, days, dayAssignments, accommodations, bookendFromAccommodation),
+    profile,
+  ) || null
 }

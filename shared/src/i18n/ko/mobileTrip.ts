@@ -16,6 +16,7 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.filesNext': '다음 파일',
   'mobileTrip.filesPrev': '이전 파일',
   'mobileTrip.googleMaps': 'Google Maps',
+  'mobileTrip.coMaps': 'CoMaps',
   'mobileTrip.icsDownload': '.ics 다운로드',
   'mobileTrip.icsSubscribe': '캘린더 구독',
   'mobileTrip.icsSubscribeSub': '캘린더 앱에서 자동으로 업데이트됩니다',

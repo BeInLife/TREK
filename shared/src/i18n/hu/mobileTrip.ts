@@ -16,6 +16,7 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.filesNext': 'Következő fájl',
   'mobileTrip.filesPrev': 'Előző fájl',
   'mobileTrip.googleMaps': 'Google Maps',
+  'mobileTrip.coMaps': 'CoMaps',
   'mobileTrip.icsDownload': '.ics letöltése',
   'mobileTrip.icsSubscribe': 'Feliratkozás a naptárra',
   'mobileTrip.icsSubscribeSub': 'Automatikusan frissül a naptáralkalmazásodban',

@@ -16,6 +16,7 @@ const mobileTrip: TranslationStrings = {
   'mobileTrip.filesNext': 'Fitxer següent',
   'mobileTrip.filesPrev': 'Fitxer anterior',
   'mobileTrip.googleMaps': 'Google Maps',
+  'mobileTrip.coMaps': 'CoMaps',
   'mobileTrip.icsDownload': 'Baixa .ics',
   'mobileTrip.icsSubscribe': 'Subscriu-te al calendari',
   'mobileTrip.icsSubscribeSub': "S'actualitza automàticament a la teva app de calendari",
