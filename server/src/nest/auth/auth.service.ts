@@ -20,6 +20,7 @@ import { EphemeralTokenService } from './ephemeral-token.service';
 // every consumer of this module — a nest→mcp→nest module cycle.
 import { revokeUserSessions } from '../../mcp/sessionManager';
 import { UserCleanupService } from './user-cleanup.service';
+import { splitManagedKeys } from '../common/managed';
 import { emitUserDeleted } from '../../plugin-user-lifecycle';
 import { verifyJwtAndLoadUser } from './jwt-verify';
 import { User } from '../../types';
@@ -230,7 +231,13 @@ export class AuthService {
     // One directory deeper than the legacy src/services location — the extra
     // '../' keeps resolving to the workspace package.json.
     const version: string = readEnv().app.appVersion ?? require('../../../package.json').version;
-    const hasGoogleKey = !!this.db.get("SELECT maps_api_key FROM users WHERE role = 'admin' AND maps_api_key IS NOT NULL AND maps_api_key != '' LIMIT 1");
+    // The operator's key counts too. getMapsKey prefers it over anything in the
+    // users table, so asking the table alone would report "no key" on an install
+    // where every lookup works, and the client would hide the Google features it
+    // is actually able to use.
+    const hasGoogleKey =
+      !!readEnv().maps.placesApiKey ||
+      !!this.db.get("SELECT maps_api_key FROM users WHERE role = 'admin' AND maps_api_key IS NOT NULL AND maps_api_key != '' LIMIT 1");
     const oidcDisplayName = readEnv().oidc.displayName ||
       this.db.get<{ value: string }>("SELECT value FROM app_settings WHERE key = 'oidc_display_name'")?.value || null;
     const oidcConfigured = !!(
@@ -602,6 +609,8 @@ export class AuthService {
     success?: boolean;
     auditSummary?: Record<string, unknown>;
     auditDebugDetails?: Record<string, unknown>;
+    /** Names the operator holds, skipped rather than written. Empty when self-hosted. */
+    managedKeys?: string[];
   } {
     const body = rawBody as Record<string, unknown>;
     const user = this.db.get<{ role: string }>('SELECT role FROM users WHERE id = ?', userId);
@@ -635,7 +644,14 @@ export class AuthService {
       }
     }
 
+    // SMTP, the OIDC toggles and the WebAuthn pair share this handler with keys
+    // the admin does own, so a managed install skips those names and keeps the
+    // rest of the save working. Reported, never thrown: the settings tab sends
+    // the whole form in one request.
+    const { blocked } = splitManagedKeys(body as Record<string, unknown>, readEnv().managed.enabled);
+
     for (const key of ADMIN_SETTINGS_KEYS) {
+      if (blocked.includes(key)) continue;
       if (body[key] !== undefined) {
         let val = String(body[key]);
         if (key === 'require_mfa') {
@@ -651,7 +667,7 @@ export class AuthService {
       }
     }
 
-    const changedKeys = ADMIN_SETTINGS_KEYS.filter(k => body[k] !== undefined && !(k === 'smtp_pass' && String(body[k]) === '••••••••'));
+    const changedKeys = ADMIN_SETTINGS_KEYS.filter(k => !blocked.includes(k) && body[k] !== undefined && !(k === 'smtp_pass' && String(body[k]) === '••••••••'));
 
     const summary: Record<string, unknown> = {};
     const smtpChanged = changedKeys.some(k => k.startsWith('smtp_'));
@@ -670,7 +686,7 @@ export class AuthService {
 
     // The reminder crons read their enable gates and channels per tick, so a
     // notification-settings change takes effect at the next run — no restart.
-    return { success: true, auditSummary: summary, auditDebugDetails: debugDetails };
+    return { success: true, auditSummary: summary, auditDebugDetails: debugDetails, managedKeys: blocked };
   }
 
   // -------------------------------------------------------------------------

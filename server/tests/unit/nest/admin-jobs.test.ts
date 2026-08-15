@@ -31,20 +31,24 @@ beforeEach(() => vi.clearAllMocks());
 describe('VersionCheckJob', () => {
   it('AJOB-001 — registers the daily 9 AM cron, with no boot log (parity)', () => {
     const registrar = registrarStub();
-    new VersionCheckJob({} as AdminService, registrar as unknown as CronRegistrarService).onApplicationBootstrap();
+    new VersionCheckJob({} as AdminService, registrar as unknown as CronRegistrarService, { isManaged: () => false } as unknown as RuntimeEnvService).onApplicationBootstrap();
     expect(registrar.register).toHaveBeenCalledWith('version-check', '0 9 * * *', expect.any(Function));
     expect(logMock.logInfo).not.toHaveBeenCalled();
   });
 
   it('AJOB-002 — does not register under the test gate', () => {
     const registrar = registrarStub(false);
-    new VersionCheckJob({} as AdminService, registrar as unknown as CronRegistrarService).onApplicationBootstrap();
+    new VersionCheckJob({} as AdminService, registrar as unknown as CronRegistrarService, { isManaged: () => false } as unknown as RuntimeEnvService).onApplicationBootstrap();
     expect(registrar.register).not.toHaveBeenCalled();
   });
 
   it('AJOB-003 — a throwing check is contained to the Version check log line', async () => {
     const admin = { checkAndNotifyVersion: vi.fn().mockRejectedValue(new Error('github down')) } as unknown as AdminService;
-    const job = new VersionCheckJob(admin, registrarStub() as unknown as CronRegistrarService);
+    const job = new VersionCheckJob(
+      admin,
+      registrarStub() as unknown as CronRegistrarService,
+      { isManaged: () => false } as unknown as RuntimeEnvService,
+    );
     await expect(job.tick()).resolves.toBeUndefined();
     expect(logMock.logError).toHaveBeenCalledWith('Version check: github down');
   });

@@ -29,6 +29,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
     webauthnRpId, setWebauthnRpId, webauthnOrigins, setWebauthnOrigins, savingWebauthn, handleSaveWebauthn,
     allowedFileTypes, setAllowedFileTypes, savingFileTypes, setSavingFileTypes,
     mapsKey, setMapsKey, unsplashKey, setUnsplashKey, showKeys, savingKeys, validating, validation,
+    managed,
     setShowRotateJwtModal,
     handleToggleAuthSetting, handleToggleRequireMfa,
     toggleKey, handleSaveApiKeys, handleValidateKey,
@@ -154,6 +155,13 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
             </p>
           )}
 
+          {/* The domain passkeys bind to and the origins that may present them
+              follow from the address the instance is served on, which the operator
+              owns. Getting either wrong invalidates every enrolled passkey, and on
+              a shared parent domain a wrong RP ID reaches past this instance
+              entirely — so they are pinned per container, not offered here. The
+              switch above stays: whether to offer passkeys at all is a house rule. */}
+          {!managed && (<>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">{t('admin.passkey.rpId')}</label>
             <p className="text-xs text-slate-400 mb-1.5">{t('admin.passkey.rpIdHint')}</p>
@@ -185,6 +193,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
             {savingWebauthn ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {t('common.save')}
           </button>
+          </>)}
         </div>
       </div>
 
@@ -246,6 +255,10 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
         </div>
       </div>
 
+      {/* Google and Unsplash come with the instance, and so does what a lookup costs;
+          the per-place toggles only ever traded away quota that is not the customer’s
+          to spend. Weather needs no key at all and has nothing to configure. */}
+      {!managed && (<>
       {/* API Keys */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">
@@ -253,6 +266,10 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
           <p className="text-xs text-slate-400 mt-1">{t('admin.apiKeysHint')}</p>
         </div>
         <div className="p-6 space-y-4">
+          {/* The two key fields, not the toggles below them: on a centrally
+              administered install the operator supplies the keys, while whether
+              photos and lookups are offered at all stays the admin’s call. */}
+          {!managed && (<>
           {/* Google Maps Key */}
           <div>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-700 mb-1.5">
@@ -329,6 +346,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
             </div>
             <p className="text-xs text-slate-400 mt-1">{t('admin.unsplashKeyHint')}</p>
           </div>
+          </>)}
 
           {/* Place Photos Toggle */}
           <div className="flex items-center justify-between gap-4 py-3 border-t border-slate-100">
@@ -444,6 +462,11 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
         </div>
       </div>
 
+      {/* An issuer the instance names can assert any address as verified, and the
+          discovery calls leave from inside the operator’s network. Sign-on is theirs
+          to wire, so the fields are not offered. */}
+      {!managed && (<>
+      </>)}
       {/* OIDC / SSO Configuration */}
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-100">
@@ -524,6 +547,10 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
           </button>
         </div>
       </div>
+      {/* Rotating the secret signs every user out and fixes nothing an instance admin
+          can reach: the file it writes belongs to the host. */}
+      {!managed && (<>
+      </>)}
       {/* Danger Zone */}
       <div className="bg-white rounded-xl border border-red-200 overflow-hidden">
         <div className="px-6 py-4 border-b border-red-100 bg-red-50">
@@ -548,6 +575,7 @@ export default function AdminSettingsTab({ admin, t }: AdminSettingsTabProps): R
           </div>
         </div>
       </div>
+      </>)}
     </div>
   )
 }

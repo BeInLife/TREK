@@ -38,6 +38,7 @@ import {
   writeVersionCache,
   type VersionInfo,
 } from './admin.helpers';
+import { MANAGED_FORBIDDEN_ERROR } from '../common/managed';
 
 /** Outbound GitHub calls: hard timeout and response-size cap (server/CLAUDE.md). */
 const GITHUB_TIMEOUT_MS = 10_000;
@@ -192,6 +193,13 @@ export class AdminService {
       }
     }
 
+    // An admin sets a password for exactly one reason: the account is believed
+    // compromised. Without bumping password_version, verifyJwtAndLoadUser keeps
+    // accepting every cookie the intruder already holds, so the one action taken
+    // to lock them out was the one action that did not. Both self-service paths
+    // (changePassword, resetPassword) have always done this; this one had not.
+    const newPv = password ? ((user as User & { password_version?: number }).password_version ?? 0) + 1 : null;
+
     this.db.transaction(() => {
       this.db.run(
         `
@@ -200,12 +208,30 @@ export class AdminService {
       email = COALESCE(?, email),
       role = COALESCE(?, role),
       password_hash = COALESCE(?, password_hash),
+      password_version = COALESCE(?, password_version),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
   `,
-        username || null, email || null, role || null, passwordHash, id,
+        username || null, email || null, role || null, passwordHash, newPv, id,
       );
+
+      if (password) {
+        // The version bump only invalidates JWT cookies. These two stores carry
+        // their own credentials and are revoked separately, exactly as the
+        // self-service paths do it.
+        this.db.run('DELETE FROM mcp_tokens WHERE user_id = ?', id);
+        try {
+          this.db.run(
+            'UPDATE oauth_tokens SET revoked_at = CURRENT_TIMESTAMP WHERE user_id = ? AND revoked_at IS NULL',
+            id,
+          );
+        } catch { /* very old installs predate oauth_tokens */ }
+      }
     });
+
+    if (password) {
+      try { revokeUserSessions(Number(id)); } catch { /* best-effort, same as elsewhere */ }
+    }
 
     const updated = this.db.get('SELECT id, username, email, role, created_at, updated_at FROM users WHERE id = ?', id);
 
@@ -236,6 +262,40 @@ export class AdminService {
   }
 
   resetUserPasskeys(id: string) { return this.passkeys.adminResetPasskeys(Number(id)); }
+
+  /**
+   * Clear another account's TOTP so its owner can enrol again.
+   *
+   * The passkey half of this has existed since passkeys landed; the TOTP half
+   * never did, which left one ordinary event with no answer: somebody on a trip
+   * loses their phone. Without this the only ways out are an operator reaching
+   * into the database or the account being deleted and rebuilt.
+   *
+   * Never for the caller themselves. An admin who wants their own MFA gone
+   * disables it through Settings, where the current password is required —
+   * making that reachable from here would turn a stolen admin session into a
+   * way to strip the second factor off the very account it came from.
+   */
+  resetUserMfa(id: string, actingUserId: number): { error?: string; status?: number; success?: boolean; email?: string } {
+    const targetId = Number(id);
+    if (targetId === actingUserId) {
+      return { error: 'Use Settings to change your own two-factor setup', status: 400 };
+    }
+    const target = this.db.get<{ id: number; email: string; mfa_enabled: number | boolean }>(
+      'SELECT id, email, mfa_enabled FROM users WHERE id = ?',
+      targetId,
+    );
+    if (!target) return { error: 'User not found', status: 404 };
+
+    // Same three columns disableMfa clears, so an admin reset and a self-service
+    // disable leave the account in exactly one state rather than two.
+    this.db.run(
+      'UPDATE users SET mfa_enabled = 0, mfa_secret = NULL, mfa_backup_codes = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      targetId,
+    );
+
+    return { success: true, email: target.email };
+  }
 
   // ── Stats ──────────────────────────────────────────────────────────────────
 
@@ -368,12 +428,26 @@ export class AdminService {
   }
 
   async checkVersion(): Promise<VersionInfo> {
-    const cached = readVersionCache();
-    if (cached) return cached;
-
     // Lazy require, re-anchored for nest/admin/ (was ../../package.json in services/).
     const currentVersion: string = readEnv().app.appVersion || require('../../../package.json').version;
     const isPrerelease = currentVersion.includes('-pre.');
+
+    // Answered rather than refused on a centrally administered install: the admin
+    // page calls this on open, and a 403 there would be an error message where a
+    // quiet surface belongs. The operator decides when to upgrade, so from inside
+    // the instance there is nothing available.
+    if (readEnv().managed.enabled) {
+      return {
+        current: currentVersion,
+        latest: currentVersion,
+        update_available: false,
+        is_docker: isDocker,
+        is_prerelease: isPrerelease,
+      };
+    }
+
+    const cached = readVersionCache();
+    if (cached) return cached;
     const fallback: VersionInfo = {
       current: currentVersion,
       latest: currentVersion,
@@ -462,7 +536,24 @@ export class AdminService {
   // ── Addons ─────────────────────────────────────────────────────────────────
 
   listAddons() {
-    const addons = this.db.all<Addon>('SELECT * FROM addons ORDER BY sort_order, id');
+    const addons = this.db
+      .all<Addon>('SELECT * FROM addons ORDER BY sort_order, id')
+      // Hidden rather than shown-and-refused, because a toggle that answers 403
+      // is worse than no toggle.
+      //
+      // AI parsing: the endpoint, the model and what a document costs all belong
+      // to the operator, so there is no instance decision left to make — not even
+      // whether it runs.
+      //
+      // AirTrail: the addon exists to reach a server the admin runs themselves,
+      // and a managed instance has no route to one.
+      .filter(
+        (a) =>
+          !(
+            readEnv().managed.enabled &&
+            (a.id === ADDON_IDS.LLM_PARSING || a.id === ADDON_IDS.AIRTRAIL)
+          ),
+      );
     const providers = this.db.all<{
       id: string;
       name: string;
@@ -474,7 +565,11 @@ export class AdminService {
     SELECT id, name, description, icon, enabled, sort_order
     FROM photo_providers
     ORDER BY sort_order, id
-  `);
+  `)
+      // Immich and Synology Photos are servers the admin runs at home. A managed
+      // instance cannot reach one (its egress does not go there, and it should
+      // not), so offering the connection would only produce a timeout.
+      .filter(() => !readEnv().managed.enabled);
     const fields = this.db.all<{
       provider_id: string;
       field_key: string;
@@ -536,6 +631,14 @@ export class AdminService {
     const addon = this.db.get<Addon>('SELECT * FROM addons WHERE id = ?', id);
     const provider = this.db.get<ProviderRow>('SELECT * FROM photo_providers WHERE id = ?', id);
     if (!addon && !provider) return { error: 'Addon not found', status: 404 };
+
+    // The whole addon, not just its config: on a centrally administered install
+    // the operator owns the endpoint, the model and the per-document cost, so
+    // there is nothing here for an instance admin to set — including whether it
+    // runs at all. listAddons hides the row; this closes the route behind it.
+    if (readEnv().managed.enabled && id === ADDON_IDS.LLM_PARSING) {
+      return { error: MANAGED_FORBIDDEN_ERROR.error, status: 403 };
+    }
 
     this.db.transaction(() => {
     if (addon) {

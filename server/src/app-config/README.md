@@ -25,7 +25,12 @@ tokens, `RuntimeEnvService`) and consumes the SAME derive functions.
 2. **Validation runs once, at boot, from the production entrypoint only.**
    Never wire the schema into `buildApp()`, `ConfigModule.forRoot({ validate })`
    or a request path. Unset/blank variables always pass (defaults apply); only
-   present-but-malformed values abort startup.
+   present-but-malformed values abort startup. The one addition on top of the
+   schema is `managedPreconditions()` in `env.ts`: cross-field rules that only
+   apply with `TREK_MANAGED`, for combinations that are individually valid and
+   together wrong. It is empty without the switch, so a self-hoster never meets
+   it. Put a rule there only if booting anyway would be a security or data
+   problem — not to enforce a preference.
 3. **Parity is law — with one deliberate exception.** Every derived field pins
    the exact coercion of the call site(s) it replaced (`Number(x) || d`
    treating `"0"` as unset, per-site defaults for the same variable, …). Do not
@@ -69,7 +74,7 @@ override these set them at file top, before the SUT import.)
 
 **Runtime-toggled** (read live on every access via `readEnv()` /
 `RuntimeEnvService`; tests mutate these mid-lifetime):
-TREK_MANAGED, DEMO_MODE, NODE_ENV, APP_VERSION, APP_URL, TREK_API_DOCS_ENABLED,
+TREK_MANAGED, PLACES_API_BASE, PLACES_API_KEY, MAPBOX_ACCESS_TOKEN, DEMO_MODE, NODE_ENV, APP_VERSION, APP_URL, TREK_API_DOCS_ENABLED,
 TREK_PLUGINS_ENABLED / _DEV_LINK / _DIR / _DATA_DIR / TREK_PLUGIN_PERMISSIONS,
 OIDC_*, SMTP_*, FORCE_HTTPS, COOKIE_SECURE, HSTS_INCLUDE_SUBDOMAINS,
 ALLOWED_ORIGINS, UNSPLASH_ACCESS_KEY, WEBAUTHN_*, TZ, ADMIN_EMAIL,
