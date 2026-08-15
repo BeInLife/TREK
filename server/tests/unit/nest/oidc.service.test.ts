@@ -177,6 +177,15 @@ describe('createState / consumeState', () => {
     expect(svc.consumeState('not-a-real-state')).toBeNull();
   });
 
+  it('OIDC-SVC-055: createState stores the remember flag and consumeState returns it', () => {
+    const { state: sTrue } = svc.createState('https://example.com/cb', undefined, true);
+    const { state: sFalse } = svc.createState('https://example.com/cb', undefined, false);
+    const { state: sAbsent } = svc.createState('https://example.com/cb');
+    expect(svc.consumeState(sTrue)!.remember).toBe(true);
+    expect(svc.consumeState(sFalse)!.remember).toBe(false);
+    expect(svc.consumeState(sAbsent)!.remember).toBeUndefined();
+  });
+
   it('OIDC-SVC-004: two different states do not conflict', () => {
     const { state: s1 } = svc.createState('http://a.example.com');
     const { state: s2 } = svc.createState('http://b.example.com');
@@ -212,6 +221,34 @@ describe('createAuthCode / consumeAuthCode', () => {
   it('OIDC-SVC-008: consumeAuthCode returns error for unknown code', () => {
     const result = svc.consumeAuthCode('not-a-real-code');
     expect('error' in result).toBe(true);
+  });
+
+  it('OIDC-SVC-056: auth code round-trips the remember flag', () => {
+    const cTrue = svc.createAuthCode('t1', true);
+    const cFalse = svc.createAuthCode('t2', false);
+    const cAbsent = svc.createAuthCode('t3');
+    expect((svc.consumeAuthCode(cTrue) as { remember?: boolean }).remember).toBe(true);
+    expect((svc.consumeAuthCode(cFalse) as { remember?: boolean }).remember).toBe(false);
+    expect((svc.consumeAuthCode(cAbsent) as { remember?: boolean }).remember).toBeUndefined();
+  });
+});
+
+// ── generateToken ─────────────────────────────────────────────────────────────
+
+describe('generateToken', () => {
+  it('OIDC-SVC-057: remember=true signs with the SESSION_DURATION_REMEMBER lifetime', () => {
+    const { user } = createUser(testDb, { email: 'remember@example.com' });
+    const token = svc.generateToken({ id: user.id }, true);
+    const decoded = jwtLib.decode(token) as { iat: number; exp: number };
+    expect(decoded.exp - decoded.iat).toBe(2592000);
+  });
+
+  it('OIDC-SVC-058: remember=false or absent signs with the default SESSION_DURATION lifetime', () => {
+    const { user } = createUser(testDb, { email: 'default@example.com' });
+    for (const token of [svc.generateToken({ id: user.id }, false), svc.generateToken({ id: user.id })]) {
+      const decoded = jwtLib.decode(token) as { iat: number; exp: number };
+      expect(decoded.exp - decoded.iat).toBe(86400);
+    }
   });
 });
 
@@ -839,7 +876,16 @@ describe('wrapper methods', () => {
     const res = {} as Response;
     const req = {} as Request;
     svc.setAuthCookie(res, 'jwt', req);
-    expect(setAuthCookieMock).toHaveBeenCalledWith(res, 'jwt', req);
+    expect(setAuthCookieMock).toHaveBeenCalledWith(res, 'jwt', req, undefined);
+  });
+
+  it('OIDC-SVC-059: setAuthCookie forwards the remember option to the cookie helper', () => {
+    const res = {} as Response;
+    const req = {} as Request;
+    svc.setAuthCookie(res, 'jwt', req, true);
+    expect(setAuthCookieMock).toHaveBeenCalledWith(res, 'jwt', req, true);
+    svc.setAuthCookie(res, 'jwt', req, false);
+    expect(setAuthCookieMock).toHaveBeenCalledWith(res, 'jwt', req, false);
   });
 });
 

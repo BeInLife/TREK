@@ -6,7 +6,7 @@
 // (OIDC-only, passkeys, forced password change) and the presentation handlers.
 import React from 'react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent } from '../../tests/helpers/render';
+import { render, screen, fireEvent, cleanup } from '../../tests/helpers/render';
 import { resetAllStores, seedStore } from '../../tests/helpers/store';
 import { useSettingsStore } from '../store/settingsStore';
 import LoginPage from './LoginPage';
@@ -425,11 +425,27 @@ describe('LoginPage — alternative sign-in buttons', () => {
 
     expect(screen.getByText('or')).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /sign in with keycloak/i });
-    expect(link).toHaveAttribute('href', '/api/auth/oidc/login?invite=abc');
+    expect(link).toHaveAttribute('href', '/api/auth/oidc/login?invite=abc&remember=0');
 
     const background = hoverRoundTrip(link, 'background');
     expect(background.hovered).not.toBe(background.before);
     expect(background.after).toBe(background.before);
+  });
+
+  it('FE-LOGIN-WIRE-026b: the SSO link carries remember=1 when the toggle is on, and no flag in register mode (#1927)', () => {
+    fixture.appConfig.oidc_configured = true;
+    fixture.appConfig.oidc_login = true;
+    fixture.appConfig.oidc_display_name = 'Keycloak';
+    fixture.rememberMe = true;
+    renderPage();
+    expect(screen.getByRole('link', { name: /sign in with keycloak/i }))
+      .toHaveAttribute('href', '/api/auth/oidc/login?remember=1');
+
+    cleanup();
+    fixture.mode = 'register';
+    renderPage();
+    expect(screen.getByRole('link', { name: /sign in with keycloak/i }))
+      .toHaveAttribute('href', '/api/auth/oidc/login');
   });
 
   it('FE-LOGIN-WIRE-027: the passkey button signs in and reacts to hover', () => {

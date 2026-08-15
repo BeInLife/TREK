@@ -1,5 +1,6 @@
 import { Body, Controller, Get, HttpException, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
+import { oidcLoginQuerySchema } from '@trek/shared';
 import { readEnv } from '../../app-config';
 import { OidcService, OIDC_STATE_TTL_MS } from './oidc.service';
 import { cookieOptions } from '../common/cookie';
@@ -52,8 +53,12 @@ export class OidcController {
         return;
       }
       const redirectUri = `${appUrl.replace(/\/+$/, '')}/api/auth/oidc/callback`;
-      const inviteToken = req.query.invite as string | undefined;
-      const { state, codeChallenge } = this.oidc.createState(redirectUri, inviteToken);
+      // Lenient parse: a malformed query must never 400 a login redirect, so
+      // unknown values simply fall back to the raw invite + default duration.
+      const query = oidcLoginQuerySchema.safeParse(req.query);
+      const inviteToken = query.success ? query.data.invite : (req.query.invite as string | undefined);
+      const remember = query.success && query.data.remember !== undefined ? query.data.remember === '1' : undefined;
+      const { state, codeChallenge } = this.oidc.createState(redirectUri, inviteToken, remember);
       // Bind the state to THIS browser. The callback requires a matching cookie,
       // so an attacker-initiated login (whose callback URL carries a valid state
       // from the shared server map) cannot be replayed in a victim's browser to
@@ -151,8 +156,8 @@ export class OidcController {
       if ('error' in result) return f('/login?oidc_error=' + result.error);
 
       this.oidc.touchLastLogin(result.user.id);
-      const jwtToken = this.oidc.generateToken(result.user);
-      const authCode = this.oidc.createAuthCode(jwtToken);
+      const jwtToken = this.oidc.generateToken(result.user, pending.remember === true);
+      const authCode = this.oidc.createAuthCode(jwtToken, pending.remember);
       return f('/login?oidc_code=' + authCode);
     } catch (err: unknown) {
       console.error('[OIDC] Callback error:', err);
@@ -171,7 +176,7 @@ export class OidcController {
       res.status(400).json({ error: result.error });
       return;
     }
-    this.oidc.setAuthCookie(res, result.token, req);
+    this.oidc.setAuthCookie(res, result.token, req, result.remember);
     res.json({ token: result.token });
   }
 }

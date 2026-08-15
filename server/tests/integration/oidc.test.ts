@@ -41,6 +41,9 @@ vi.mock('../../src/config', () => ({
   SESSION_DURATION: '24h',
   SESSION_DURATION_MS: 86400000,
   SESSION_DURATION_SECONDS: 86400,
+  SESSION_DURATION_REMEMBER: '30d',
+  SESSION_DURATION_REMEMBER_MS: 2592000000,
+  SESSION_DURATION_REMEMBER_SECONDS: 2592000,
   DEFAULT_LANGUAGE: 'en',
 }));
 vi.mock('../../src/websocket', () => ({ broadcast: vi.fn(), broadcastToUser: vi.fn() }));
@@ -340,5 +343,62 @@ describe('GET /api/auth/oidc/exchange', () => {
     // Second use: rejected
     const res2 = await request(app).get(`/api/auth/oidc/exchange?code=${code}`);
     expect(res2.status).toBe(400);
+  });
+});
+
+// ── remember-me across the full flow (#1927) ─────────────────────────────────
+
+describe('OIDC remember-me (#1927)', () => {
+  // Runs the real /login → /callback → /exchange chain, following the state the
+  // controller minted, and returns the exchange response for cookie assertions.
+  async function runFlow(loginQuery: string, sub: string, email: string) {
+    mockDiscover.mockResolvedValue(MOCK_DISCOVERY_DOC);
+    mockExchangeCode.mockResolvedValue({ access_token: 'tok', id_token: 'fake.id.token', _ok: true, _status: 200 });
+    mockVerifyIdToken.mockResolvedValue({ ok: true, claims: { sub } });
+    mockGetUserInfo.mockResolvedValue({ sub, email, name: 'Flow User' });
+
+    const login = await request(app).get(`/api/auth/oidc/login${loginQuery}`);
+    expect(login.status).toBe(302);
+    const state = new URL(login.headers.location!).searchParams.get('state')!;
+
+    const cb = await request(app)
+      .get(`/api/auth/oidc/callback?code=anycode&state=${state}`)
+      .set('Cookie', `trek_oidc_state=${state}`);
+    expect(cb.status).toBe(302);
+    const oidcCode = new URL(cb.headers.location!, 'http://localhost').searchParams.get('oidc_code')!;
+    expect(oidcCode).toBeTruthy();
+
+    return request(app).get(`/api/auth/oidc/exchange?code=${oidcCode}`);
+  }
+
+  function sessionCookie(res: request.Response): string {
+    const cookies = Array.isArray(res.headers['set-cookie']) ? res.headers['set-cookie'] : [res.headers['set-cookie']];
+    return cookies.filter((c: string) => c.startsWith('trek_session=')).pop()!;
+  }
+
+  it('OIDC-015: remember=1 issues a 30d JWT and a Max-Age=2592000 cookie', async () => {
+    const res = await runFlow('?remember=1', 'sub-rm-1', 'rm1@example.com');
+    expect(res.status).toBe(200);
+    expect(sessionCookie(res)).toContain('Max-Age=2592000');
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.decode(res.body.token) as { iat: number; exp: number };
+    expect(decoded.exp - decoded.iat).toBe(2592000);
+  });
+
+  it('OIDC-016: remember=0 issues a browser-session cookie (no Max-Age) with the default JWT', async () => {
+    const res = await runFlow('?remember=0', 'sub-rm-0', 'rm0@example.com');
+    expect(res.status).toBe(200);
+    const cookie = sessionCookie(res);
+    expect(cookie).not.toContain('Max-Age=');
+    expect(cookie).not.toContain('Expires=');
+    const jwt = require('jsonwebtoken');
+    const decoded = jwt.decode(res.body.token) as { iat: number; exp: number };
+    expect(decoded.exp - decoded.iat).toBe(86400);
+  });
+
+  it('OIDC-017: no remember param keeps the historical 24h persistent cookie', async () => {
+    const res = await runFlow('', 'sub-rm-abs', 'rmabs@example.com');
+    expect(res.status).toBe(200);
+    expect(sessionCookie(res)).toContain('Max-Age=86400');
   });
 });

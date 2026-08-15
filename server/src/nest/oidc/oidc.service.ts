@@ -6,11 +6,11 @@ import { v4 as uuidv4 } from 'uuid';
 import bcrypt from 'bcryptjs';
 import type { Request, Response } from 'express';
 import { readEnv, getAppUrl } from '../../app-config';
-import { JWT_SECRET, SESSION_DURATION_SECONDS } from '../../config';
+import { JWT_SECRET, SESSION_DURATION_SECONDS, SESSION_DURATION_REMEMBER_SECONDS } from '../../config';
 import { User } from '../../types';
 import { decrypt_api_key, maybe_encrypt_api_key } from '../common/crypto/apiKeyCrypto';
 import { TripMembershipService } from '../trip-membership/trip-membership.service';
-import { setAuthCookie } from '../common/cookie';
+import { setAuthCookie, RememberOption } from '../common/cookie';
 import { AuthService } from '../auth/auth.service';
 import { DatabaseService } from '../database/database.service';
 import { safeFetchAdminConfigured } from '../../utils/ssrfGuard';
@@ -164,13 +164,13 @@ export class OidcService implements OnModuleDestroy {
   // State management – pending OIDC states
   // -------------------------------------------------------------------------
 
-  private readonly pendingStates = new Map<string, { createdAt: number; redirectUri: string; inviteToken?: string; codeVerifier: string }>();
+  private readonly pendingStates = new Map<string, { createdAt: number; redirectUri: string; inviteToken?: string; codeVerifier: string; remember?: boolean }>();
 
   // -------------------------------------------------------------------------
   // Auth code management – short-lived codes exchanged for JWT
   // -------------------------------------------------------------------------
 
-  private readonly authCodes = new Map<string, { token: string; created: number }>();
+  private readonly authCodes = new Map<string, { token: string; created: number; remember?: boolean }>();
 
   // Discovery document cache (1 h TTL), keyed by discovery URL so two
   // configured issuers no longer thrash a single slot.
@@ -209,16 +209,16 @@ export class OidcService implements OnModuleDestroy {
 
   getAppUrl() { return getAppUrl(); }
 
-  setAuthCookie(res: Response, token: string, req: Request) { setAuthCookie(res, token, req); }
+  setAuthCookie(res: Response, token: string, req: Request, remember?: RememberOption) { setAuthCookie(res, token, req, remember); }
 
   // Creates the login state and a matching PKCE pair. The verifier stays server
   // side (in pendingStates); the S256 challenge goes to the provider so PKCE-
   // required setups (e.g. Pocket ID with PKCE = required) work.
-  createState(redirectUri: string, inviteToken?: string): { state: string; codeChallenge: string } {
+  createState(redirectUri: string, inviteToken?: string, remember?: boolean): { state: string; codeChallenge: string } {
     const state = crypto.randomBytes(32).toString('hex');
     const codeVerifier = base64url(crypto.randomBytes(32));
     const codeChallenge = base64url(crypto.createHash('sha256').update(codeVerifier).digest());
-    this.pendingStates.set(state, { createdAt: Date.now(), redirectUri, inviteToken, codeVerifier });
+    this.pendingStates.set(state, { createdAt: Date.now(), redirectUri, inviteToken, codeVerifier, remember });
     return { state, codeChallenge };
   }
 
@@ -229,18 +229,18 @@ export class OidcService implements OnModuleDestroy {
     return pending;
   }
 
-  createAuthCode(token: string): string {
+  createAuthCode(token: string, remember?: boolean): string {
     const authCode: string = uuidv4();
-    this.authCodes.set(authCode, { token, created: Date.now() });
+    this.authCodes.set(authCode, { token, created: Date.now(), remember });
     return authCode;
   }
 
-  consumeAuthCode(code: string): { token: string } | { error: string } {
+  consumeAuthCode(code: string): { token: string; remember?: boolean } | { error: string } {
     const entry = this.authCodes.get(code);
     if (!entry) return { error: 'Invalid or expired code' };
     this.authCodes.delete(code);
     if (Date.now() - entry.created > AUTH_CODE_TTL) return { error: 'Code expired' };
-    return { token: entry.token };
+    return { token: entry.token, remember: entry.remember };
   }
 
   // -------------------------------------------------------------------------
@@ -328,12 +328,20 @@ export class OidcService implements OnModuleDestroy {
     return base + path;
   }
 
-  generateToken(user: { id: number }): string {
+  generateToken(user: { id: number }, remember?: boolean): string {
     // Embed the current password_version so an OIDC-issued session is invalidated
     // by a password change/reset exactly like a password-login session (the auth
     // middleware compares this `pv` against users.password_version).
     const pv = (this.db.prepare('SELECT password_version FROM users WHERE id = ?').get(user.id) as { password_version?: number } | undefined)?.password_version ?? 0;
-    return jwt.sign({ id: user.id, pv }, JWT_SECRET, { expiresIn: SESSION_DURATION_SECONDS, algorithm: 'HS256' });
+    // "Remember me" mirrors the password flow: the JWT lifetime matches the
+    // persistent cookie maxAge picked by the cookie service off the same flag,
+    // and the claim lets sliding renewal preserve those semantics.
+    const expiresIn = remember === true ? SESSION_DURATION_REMEMBER_SECONDS : SESSION_DURATION_SECONDS;
+    return jwt.sign(
+      { id: user.id, pv, ...(typeof remember === 'boolean' ? { remember } : {}) },
+      JWT_SECRET,
+      { expiresIn, algorithm: 'HS256' },
+    );
   }
 
   // -------------------------------------------------------------------------

@@ -106,4 +106,21 @@ describe('OIDC e2e (real cookie service)', () => {
     const setCookie = res.headers['set-cookie'] as unknown as string[];
     expect(setCookie.some((c) => c.startsWith('trek_session=') && /HttpOnly/i.test(c))).toBe(true);
   });
+
+  it('GET /exchange with a remembered code sets a persistent Max-Age cookie (#1927)', async () => {
+    consumeAuthCode.mockReturnValue({ token: 'jwt.value', remember: true });
+    const res = await request(server).get('/api/auth/oidc/exchange').query({ code: 'good' });
+    expect(res.status).toBe(200);
+    const cookie = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('trek_session='))!;
+    expect(cookie).toContain('Max-Age=2592000');
+  });
+
+  it('GET /exchange with remember=false sets a browser-session cookie (no Max-Age) (#1927)', async () => {
+    consumeAuthCode.mockReturnValue({ token: 'jwt.value', remember: false });
+    const res = await request(server).get('/api/auth/oidc/exchange').query({ code: 'good' });
+    expect(res.status).toBe(200);
+    const cookie = (res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('trek_session='))!;
+    expect(cookie).not.toContain('Max-Age=');
+    expect(cookie).not.toContain('Expires=');
+  });
 });

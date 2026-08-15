@@ -1086,7 +1086,13 @@ export default function LoginPage(): React.ReactElement {
                 <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
               </div>
               <a
-                href={`/api/auth/oidc/login${inviteToken ? '?invite=' + encodeURIComponent(inviteToken) : ''}`}
+                href={`/api/auth/oidc/login${
+                  inviteToken ? '?invite=' + encodeURIComponent(inviteToken) : ''
+                }${
+                  // The remember-me toggle only renders in login mode; in
+                  // register mode omit the param so the server default applies.
+                  mode === 'login' ? (inviteToken ? '&' : '?') + 'remember=' + (rememberMe ? '1' : '0') : ''
+                }`}
                 style={{
                   marginTop: 12,
                   width: '100%',
