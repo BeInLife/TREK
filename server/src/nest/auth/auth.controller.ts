@@ -40,6 +40,7 @@ import {
 import { RateLimitService } from '../common/rate-limit.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
+import { decodeSessionClaims } from './jwt-verify';
 import { getClientIp } from '../audit/client-ip';
 import { AuditService } from '../audit/audit.service';
 import type { User } from '../../types';
@@ -97,13 +98,17 @@ export class AuthController {
   @Put('me/password')
   changePassword(@CurrentUser() user: User, @Body() body: ChangePasswordDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
     this.limit('login', req, 5);
-    const result = this.auth.changePassword(user.id, user.email, body);
+    // Carry the session's remember choice into the re-issued token/cookie so a
+    // "remember me" login survives a password change (#1927). Bearer callers
+    // have no cookie → undefined → the historical default duration.
+    const remember = decodeSessionClaims((req.cookies as Record<string, string> | undefined)?.trek_session)?.remember;
+    const result = this.auth.changePassword(user.id, user.email, body, remember);
     if (result.error) {
       throw new HttpException({ error: result.error }, result.status!);
     }
     // Refresh this device's cookie with the new password_version so the user
     // stays logged in here while all other sessions are invalidated.
-    if (result.token) this.auth.setAuthCookie(res, result.token, req);
+    if (result.token) this.auth.setAuthCookie(res, result.token, req, remember);
     this.audit.writeAudit({ userId: user.id, action: 'user.password_change', ip: getClientIp(req) });
     return { success: true };
   }

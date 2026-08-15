@@ -265,7 +265,20 @@ describe('AuthController (authenticated)', () => {
     const setAuthCookie = vi.fn();
     const c = ac(asvc({ changePassword: vi.fn().mockReturnValue({ token: 'tk2' }), setAuthCookie } as Partial<AuthService>), rl());
     expect(c.changePassword(user, anyBody(), req, res)).toEqual({ success: true });
-    expect(setAuthCookie).toHaveBeenCalledWith(res, 'tk2', req);
+    expect(setAuthCookie).toHaveBeenCalledWith(res, 'tk2', req, undefined);
+  });
+
+  it('change-password carries the session cookie remember claim into the service and the re-issued cookie (#1927)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const jwt = require('jsonwebtoken');
+    const remembered = jwt.sign({ id: 1, pv: 0, remember: true }, 'any-secret');
+    const reqCookie = { ip: '9.9.9.9', headers: {}, cookies: { trek_session: remembered } } as unknown as Request;
+    const setAuthCookie = vi.fn();
+    const changePassword = vi.fn().mockReturnValue({ token: 'tk3' });
+    const c = ac(asvc({ changePassword, setAuthCookie } as Partial<AuthService>), rl());
+    expect(c.changePassword(user, anyBody(), reqCookie, res)).toEqual({ success: true });
+    expect(changePassword).toHaveBeenCalledWith(1, 'u@example.test', anyBody(), true);
+    expect(setAuthCookie).toHaveBeenCalledWith(res, 'tk3', reqCookie, true);
   });
 
   it('delete-account maps error, else audits and succeeds', () => {
