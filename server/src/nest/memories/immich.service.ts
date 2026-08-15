@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import type { Response } from 'express';
-import path from 'path';
 import { maybe_encrypt_api_key, decrypt_api_key } from '../common/crypto/apiKeyCrypto';
 import { checkSsrf, safeFetch } from '../../utils/ssrfGuard';
 import { AuditService } from '../audit/audit.service';
@@ -79,6 +78,9 @@ export class ImmichService {
     clientIp: string | null
   ): Promise<{ success: boolean; warning?: string; error?: string }> {
     if (immichUrl) {
+      if (immichUrl.endsWith('/')) {
+        immichUrl = immichUrl.slice(0, -1);
+      }
       const ssrf = await checkSsrf(immichUrl.trim());
       if (!ssrf.allowed) {
         return { success: false, error: `Invalid Immich URL: ${ssrf.error}` };
@@ -116,6 +118,9 @@ export class ImmichService {
     immichUrl: string,
     immichApiKey: string
   ): Promise<{ connected: boolean; error?: string; user?: { name?: string; email?: string }; canonicalUrl?: string }> {
+    if (immichUrl.endsWith('/')) {
+      immichUrl = immichUrl.slice(0, -1);
+    }
     const ssrf = await checkSsrf(immichUrl);
     if (!ssrf.allowed) return { connected: false, error: ssrf.error ?? 'Invalid Immich URL' };
     try {
