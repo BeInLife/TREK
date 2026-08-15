@@ -480,6 +480,18 @@ describe('changePassword — session invalidation', () => {
 
     expect(verifyJwtAndLoadUser(stolen)).toBeNull(); // invalidated by the pv bump
   });
+
+  it('AUTH-DB-036d: preserves the remember choice in the re-issued session (#1927)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const jwt = require('jsonwebtoken');
+    const { user, password } = createUser(testDb);
+
+    const result = svc.changePassword(user.id, user.email, { current_password: password, new_password: 'New1234!' }, true);
+    expect(result.success).toBe(true);
+    const decoded = jwt.decode(result.token!) as { remember?: boolean; iat: number; exp: number };
+    expect(decoded.remember).toBe(true);
+    expect(decoded.exp - decoded.iat).toBe(2592000); // remember window survives the change
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -963,5 +975,27 @@ describe('MCP token verification round-trips', () => {
     const token = svc.generateToken({ id: user.id });
     expect(svc.verifyJwtToken(token)?.id).toBe(user.id);
     expect(svc.verifyJwtToken('not-a-jwt')).toBeNull();
+  });
+});
+
+describe('generateToken remember claim (#1927)', () => {
+  const jwt = require('jsonwebtoken');
+
+  it('AUTH-TOKEN-001: embeds remember and picks the matching lifetime when the caller chose', () => {
+    const { user } = createUser(testDb);
+    const long = jwt.decode(svc.generateToken({ id: user.id }, true)) as { remember?: boolean; iat: number; exp: number };
+    expect(long.remember).toBe(true);
+    expect(long.exp - long.iat).toBe(2592000);
+
+    const short = jwt.decode(svc.generateToken({ id: user.id }, false)) as { remember?: boolean; iat: number; exp: number };
+    expect(short.remember).toBe(false);
+    expect(short.exp - short.iat).toBe(86400);
+  });
+
+  it('AUTH-TOKEN-002: omits the claim entirely when the caller did not choose (legacy payload)', () => {
+    const { user } = createUser(testDb);
+    const decoded = jwt.decode(svc.generateToken({ id: user.id })) as { remember?: boolean; iat: number; exp: number };
+    expect('remember' in decoded).toBe(false);
+    expect(decoded.exp - decoded.iat).toBe(86400);
   });
 });

@@ -32,6 +32,28 @@ export function extractToken(req: Request): string | null {
  * compares the claim. Several paths used to call `jwt.verify` directly and skip
  * the DB lookup, so a stolen token kept working after the victim reset.
  */
+export interface SessionClaims {
+  id?: number;
+  pv?: number;
+  remember?: boolean;
+  purpose?: string;
+  iat?: number;
+  exp?: number;
+}
+
+/**
+ * Decode (NOT verify) a session token's claims. Only for callers that have
+ * already authenticated the request through a guard and need the token's
+ * metadata — sliding renewal and the password-change cookie re-issue read the
+ * `remember` claim this way. Never use this as an auth check.
+ */
+export function decodeSessionClaims(token: string | undefined): SessionClaims | null {
+  if (!token) return null;
+  const decoded = jwt.decode(token);
+  if (!decoded || typeof decoded !== 'object') return null;
+  return decoded as SessionClaims;
+}
+
 export function verifyJwtAndLoadUser(token: string): User | null {
   try {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as { id: number; pv?: number; purpose?: string };

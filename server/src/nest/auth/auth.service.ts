@@ -197,15 +197,19 @@ export class AuthService {
     return !this.resolveAuthToggles().password_login;
   }
 
-  generateToken(user: { id: number | bigint; password_version?: number }, rememberMe = false) {
+  generateToken(user: { id: number | bigint; password_version?: number }, remember?: boolean) {
     const pv = typeof user.password_version === 'number'
       ? user.password_version
       : (this.db.get<{ password_version?: number }>('SELECT password_version FROM users WHERE id = ?', user.id)?.password_version ?? 0);
     // "Remember me" extends the JWT lifetime to match the persistent cookie maxAge;
     // the cookie service decides session-vs-persistent off the same flag.
-    const expiresIn = rememberMe ? SESSION_DURATION_REMEMBER_SECONDS : SESSION_DURATION_SECONDS;
+    const expiresIn = remember === true ? SESSION_DURATION_REMEMBER_SECONDS : SESSION_DURATION_SECONDS;
+    // The flag is embedded as a claim so sliding renewal can re-issue with the
+    // same duration AND cookie semantics (false → browser-session cookie is not
+    // recoverable from exp − iat). Omitted when the caller didn't choose, so
+    // register/demo/passkey tokens keep their historical payload.
     return jwt.sign(
-      { id: user.id, pv },
+      { id: user.id, pv, ...(typeof remember === 'boolean' ? { remember } : {}) },
       JWT_SECRET,
       { expiresIn, algorithm: 'HS256' }
     );
@@ -514,7 +518,8 @@ export class AuthService {
   changePassword(
     userId: number,
     userEmail: string,
-    rawBody: unknown
+    rawBody: unknown,
+    remember?: boolean,
   ): { error?: string; status?: number; success?: boolean; token?: string } {
     const body = rawBody as { current_password?: string; new_password?: string };
     if (this.isOidcOnlyMode()) {
@@ -554,8 +559,10 @@ export class AuthService {
     try { revokeUserSessions?.(userId); } catch { /* best-effort */ }
 
     // Re-issue a session bound to the new password_version so the current device
-    // stays logged in while other existing sessions are rotated out by the pv gate.
-    const token = this.generateToken({ id: userId, password_version: newPv });
+    // stays logged in while other existing sessions are rotated out by the pv
+    // gate — preserving the login's remember choice instead of downgrading a
+    // remembered session to the default duration (#1927).
+    const token = this.generateToken({ id: userId, password_version: newPv }, remember);
     return { success: true, token };
   }
 

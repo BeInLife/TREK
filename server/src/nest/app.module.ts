@@ -64,6 +64,7 @@ import { trekMcpAccessPolicy, trekMcpValidateAccess } from '../mcp/nest-mcp-poli
 import { TrekExceptionFilter } from './common/trek-exception.filter';
 import { SpaFallbackFilter } from './platform/spa-fallback.filter';
 import { IdempotencyInterceptor } from './common/idempotency.interceptor';
+import { SessionRenewalInterceptor } from './auth/session-renewal.interceptor';
 import { IdempotencyCleanupJob } from './common/idempotency-cleanup.job';
 import { RealtimeGatewayModule } from './realtime/realtime-gateway.module';
 
@@ -97,6 +98,9 @@ import { RealtimeGatewayModule } from './realtime/realtime-gateway.module';
     // Replays the X-Idempotency-Key the client sends on every write, so retried
     // mutations don't double-apply.
     { provide: APP_INTERCEPTOR, useClass: IdempotencyInterceptor },
+    // Sliding session renewal: re-issues the trek_session cookie once a
+    // cookie-authenticated token is past half its lifetime (#1927).
+    { provide: APP_INTERCEPTOR, useClass: SessionRenewalInterceptor },
     // Its nightly TTL purge — a provider here because common/ has no module.
     IdempotencyCleanupJob,
     // Global Zod validation: any parameter typed with a createZodDto class
