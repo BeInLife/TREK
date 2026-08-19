@@ -43,8 +43,8 @@ describe('incoming_leg_transport_mode migration', () => {
     //
     // >>> Appending a migration? Re-point the "undo" below at whatever yours
     // >>> does. That is the whole maintenance cost of this guard. The current
-    // >>> trailing slot adds journey_share_tokens.newest_first, so undoing it
-    // >>> means dropping that column and letting the replay put it back.
+    // >>> trailing slot creates journey_books (the TREK Studio document store,
+    // >>> #1973), so undoing it means dropping that table and its index.
     const upgraded = new Database(':memory:');
     upgraded.exec('PRAGMA foreign_keys = ON');
     createTables(upgraded);
@@ -52,19 +52,22 @@ describe('incoming_leg_transport_mode migration', () => {
 
     const { version } = upgraded.prepare('SELECT version FROM schema_version').get() as { version: number };
 
-    const hasNewestFirst = () =>
-      (upgraded.prepare("SELECT name FROM pragma_table_info('journey_share_tokens')").all() as { name: string }[])
-        .some(c => c.name === 'newest_first');
-
-    expect(hasNewestFirst()).toBe(true);
-    upgraded.exec('ALTER TABLE journey_share_tokens DROP COLUMN newest_first');
-    expect(hasNewestFirst()).toBe(false);
+    upgraded.exec('DROP INDEX IF EXISTS idx_journey_books_journey');
+    upgraded.exec('DROP TABLE IF EXISTS journey_books');
+    expect(
+      upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'journey_books'").get()
+    ).toBeUndefined();
 
     upgraded.prepare('UPDATE schema_version SET version = ?').run(version - 1);
 
     runMigrations(upgraded);
 
-    expect(hasNewestFirst()).toBe(true);
+    expect(
+      upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'journey_books'").get()
+    ).toEqual({ name: 'journey_books' });
+    expect(
+      upgraded.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_journey_books_journey'").get()
+    ).toEqual({ name: 'idx_journey_books_journey' });
     expect(upgraded.prepare('SELECT version FROM schema_version').get()).toEqual({ version });
     upgraded.close();
   });
