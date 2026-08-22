@@ -525,7 +525,7 @@ function SidebarContent({ data, stats, countries, selectedCountry, countryDetail
     return (
       <>
         {tabBar}
-        <EmptyState scene="atlas" title={t('atlas.noData')} />
+        <EmptyState scene="atlas" title={t('atlas.noData')} layout="row" size={52} />
       </>
     )
   }

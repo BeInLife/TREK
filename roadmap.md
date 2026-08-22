@@ -181,9 +181,10 @@ Ordered by value:
   'write' }` appears ~100+ times across `.mcp.ts` files as free strings. A typo'd group
   never matches a real scope: scoped tokens get denied (fail closed) but `scopes: null`
   sessions pass (fail open) — silent scope-model drift either way. Mechanism: derive a
-  `ScopeGroup` union from `SCOPES` and type the decorator's `access.group` against it via
-  the same `declare module '@trek/nest-mcp'` augmentation already used for `McpContext`
-  (keeps nest-mcp extraction-clean); plus a **boot gate in the MCP registry**: at discovery
+  `ScopeGroup` union from `SCOPES` and type the decorator's `access.group` against it
+  (originally a `declare module '@trek/nest-mcp'` augmentation; since the 2026-08-22 fold
+  the registries live directly in `server/src/nest-mcp/types.ts`); plus a **boot gate in
+  the MCP registry**: at discovery
   time, refuse to boot on an `access.group`/tool-name/`when` combination that doesn't
   resolve against `SCOPES` — the body-contract ratchet pattern applied to the MCP surface.
   The registry the user-facing scopes UI reads (`SCOPE_INFO`) then serves decorators, the
