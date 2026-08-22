@@ -52,6 +52,12 @@ const tr: NotificationLocale = {
       title: 'Yeni TREK sürümü mevcut',
       body: `TREK ${p.version} artık mevcut. Güncellemek için yönetici panelini ziyaret edin.`,
     }),
+    replica_failure: (p) => ({
+      title: 'Depolama kopyası hatası',
+      body:
+        `'${p.backend}' kopyasına yazma başarısız oldu: ${p.op} (${p.key}) — ${p.error}.` +
+        (p.suppressed !== '0' ? ` Son bildirimden bu yana ${p.suppressed} hata daha bastırıldı.` : ''),
+    }),
     synology_session_cleared: () => ({
       title: 'Synology oturumu temizlendi',
       body: 'Synology hesabınız veya URL değişti. Synology Photos oturumunuz kapatıldı.',

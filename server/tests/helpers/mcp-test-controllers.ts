@@ -74,6 +74,8 @@ import { makeNotificationsService, makeNotificationPreferencesService } from './
 import { AddonsService } from '../../src/nest/addons/addons.service';
 import { notificationsStub } from './notifications';
 import { EphemeralTokenService } from '../../src/nest/auth/ephemeral-token.service';
+import { AllowedFileTypesService } from '../../src/nest/files/allowed-file-types.service';
+import { makeStorageFixture } from './storage-fixture';
 
 /**
  * Hand-wired counterpart of the boot-time discovery in McpRegistryService,
@@ -84,6 +86,7 @@ import { EphemeralTokenService } from '../../src/nest/auth/ephemeral-token.servi
  */
 export function createMcpTestRegistry(): McpRegistry {
   const dbService = new DatabaseService(db);
+  const generalStorage = makeStorageFixture('').storage;
   const permissionsService = new PermissionsService(dbService);
   // Same argument list as auth.bridge.ts. AtlasService used to sit in third
   // place; when getTravelStats moved onto AtlasService itself the edge was
@@ -102,15 +105,16 @@ export function createMcpTestRegistry(): McpRegistry {
     new UserCleanupService(dbService, budgetService),
     new MailerService(dbService),
     new EphemeralTokenService(),
+    new AllowedFileTypesService(dbService),
   );
   const queryHelpersService = new QueryHelpersService(dbService);
   const daysService = new DaysService(dbService, permissionsService, realtimeService, queryHelpersService);
   const todoService = new TodoService(dbService, permissionsService, realtimeService);
   const packingService = new PackingService(dbService, permissionsService, realtimeService, notificationsStub());
-  const collabService = new CollabService(dbService, permissionsService, realtimeService, notificationsStub());
+  const collabService = new CollabService(dbService, permissionsService, realtimeService, notificationsStub(), generalStorage);
   // Exactly one instance, shared by maps, places and share: its stampede guard
   // and its on-disk set only work if all three readers see the same maps.
-  const placePhotoCache = new PlacePhotoCacheService(dbService, new RuntimeEnvService());
+  const placePhotoCache = new PlacePhotoCacheService(dbService, makeStorageFixture('photos/google/').storage);
   const mapsService = new MapsService(dbService, placePhotoCache);
   const journeyDomain = new JourneyDomainService(dbService, realtimeService, new TrekPhotosRepository(dbService));
   // The last three were previously omitted, which left them `undefined` at
@@ -119,9 +123,10 @@ export function createMcpTestRegistry(): McpRegistry {
   // includes `src`, so nothing here is typechecked; pass them for real.
   const placesService = new PlacesService(
     dbService, permissionsService, realtimeService, mapsService, queryHelpersService,
-    new UnsplashService(dbService, new RuntimeEnvService()),
+    new UnsplashService(dbService, new RuntimeEnvService(), generalStorage),
     placePhotoCache,
     journeyDomain,
+    generalStorage,
   );
   const reservationsService = new ReservationsService(dbService, permissionsService, budgetService, realtimeService, notificationsStub(), new ReservationsReadRepository(dbService));
   const accommodationsService = new AccommodationsService(dbService, permissionsService, realtimeService);
@@ -134,12 +139,13 @@ export function createMcpTestRegistry(): McpRegistry {
     budgetService,
     new VacayService(dbService, realtimeService, notificationsStub()),
     realtimeService,
-    new UnsplashService(dbService, new RuntimeEnvService()),
+    new UnsplashService(dbService, new RuntimeEnvService(), generalStorage),
+    generalStorage,
   );
   const readModelService = new TripReadModelService(
     dbService, membersService, daysService, accommodationsService, budgetService,
     packingService, reservationsService, collabService, placesService, todoService,
-    new FilesService(dbService, permissionsService, realtimeService, new EphemeralTokenService()),
+    new FilesService(dbService, permissionsService, realtimeService, new EphemeralTokenService(), generalStorage),
   );
   const calendarService = new CalendarService(dbService, reservationsService);
   // The nine addon-gated surfaces read their toggle off an injected service now
@@ -172,7 +178,7 @@ export function createMcpTestRegistry(): McpRegistry {
       new ShareMcp(new ShareService(dbService, new SettingsService(dbService), permissionsService, queryHelpersService, placePhotoCache), authService, guards),
       new MapsMcp(mapsService),
       new PlacesMcp(placesService, mapsService, dbService, authService, journeyDomain, assignmentsService, guards),
-      new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService, notificationsStub()), dbService, authService, addonsService),
+      new CollectionsMcp(new CollectionsService(dbService, permissionsService, realtimeService, notificationsStub(), generalStorage), dbService, authService, addonsService),
       new TransitMcp(new TransitService(), daysService, reservationsService, dbService, authService, guards),
       new AtlasMcp(new AtlasService(dbService), addonsService, authService),
       new JourneyMcp(journeyDomain, new JourneyShareService(dbService, journeyDomain), addonsService, authService),

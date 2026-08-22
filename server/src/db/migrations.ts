@@ -3895,8 +3895,8 @@ function runMigrations(db: Database.Database): void {
     // its day are on the same trip. The table carries no trip_id and its two
     // foreign keys only ask that the ids exist, so pairs that never belonged
     // together could accumulate; the writer refuses them now, and this clears
-    // whatever an older build let through. Appended LAST — the array is
-    // index-addressed against schema_version.
+    // whatever an older build let through. This slot keeps the index it shipped
+    // with on dev — the array is index-addressed against schema_version.
     () => {
       db.exec(`
         DELETE FROM reservation_day_positions
@@ -4066,6 +4066,22 @@ function runMigrations(db: Database.Database): void {
         const byName = nameToCode.get((row.region_name || '').toLowerCase());
         if (byName) update.run(byName, row.id);
       }
+    },
+    // Storage slice 2 — collab note attachments historically stored 'files/<name>'
+    // in trip_files.filename while the file manager stored bare names in the same
+    // column; the storage layer addresses objects as category + bare name, so
+    // normalize the legacy rows. substr is 1-indexed: 7 drops the six chars of
+    // 'files/'. The LIKE guard makes it a no-op on already-bare rows.
+    //
+    // Appended LAST again, and for the same reason as the note this replaces:
+    // the array is index-addressed against schema_version, so a slot that has
+    // shipped in dev keeps the index it shipped with and anything from this
+    // branch goes after it. A database that already ran this migration at its
+    // pre-merge index replays it harmlessly (the LIKE guard) but skips whatever
+    // now occupies that index. Acceptable only because this branch has never
+    // been published; never do this with a released slot.
+    () => {
+      db.exec("UPDATE trip_files SET filename = substr(filename, 7) WHERE filename LIKE 'files/%'");
     },
   ];
 

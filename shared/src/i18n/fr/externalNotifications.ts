@@ -52,6 +52,14 @@ const fr: NotificationLocale = {
       title: 'Nouvelle version TREK disponible',
       body: `TREK ${p.version} est maintenant disponible. Rendez-vous dans le panneau d'administration pour mettre à jour.`,
     }),
+    replica_failure: (p) => ({
+      title: 'Échec de réplique de stockage',
+      body:
+        `Échec de l'écriture sur la réplique '${p.backend}' : ${p.op} de ${p.key} — ${p.error}.` +
+        (p.suppressed !== '0'
+          ? ` ${p.suppressed} erreurs supplémentaires ont été supprimées depuis la dernière notification.`
+          : ''),
+    }),
     synology_session_cleared: () => ({
       title: 'Session Synology effacée',
       body: 'Votre compte ou URL Synology a changé. Vous avez été déconnecté de Synology Photos.',

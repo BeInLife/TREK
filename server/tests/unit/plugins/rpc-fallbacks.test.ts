@@ -80,7 +80,7 @@ describe('optional fields fall back rather than reaching the service as undefine
     const { guards, db } = guardsFor();
     const createFileLink = vi.fn(() => []);
     const files = { getFileById: vi.fn(() => ({})), findForeignLinkTarget: vi.fn(() => null), createFileLink } as never;
-    const host = new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([new FilesRpc(files, realtime(), db, guards)]));
+    const host = new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([new FilesRpc(files, realtime(), db, guards, {} as never)]));
     await host.dispatch(req('files.createLink', { tripId: 1, fileId: 2, opts: {} }), 42);
     expect(createFileLink).toHaveBeenCalledWith(2, { reservation_id: null, assignment_id: null, place_id: null });
   });
@@ -89,7 +89,7 @@ describe('optional fields fall back rather than reaching the service as undefine
     const { guards, db } = guardsFor();
     const updateFile = vi.fn((id: number) => ({ id }));
     const files = { getFileById: vi.fn(() => ({})), findForeignLinkTarget: vi.fn(() => null), updateFile } as never;
-    const host = new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([new FilesRpc(files, realtime(), db, guards)]));
+    const host = new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([new FilesRpc(files, realtime(), db, guards, {} as never)]));
     await host.dispatch(req('files.update', { tripId: 1, fileId: 2, input: { reservation_id: null, place_id: 7 } }), 42);
     expect(updateFile).toHaveBeenLastCalledWith(2, expect.anything(), expect.objectContaining({ reservation_id: null, place_id: '7' }));
   });
@@ -107,7 +107,10 @@ describe('optional fields fall back rather than reaching the service as undefine
 describe('a service that says no becomes a refusal, not a crash', () => {
   it('FALLBACK-006 a place that will not delete is refused', async () => {
     const { guards } = guardsFor();
-    const places = { get: vi.fn(() => ({ id: 7 })), remove: vi.fn(() => false), create: vi.fn(), update: vi.fn(), linkedExpenseIds: vi.fn(() => []) } as never;
+    // remove is async in production; a Promise-returning double pins the fix that
+    // awaits it — an un-awaited call compares a Promise (always truthy) against
+    // falsy and never refuses.
+    const places = { get: vi.fn(() => ({ id: 7 })), remove: vi.fn(() => Promise.resolve(false)), create: vi.fn(), update: vi.fn(), linkedExpenseIds: vi.fn(() => []) } as never;
     const journey = { onPlaceDeleted: vi.fn(), onPlaceCreated: vi.fn(), onPlaceUpdated: vi.fn() } as never;
     const host = new PluginRpcHost('p', ALL, makeDeps(), createTestPluginRegistry([new PlacesRpc(places, journey, realtime(), guards)]));
     expect(err(await host.dispatch(req('places.delete', { tripId: 1, placeId: 7 }), 42)).message).toBe('no place 7 on trip 1');

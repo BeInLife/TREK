@@ -72,6 +72,7 @@ import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.se
 import { UnsplashService } from '../../../src/nest/unsplash/unsplash.service';
 import { PlacePhotoCacheService } from '../../../src/nest/place-photos/place-photo-cache.service';
 import { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
+import { makeStorageFixture } from '../../helpers/storage-fixture';
 import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.service';
 import { TrekPhotosRepository } from '../../../src/nest/photos/trek-photos.repository';
 
@@ -83,12 +84,13 @@ const budgetSvc = new BudgetService(dbs(), new PermissionsService(dbs()), new Ex
 const daysSvc = new DaysService(dbs(), new PermissionsService(dbs()), new RealtimeService(), new QueryHelpersService(dbs()));
 // One shared cache instance (the PlacePhotoCacheService rule): the in-flight dedup in
 // PlacePhotoCacheService only works while both consumers hold the same object.
-const photoCache = new PlacePhotoCacheService(dbs(), new RuntimeEnvService());
+const photoCache = new PlacePhotoCacheService(dbs(), makeStorageFixture('photos/google/').storage);
 const placesSvc = new PlacesService(
   dbs(), new PermissionsService(dbs()), new RealtimeService(),
   new MapsService(dbs(), photoCache), new QueryHelpersService(dbs()),
-  new UnsplashService(dbs(), new RuntimeEnvService()), photoCache,
+  new UnsplashService(dbs(), new RuntimeEnvService(), makeStorageFixture('').storage), photoCache,
   new JourneyDomainService(dbs(), new RealtimeService(), new TrekPhotosRepository(dbs())),
+  makeStorageFixture('').storage,
 );
 const accommodationsSvc = new AccommodationsService(dbs(), new PermissionsService(dbs()), new RealtimeService());
 const membersSvc = new TripMembersService(dbs(), budgetSvc, new UserCleanupService(dbs(), budgetSvc), new PermissionsService(dbs()), new RealtimeService(), notificationsStub());
@@ -98,10 +100,10 @@ const buildReadModel = (database: DatabaseService, roster: TripMembersService = 
     database, roster, daysSvc, accommodationsSvc, budgetSvc,
     new PackingService(dbs(), new PermissionsService(dbs()), new RealtimeService(), notificationsStub()),
     new ReservationsService(dbs(), new PermissionsService(dbs()), budgetSvc, new RealtimeService(), notificationsStub(), new ReservationsReadRepository(dbs())),
-    new CollabService(dbs(), new PermissionsService(dbs()), new RealtimeService(), notificationsStub()),
+    new CollabService(dbs(), new PermissionsService(dbs()), new RealtimeService(), notificationsStub(), makeStorageFixture('').storage),
     placesSvc,
     new TodoService(dbs(), new PermissionsService(dbs()), new RealtimeService()),
-    new FilesService(dbs(), new PermissionsService(dbs()), new RealtimeService(), new EphemeralTokenService()),
+    new FilesService(dbs(), new PermissionsService(dbs()), new RealtimeService(), new EphemeralTokenService(), makeStorageFixture('').storage),
   );
 
 const svc = buildReadModel(dbs());

@@ -52,6 +52,12 @@ const gr: NotificationLocale = {
       title: 'Νέα έκδοση TREK διαθέσιμη',
       body: `Η έκδοση TREK ${p.version} είναι τώρα διαθέσιμη. Επισκεφθείτε τον πίνακα διαχείρισης για να ενημερώσετε.`,
     }),
+    replica_failure: (p) => ({
+      title: 'Αποτυχία αντιγράφου αποθήκευσης',
+      body:
+        `Η εγγραφή στο αντίγραφο '${p.backend}' απέτυχε: ${p.op} του ${p.key} — ${p.error}.` +
+        (p.suppressed !== '0' ? ` ${p.suppressed} επιπλέον αποτυχίες αποκρύφθηκαν από την τελευταία ειδοποίηση.` : ''),
+    }),
     synology_session_cleared: () => ({
       title: 'Η σύνδεση Synology τερματίστηκε',
       body: 'Ο λογαριασμός σας Synology ή το URL άλλαξε. Έχετε αποσυνδεθεί από το Synology Photos.',

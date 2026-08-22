@@ -129,7 +129,7 @@ const photoCacheStub = {
   markError: (placeId: string, kind?: string) => mockCacheMarkError(placeId, kind),
   getInFlight: (placeId: string) => mockCacheGetInFlight(placeId),
   setInFlight: (placeId: string, p: Promise<any>) => mockCacheSetInFlight(placeId, p),
-  serveFilePath: (placeId: string) => mockServeFilePath(placeId),
+  serveKey: (placeId: string) => mockServeFilePath(placeId),
 } as unknown as PlacePhotoCacheService;
 
 import { db } from '../../../src/db/database';
@@ -1964,9 +1964,8 @@ describe('getPlacePhoto (fetch stubbed)', () => {
   it('MAPS-043b: returns cached photo when disk cache returns a hit', async () => {
     const placeId = `coords:cache-test-${Date.now()}`;
     const cachedUrl = `/api/maps/place-photo/${encodeURIComponent(placeId)}/bytes`;
-    mockCacheGet.mockReturnValue({
+    mockCacheGet.mockResolvedValue({
       photoUrl: cachedUrl,
-      filePath: `/tmp/${placeId}.jpg`,
       attribution: null,
     });
     const fetchMock = vi.fn();
@@ -2446,16 +2445,16 @@ describe('kill-switch settings reads', () => {
   });
 });
 
-describe('photoBytesPath', () => {
-  it('returns the cached file path from placePhotoCache', () => {
-    mockServeFilePath.mockReturnValue('/cache/p1.jpg');
-    expect(svc.photoBytesPath('p1')).toBe('/cache/p1.jpg');
+describe('photoBytesKey', () => {
+  it('returns the cached storage name from placePhotoCache', () => {
+    mockServeFilePath.mockReturnValue('abc.jpg');
+    expect(svc.photoBytesKey('p1')).toBe('abc.jpg');
     expect(mockServeFilePath).toHaveBeenCalledWith('p1');
   });
 
   it('returns null when nothing is cached', () => {
     mockServeFilePath.mockReturnValue(null);
-    expect(svc.photoBytesPath('p1')).toBeNull();
+    expect(svc.photoBytesKey('p1')).toBeNull();
   });
 });
 

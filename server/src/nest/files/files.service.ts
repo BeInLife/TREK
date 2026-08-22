@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import path from 'path';
-import fs from 'fs';
 import type { Request } from 'express';
 import type { TrekWsPayload, TrekWsTripEventName } from '@trek/shared';
 import { RealtimeService } from '../realtime/realtime.service';
@@ -10,7 +9,8 @@ import { EphemeralTokenService } from '../auth/ephemeral-token.service';
 import { verifyJwtAndLoadUser } from '../auth/jwt-verify';
 import type { User, TripFile } from '../../types';
 import { DatabaseService, type TripAccess } from '../database/database.service';
-import { DEFAULT_ALLOWED_EXTENSIONS, filesDir } from './files.constants';
+import { DEFAULT_ALLOWED_EXTENSIONS } from './files.constants';
+import { StorageService } from '../storage/storage.service';
 
 type Trip = TripAccess;
 type FilePermission = 'file_upload' | 'file_edit' | 'file_delete';
@@ -45,9 +45,9 @@ export interface FileLink {
  * DatabaseService's canAccessTrip (the legacy verifyTripAccess re-export was a
  * plain wrapper over the same helper); the file_* permissions, path-resolution
  * guard, download-token auth and WebSocket broadcasts are unchanged. The
- * load-time constants live in files.constants.ts; the one out-of-DI consumer
- * path (module-scope multer configs) reaches getAllowedExtensions through
- * files.bridge.ts.
+ * load-time constants live in files.constants.ts; the admin allowed-types
+ * live-read is AllowedFileTypesService (the single query owner since the
+ * storage slice-2 consolidation).
  *
  * Two deliberate post-migration fixes over the legacy behavior: createFileLink
  * no longer swallows insert errors, and updateFile coerces an empty-string
@@ -60,6 +60,7 @@ export class FilesService {
     private readonly permissions: PermissionsService,
     private readonly realtime: RealtimeService,
     private readonly tokens: EphemeralTokenService,
+    private readonly storage: StorageService,
   ) {}
 
   verifyTripAccess(tripId: string | number, userId: number) {
@@ -72,13 +73,6 @@ export class FilesService {
 
   broadcast<E extends TrekWsTripEventName>(tripId: string, event: E, payload: TrekWsPayload<E>, socketId: string | undefined): void {
     this.realtime.broadcast(tripId, event, payload, socketId);
-  }
-
-  getAllowedExtensions(): string {
-    try {
-      const row = this.db.get<{ value: string }>("SELECT value FROM app_settings WHERE key = 'allowed_file_types'");
-      return row?.value || DEFAULT_ALLOWED_EXTENSIONS;
-    } catch { return DEFAULT_ALLOWED_EXTENSIONS; }
   }
 
   // ---------------------------------------------------------------------------
@@ -110,14 +104,6 @@ export class FilesService {
     }
 
     return { error: 'Authentication required', status: 401 };
-  }
-
-  resolveFilePath(filename: string): { resolved: string; safe: boolean } {
-    const safeName = path.basename(filename);
-    const filePath = path.join(filesDir, safeName);
-    const resolved = path.resolve(filePath);
-    const safe = resolved.startsWith(path.resolve(filesDir));
-    return { resolved, safe };
   }
 
   // ---------------------------------------------------------------------------
@@ -251,14 +237,12 @@ export class FilesService {
   }
 
   async permanentDeleteFile(file: TripFile): Promise<void> {
-    const { resolved } = this.resolveFilePath(file.filename);
-    // `force: true` swallows ENOENT, replacing the prior existsSync+unlink
-    // double-call that blocked the event loop twice per deletion. Only
-    // drop the DB row when the on-disk unlink either succeeded or the
-    // file was already gone — otherwise a permission / ENOSPC failure
-    // would orphan the bytes on disk with no DB pointer left to clean it.
+    // storage.delete is idempotent on a missing object (the old rm force:true
+    // contract). Only drop the DB row when the delete either succeeded or the
+    // object was already gone — otherwise a permission / ENOSPC failure
+    // would orphan the bytes with no DB pointer left to clean them.
     try {
-      await fs.promises.rm(resolved, { force: true });
+      await this.storage.delete('files', path.basename(file.filename));
     } catch (e) {
       console.error(`[files] unlink failed for ${file.filename}, keeping DB row:`, e);
       throw e;
@@ -273,9 +257,8 @@ export class FilesService {
     // and a retry via the single-file delete path can try again.
     const successfullyUnlinked: number[] = [];
     await Promise.all(trashed.map(async (file) => {
-      const { resolved } = this.resolveFilePath(file.filename);
       try {
-        await fs.promises.rm(resolved, { force: true });
+        await this.storage.delete('files', path.basename(file.filename));
         successfullyUnlinked.push(Number(file.id));
       } catch (e) {
         console.error(`[files] unlink failed for ${file.filename}, keeping DB row:`, e);

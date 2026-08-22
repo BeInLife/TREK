@@ -79,6 +79,14 @@ export const MANAGED_ROUTE_ALLOW_LIST: string[] = [
   'PluginsController.link',
   'PluginsController.reload',
   'PluginsController.upload',
+  'StorageAdminController.backfillCancel',
+  'StorageAdminController.backfillStart',
+  'StorageAdminController.get',
+  'StorageAdminController.migrationCancel',
+  'StorageAdminController.migrationStart',
+  'StorageAdminController.statsRefresh',
+  'StorageAdminController.test',
+  'StorageAdminController.update',
 ];
 
 /**

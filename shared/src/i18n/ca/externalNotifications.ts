@@ -48,6 +48,12 @@ const ca: NotificationLocale = {
       title: 'Versió nova de TREK disponible',
       body: `TREK ${p.version} ja està disponible. Visita el panell d'administració per actualitzar.`,
     }),
+    replica_failure: (p) => ({
+      title: "Error de rèplica d'emmagatzematge",
+      body:
+        `L'escriptura a la rèplica '${p.backend}' ha fallat: ${p.op} de ${p.key} — ${p.error}.` +
+        (p.suppressed !== '0' ? ` S'han suprimit ${p.suppressed} errors més des de l'última notificació.` : ''),
+    }),
     synology_session_cleared: () => ({
       title: 'Sessió de Synology tancada',
       body: 'El teu compte o URL de Synology ha canviat. Has tancat la sessió a Synology Photos.',

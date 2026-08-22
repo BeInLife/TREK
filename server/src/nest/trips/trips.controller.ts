@@ -20,11 +20,10 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { isDemoWriteBlocked, DEMO_WRITE_ERROR } from '../common/demo-write';
 import { RuntimeEnvService } from '../app-config/runtime-env.service';
 import type { Request, Response } from 'express';
-import { diskStorage } from 'multer';
+import type { Options } from 'multer';
 import path from 'path';
-import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
 import type { ActiveTripResponse } from '@trek/shared';
+import { StorageService } from '../storage/storage.service';
 import type { User } from '../../types';
 import { TripsService } from './trips.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -38,23 +37,16 @@ import { UnsplashService } from '../unsplash/unsplash.service';
 import { CalendarService } from '../calendar/calendar.service';
 import { TripReadModelService } from '../trip-read-model/trip-read-model.service';
 
-const MAX_COVER_SIZE = 20 * 1024 * 1024;
-const coversDir = path.join(__dirname, '../../../uploads/covers');
-const COVER_UPLOAD = {
-  storage: diskStorage({
-    destination: (_req, _file, cb) => {
-      if (!fs.existsSync(coversDir)) fs.mkdirSync(coversDir, { recursive: true });
-      cb(null, coversDir);
-    },
-    filename: (_req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname)}`),
-  }),
-  limits: { fileSize: MAX_COVER_SIZE },
-  fileFilter: (_req: Request, file: Express.Multer.File, cb: (err: Error | null, accept: boolean) => void) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
-    if (file.mimetype.startsWith('image/') && !file.mimetype.includes('svg') && allowed.includes(ext)) cb(null, true);
-    else cb(new Error('Only jpg, png, gif, webp images allowed'), false);
-  },
+export const MAX_COVER_SIZE = 20 * 1024 * 1024;
+// Still needed by the Unsplash cover download (a raw-fs writer until the
+// caches/downloads slice); the multer destination moved to the storage spool.
+// Consumed by trips.module.ts's MulterModule factory. Quirk preserved on
+// purpose: a plain Error without statusCode maps to 500, not 400 (parity).
+export const TRIP_COVER_FILE_FILTER: Options['fileFilter'] = (_req, file, cb) => {
+  const ext = path.extname(file.originalname).toLowerCase();
+  const allowed = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+  if (file.mimetype.startsWith('image/') && !file.mimetype.includes('svg') && allowed.includes(ext)) cb(null, true);
+  else cb(new Error('Only jpg, png, gif, webp images allowed'));
 };
 
 const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
@@ -74,7 +66,7 @@ const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.get
 export class TripsController {
   // calendar last: the hand-wired construction sites in the tests stay positional,
   // so a new dependency does not touch the ones that never reach the ICS route.
-  constructor(private readonly trips: TripsService, private readonly audit: AuditService, private readonly env: RuntimeEnvService, private readonly unsplash: UnsplashService, private readonly calendar: CalendarService, private readonly readModel: TripReadModelService) {}
+  constructor(private readonly trips: TripsService, private readonly audit: AuditService, private readonly env: RuntimeEnvService, private readonly unsplash: UnsplashService, private readonly calendar: CalendarService, private readonly readModel: TripReadModelService, private readonly storage: StorageService) {}
 
   @Get()
   list(@CurrentUser() user: User, @Query('archived') archived?: string) {
@@ -161,7 +153,7 @@ export class TripsController {
     // it into uploads/covers so the cover survives offline + CDN link-rot (#1277).
     if (this.unsplash.isUnsplashCoverUrl(body.cover_image)) {
       try {
-        const filename = await this.unsplash.saveUnsplashCover(body.cover_image, coversDir);
+        const filename = await this.unsplash.saveUnsplashCover(body.cover_image);
         body.cover_image = `/uploads/covers/${filename}`;
       } catch (e) {
         console.error('Unsplash cover download failed:', e);
@@ -174,7 +166,7 @@ export class TripsController {
     try {
       const result = await this.trips.update(id, user.id, body, user.role);
       if (body.cover_image !== undefined && body.cover_image !== oldCover) {
-        this.trips.deleteOldCover(oldCover);
+        await this.trips.deleteOldCover(oldCover);
       }
       if (Object.keys(result.changes).length > 0) {
         this.audit.writeAudit({ userId: user.id, action: 'trip.update', ip: getClientIp(req), details: { tripId: Number(id), trip: result.newTitle, ...(result.ownerEmail ? { owner: result.ownerEmail } : {}), ...result.changes } });
@@ -194,8 +186,8 @@ export class TripsController {
   }
 
   @Post(':id/cover')
-  @UseInterceptors(FileInterceptor('cover', COVER_UPLOAD))
-  cover(@CurrentUser() user: User, @Param('id') id: string, @UploadedFile() file: Express.Multer.File | undefined) {
+  @UseInterceptors(FileInterceptor('cover'))
+  async cover(@CurrentUser() user: User, @Param('id') id: string, @UploadedFile() file: Express.Multer.File | undefined) {
     if (isDemoWriteBlocked(this.env, user.email)) {
       throw new HttpException(DEMO_WRITE_ERROR, 403);
     }
@@ -213,7 +205,10 @@ export class TripsController {
     if (!file) {
       throw new HttpException({ error: 'No image uploaded' }, 400);
     }
-    this.trips.deleteOldCover(trip.cover_image);
+    // Commit the spooled upload to its final storage location (atomic
+    // same-volume rename) before anything references the final path.
+    await this.storage.put('covers', file.filename, { tmpPath: file.path });
+    await this.trips.deleteOldCover(trip.cover_image);
     const coverUrl = `/uploads/covers/${file.filename}`;
     this.trips.updateCoverImage(id, coverUrl);
     return { cover_image: coverUrl };

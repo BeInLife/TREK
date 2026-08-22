@@ -52,13 +52,14 @@ import { JourneyDomainService } from '../../../src/nest/journey/journey-domain.s
 import { TrekPhotosRepository } from '../../../src/nest/photos/trek-photos.repository';
 import { RuntimeEnvService } from '../../../src/nest/app-config/runtime-env.service';
 import { notificationsStub } from '../../helpers/notifications';
+import { makeStorageFixture } from '../../helpers/storage-fixture';
 
 const dbs = new DatabaseService(testDb);
 const realtime = new RealtimeService();
 const runtimeEnv = new RuntimeEnvService();
 // One cache instance shared by maps and places, the way the container wires it:
 // the service's stampede guard only works if there is exactly one of them.
-const photoCache = new PlacePhotoCacheService(dbs, runtimeEnv);
+const photoCache = new PlacePhotoCacheService(dbs, makeStorageFixture('photos/google/').storage);
 
 const packing = new PackingService(dbs, new PermissionsService(dbs), realtime, notificationsStub());
 const places = new PlacesService(
@@ -67,9 +68,10 @@ const places = new PlacesService(
   realtime,
   new MapsService(dbs, photoCache),
   new QueryHelpersService(dbs),
-  new UnsplashService(dbs, runtimeEnv),
+  new UnsplashService(dbs, runtimeEnv, makeStorageFixture('').storage),
   photoCache,
   new JourneyDomainService(dbs, realtime, new TrekPhotosRepository(dbs)),
+  makeStorageFixture('').storage,
 );
 
 beforeAll(() => {
@@ -91,32 +93,32 @@ function freshPlace(tripId: number) {
 }
 
 describe('PlacesService.update — optimistic concurrency', () => {
-  it('updates normally when no If-Match token is sent (back-compat)', () => {
+  it('updates normally when no If-Match token is sent (back-compat)', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = freshPlace(trip.id);
 
-    const result = places.update(String(trip.id), String(place.id), { name: 'Edited' });
+    const result = await places.update(String(trip.id), String(place.id), { name: 'Edited' });
     expect(isUpdateConflict(result)).toBe(false);
     expect((result as { name: string }).name).toBe('Edited');
   });
 
-  it('updates when the If-Match token matches the current updated_at', () => {
+  it('updates when the If-Match token matches the current updated_at', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = freshPlace(trip.id);
 
-    const result = places.update(String(trip.id), String(place.id), { name: 'Edited' }, place.updated_at);
+    const result = await places.update(String(trip.id), String(place.id), { name: 'Edited' }, place.updated_at);
     expect(isUpdateConflict(result)).toBe(false);
     expect((result as { name: string }).name).toBe('Edited');
   });
 
-  it('returns a conflict (with the server row) when the token is stale', () => {
+  it('returns a conflict (with the server row) when the token is stale', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     const place = freshPlace(trip.id);
 
-    const result = places.update(String(trip.id), String(place.id), { name: 'Mine' }, '1999-01-01 00:00:00');
+    const result = await places.update(String(trip.id), String(place.id), { name: 'Mine' }, '1999-01-01 00:00:00');
     expect(isUpdateConflict(result)).toBe(true);
     if (isUpdateConflict(result)) {
       expect((result.server as { name: string }).name).toBe('Original');
@@ -126,10 +128,10 @@ describe('PlacesService.update — optimistic concurrency', () => {
     expect(row.name).toBe('Original');
   });
 
-  it('returns null for a place that does not exist', () => {
+  it('returns null for a place that does not exist', async () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
-    expect(places.update(String(trip.id), '999999', { name: 'x' }, 'whatever')).toBeNull();
+    expect(await places.update(String(trip.id), '999999', { name: 'x' }, 'whatever')).toBeNull();
   });
 });
 

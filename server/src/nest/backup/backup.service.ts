@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import type { Response } from 'express';
+import { StorageService } from '../storage/storage.service';
 import * as svc from './backup.impl';
 
 /**
@@ -13,14 +15,17 @@ import * as svc from './backup.impl';
  */
 @Injectable()
 export class BackupService {
-  listBackups() { return svc.listBackups(); }
-  createBackup(prefix?: 'backup' | 'auto-backup') { return svc.createBackup(prefix); }
-  restoreFromZip(zipPath: string) { return svc.restoreFromZip(zipPath); }
-  deleteBackup(filename: string) { return svc.deleteBackup(filename); }
+  constructor(private readonly storage: StorageService) {}
+
+  listBackups() { return svc.listBackups(this.storage); }
+  createBackup(prefix?: 'backup' | 'auto-backup') { return svc.createBackup(this.storage, prefix); }
+  restoreFromZip(zipPath: string) { return svc.restoreFromZip(this.storage, zipPath); }
+  restoreBackup(filename: string) { return svc.restoreBackup(this.storage, filename); }
+  deleteBackup(filename: string) { return svc.deleteBackup(this.storage, filename); }
 
   isValidBackupFilename(filename: string) { return svc.isValidBackupFilename(filename); }
-  backupFilePath(filename: string) { return svc.backupFilePath(filename); }
-  backupFileExists(filename: string) { return svc.backupFileExists(filename); }
+  backupFileExists(filename: string) { return svc.backupFileExists(this.storage, filename); }
+  sendBackupToResponse(filename: string, res: Response) { return svc.sendBackupToResponse(this.storage, filename, res); }
   checkRateLimit(key: string, maxAttempts: number, windowMs: number) { return svc.checkRateLimit(key, maxAttempts, windowMs); }
 
   get rateWindow() { return svc.BACKUP_RATE_WINDOW; }

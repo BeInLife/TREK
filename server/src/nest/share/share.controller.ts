@@ -1,8 +1,11 @@
 import { Body, Controller, Delete, Get, HttpException, Param, Post, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
-import { createReadStream } from 'node:fs';
+import type { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import type { User } from '../../types';
 import { ShareService } from './share.service';
+import { StorageService } from '../storage/storage.service';
+import { isClientAbortError } from '../storage/storage.types';
 import { ShareLinkDto } from './share.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
@@ -78,30 +81,65 @@ export class TripShareController {
 @Public('share-token validated: a shared trip link has to work for somebody without an account')
 @Controller('api/shared')
 export class SharedController {
-  constructor(private readonly share: ShareService) {}
+  constructor(
+    private readonly share: ShareService,
+    private readonly storage: StorageService,
+  ) {}
 
   /**
    * Public, token-scoped place-photo proxy. The shared payload rewrites place
    * image URLs to this route so thumbnails load without a session cookie (the
    * /api/maps bytes endpoint is JwtAuthGuard'd). The service validates the token
    * and that the place belongs to its trip; a miss streams nothing and answers
-   * 404. Declared before the bare ':token' read route. Streaming mirrors
-   * MapsController.placePhotoBytes (cached photos are always JPEG).
+   * an empty 204, mirroring MapsController.placePhotoBytes (#1727's rationale
+   * extended to shared pages: shared payloads keep this URL in place
+   * image_urls, so evicted cache entries would otherwise 404 once per place
+   * per render). Declared before the bare ':token' read route. Cached photos
+   * are always JPEG.
    */
   @Get(':token/place-photo/:placeId/bytes')
-  placePhotoBytes(@Param('token') token: string, @Param('placeId') placeId: string, @Res() res: Response): void {
-    const fp = this.share.getSharedPlacePhotoPath(token, placeId);
-    if (!fp) {
-      res.status(404).json({ error: 'Photo not cached' });
+  async placePhotoBytes(@Param('token') token: string, @Param('placeId') placeId: string, @Res() res: Response): Promise<void> {
+    const key = await this.share.getSharedPlacePhotoKey(token, placeId);
+    if (!key) {
+      this.emptyPhoto(res);
       return;
     }
+    // Bytes are stream-piped like the maps handler; headers go on before the
+    // stream attempt so an early failure overrides them exactly as the old
+    // createReadStream error event did.
     res.set('Cache-Control', 'public, max-age=2592000, immutable');
     res.type('image/jpeg');
-    const stream = createReadStream(fp);
-    stream.on('error', () => {
-      if (!res.headersSent) res.status(404).json({ error: 'Photo not cached' });
-    });
-    stream.pipe(res);
+    let stream: Readable;
+    try {
+      ({ stream } = await this.storage.getStream('photos-google', key));
+    } catch {
+      // Cache-delete race — same terminal state as the stream error path.
+      if (!res.headersSent) this.emptyPhoto(res);
+      return;
+    }
+    try {
+      // pipeline destroys the source on any failure (no leaked read handle),
+      // matching storage.service.ts's sendToResponse contract.
+      await pipeline(stream, res);
+    } catch (err) {
+      if (!res.headersSent) {
+        // Same terminal state as the old pre-flush stream error path.
+        this.emptyPhoto(res);
+        return;
+      }
+      // Bytes are already on the wire — a client abort mid-download is the
+      // client's problem now, not ours; a real source error still surfaces
+      // (to the exception filter, which now no-ops safely on headersSent).
+      if (!isClientAbortError(err)) throw err;
+    }
+  }
+
+  // 204 for "no bytes to serve". Overrides the immutable Cache-Control the hit
+  // path already set — a photo that reappears in the cache must not stay hidden
+  // behind a month-old empty response.
+  private emptyPhoto(res: Response): void {
+    res.set('Cache-Control', 'no-store');
+    res.status(204).end();
   }
 
   @Get(':token')

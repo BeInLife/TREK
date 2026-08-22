@@ -47,6 +47,11 @@ import {
   type BookingImportPreviewResponse,
   type BookingImportConfirmResponse,
   type BookingImportMode,
+  type StorageAdminState,
+  type StorageBackend,
+  type StorageConfigPut,
+  type StorageTestResponse,
+  type StorageUsage,
 } from '@trek/shared'
 import { getSocketId } from './websocket'
 import { probeNow } from '../sync/connectivity'
@@ -637,6 +642,26 @@ export const adminApi = {
   updateNotificationPreferences: (prefs: Record<string, Record<string, boolean>>) => apiClient.put('/admin/notification-preferences', prefs).then(r => r.data),
   getDefaultUserSettings: () => apiClient.get('/admin/default-user-settings').then(r => r.data),
   updateDefaultUserSettings: (settings: Record<string, unknown>) => apiClient.put('/admin/default-user-settings', settings).then(r => r.data),
+  getStorage: (): Promise<StorageAdminState> => apiClient.get('/admin/storage').then(r => r.data),
+  updateStorage: (config: StorageConfigPut): Promise<StorageAdminState> =>
+    apiClient.put('/admin/storage', config).then(r => r.data),
+  // A probe is bounded by the target driver's own timeout (default 30s, ×2 with
+  // one retry) and a mirror probes its targets sequentially — the instance-wide
+  // 8s axios timeout would abort a legitimate slow probe, so this call carries
+  // its own generous ceiling.
+  testStorageBackend: (backend: StorageBackend): Promise<StorageTestResponse> =>
+    apiClient.post('/admin/storage/test', { backend }, { timeout: 120_000 }).then(r => r.data),
+  startStorageBackfill: (backend: string): Promise<{ started: true }> =>
+    apiClient.post(`/admin/storage/backends/${encodeURIComponent(backend)}/backfill`).then(r => r.data),
+  cancelStorageBackfill: (backend: string): Promise<{ cancelled: true }> =>
+    apiClient.delete(`/admin/storage/backends/${encodeURIComponent(backend)}/backfill`).then(r => r.data),
+  startStorageMigration: (category: string, to: string): Promise<{ started: true }> =>
+    apiClient.post('/admin/storage/migrations', { category, to }).then(r => r.data),
+  cancelStorageMigration: (category: string): Promise<{ cancelled: true }> =>
+    apiClient.delete(`/admin/storage/migrations/${encodeURIComponent(category)}`).then(r => r.data),
+  // A full scan of a large install can exceed the 8s instance timeout.
+  refreshStorageStats: (): Promise<StorageUsage> =>
+    apiClient.post('/admin/storage/stats/refresh', undefined, { timeout: 120_000 }).then(r => r.data),
 }
 
 export const addonsApi = {

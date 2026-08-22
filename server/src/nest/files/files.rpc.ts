@@ -1,6 +1,6 @@
-import fsMod from 'node:fs';
 import pathMod from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { PluginController, PluginMethod } from '../plugins/host/rpc-kit/decorators';
 import { PluginGuards } from '../plugins/host/plugin-guards.service';
 import { BadParams, ForbiddenResource } from '../plugins/host/rpc-errors';
@@ -10,8 +10,10 @@ import { RealtimeService } from '../realtime/realtime.service';
 import { DatabaseService } from '../database/database.service';
 import { readEnv } from '../../app-config';
 import { isDemoEmail } from '../common/demo';
-import { BLOCKED_EXTENSIONS, filesDir } from './files.constants';
+import { BLOCKED_EXTENSIONS } from './files.constants';
 import { FilesService } from './files.service';
+import { StorageService } from '../storage/storage.service';
+import { StorageNotFoundError, StorageInvalidKeyError, type ObjectStat } from '../storage/storage.types';
 
 /** Files use three separate rights, one per operation, unlike every other domain. */
 const UPLOAD_ACTION = 'file_upload';
@@ -46,9 +48,10 @@ type CreateInput = {
  * sensitive than its filename. And the three write operations use three distinct
  * rights (file_upload / file_edit / file_delete) rather than one domain action.
  *
- * The upload path is the only one in the plugin surface that touches disk, so the
- * extension is checked against the central blocklist and the size is capped before
- * anything is written, and a demo user is refused outright.
+ * This surface holds no direct fs access: both byte-paths — read and write — go
+ * through the storage layer, so `ctx.files` behaves identically whether the backend
+ * is local disk, S3, or a mirrored pair. The extension blocklist and size cap still
+ * run before the put, and a demo user is refused outright.
  */
 @PluginController()
 export class FilesRpc {
@@ -57,6 +60,7 @@ export class FilesRpc {
     private readonly realtime: RealtimeService,
     private readonly db: DatabaseService,
     private readonly guards: PluginGuards,
+    private readonly storage: StorageService,
   ) {}
 
   @PluginMethod('files.list', { permission: 'db:read:files' })
@@ -74,7 +78,8 @@ export class FilesRpc {
 
   /**
    * Size-capped BEFORE the read, so a 500MB video cannot be pulled through the IPC
-   * pipe as ~667MB of base64. The read itself runs off the event loop: 10MB of
+   * pipe as ~667MB of base64. The bytes come from the storage layer, so this read
+   * works on remote backends too. The read itself runs off the event loop: 10MB of
    * readFile plus base64 on the host thread would stall every other plugin RPC and
    * every HTTP request for its duration.
    */
@@ -84,10 +89,35 @@ export class FilesRpc {
     if ((file.file_size ?? 0) > CONTENT_MAX) {
       throw new BadParams(`file too large to read (>${CONTENT_MAX} bytes); use the download UI`);
     }
-    const { resolved, safe } = this.files.resolveFilePath(file.filename);
-    if (!safe) throw new ForbiddenResource('file path is not accessible');
-    const buf = await fsMod.promises.readFile(resolved);
-    if (buf.length > CONTENT_MAX) throw new BadParams('file too large to read');
+    let stream: Readable;
+    let stat: ObjectStat;
+    try {
+      ({ stream, stat } = await this.storage.getStream('files', pathMod.basename(file.filename)));
+    } catch (err) {
+      if (err instanceof StorageNotFoundError || err instanceof StorageInvalidKeyError) {
+        throw new ForbiddenResource('file path is not accessible');
+      }
+      throw err;
+    }
+    // Re-checked against the OBJECT, not the DB row: file_size can drift.
+    if (stat.size > CONTENT_MAX) {
+      stream.destroy();
+      throw new BadParams(`file too large to read (>${CONTENT_MAX} bytes); use the download UI`);
+    }
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const chunk of stream) {
+      const part = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
+      total += part.length;
+      // A driver whose stat under-reports must not push an oversized payload
+      // through the IPC pipe: abort as soon as the running total crosses the cap.
+      if (total > CONTENT_MAX) {
+        stream.destroy();
+        throw new BadParams('file too large to read');
+      }
+      chunks.push(part);
+    }
+    const buf = Buffer.concat(chunks);
     return {
       name: file.original_name,
       mimetype: file.mime_type ?? 'application/octet-stream',
@@ -97,7 +127,7 @@ export class FilesRpc {
   }
 
   @PluginMethod('files.create', { permission: 'db:write:files' })
-  create(params: Record<string, unknown>, ctx: PluginRpcContext): unknown {
+  async create(params: Record<string, unknown>, ctx: PluginRpcContext): Promise<unknown> {
     const tripId = num(params.tripId, 'tripId');
     const actor = this.guards.requireActor(ctx, 'file');
     const input = asPayload(params.input);
@@ -116,7 +146,7 @@ export class FilesRpc {
     return this.writeFile(tripId, input as unknown as CreateInput, actor);
   }
 
-  private writeFile(tripId: number, input: CreateInput, actingUserId: number): unknown {
+  private async writeFile(tripId: number, input: CreateInput, actingUserId: number): Promise<unknown> {
     // Mirrors the REST upload guard: a demo user must not write bytes to the shared
     // demo instance, not even through a plugin's db:write:files. The email is only
     // resolved when demo mode is actually on, so self-hosted installs pay nothing.
@@ -138,8 +168,12 @@ export class FilesRpc {
     });
     if (foreign) throw new ForbiddenResource(`${foreign} does not belong to trip ${tripId}`);
     const filename = `${randomUUID()}${ext}`;
-    fsMod.mkdirSync(filesDir, { recursive: true });
-    fsMod.writeFileSync(pathMod.join(filesDir, filename), buf);
+    // Same order as the REST upload (files.controller.ts): the object is
+    // committed to storage before anything references it — a put failure can
+    // orphan a blob at worst, never create a row pointing at missing bytes.
+    await this.storage.put('files', filename, Readable.from(buf), {
+      contentType: input.mimetype || 'application/octet-stream',
+    });
     const file = this.files.createFile(
       tripId,
       { filename, originalname: original, size: buf.length, mimetype: input.mimetype || 'application/octet-stream' },

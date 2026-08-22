@@ -52,6 +52,12 @@ const ko: NotificationLocale = {
       title: '새 TREK 버전 사용 가능',
       body: `TREK ${p.version}을 사용할 수 있습니다. 관리자 패널에서 업데이트하세요.`,
     }),
+    replica_failure: (p) => ({
+      title: '스토리지 복제본 오류',
+      body:
+        `복제본 '${p.backend}'에 쓰기가 실패했습니다: ${p.op} / ${p.key} — ${p.error}.` +
+        (p.suppressed !== '0' ? `마지막 알림 이후 ${p.suppressed}개의 추가 실패가 억제되었습니다.` : ''),
+    }),
     synology_session_cleared: () => ({
       title: 'Synology 세션이 초기화되었습니다',
       body: 'Synology 계정 또는 URL이 변경되었습니다. Synology Photos에서 로그아웃되었습니다.',

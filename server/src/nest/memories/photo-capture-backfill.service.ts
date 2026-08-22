@@ -1,8 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import path from 'node:path';
 import exifr from 'exifr';
-import { UPLOADS_ROOT } from './uploads-root';
 import { PhotoResolverService } from './photo-resolver.service';
+import { StorageService } from '../storage/storage.service';
 import { TrekPhotosRepository } from '../photos/trek-photos.repository';
 
 /**
@@ -23,6 +22,7 @@ export class PhotoCaptureBackfillService {
   constructor(
     private readonly resolver: PhotoResolverService,
     private readonly photos: TrekPhotosRepository,
+    private readonly storage: StorageService,
   ) {}
 
   /** Fire-and-forget for a batch that was just added. */
@@ -74,18 +74,24 @@ export class PhotoCaptureBackfillService {
     filePath?: string | null,
   ): Promise<{ takenAt: string | null; lat: number | null; lng: number | null } | null> {
     if (!filePath) return null;
-    // Never let a stored path climb out of the uploads tree.
-    const abs = path.resolve(UPLOADS_ROOT, filePath);
-    if (abs !== UPLOADS_ROOT && !abs.startsWith(UPLOADS_ROOT + path.sep)) return null;
+    // photos.file_path is uploads-relative 'journey/<name>' by every writer;
+    // anything else reads as a miss (same rule as photo-resolver). Central key
+    // validation (storage-keys.ts) rejects a name that still carries a path,
+    // so a stored path can never climb out of the journey category.
+    if (!filePath.startsWith('journey/')) return null;
+    const name = filePath.slice('journey/'.length);
 
     type Exif = { DateTimeOriginal?: Date; CreateDate?: Date; latitude?: number; longitude?: number };
     let parsed: Exif | null;
     try {
-      parsed = (await exifr.parse(abs, {
-        pick: ['DateTimeOriginal', 'CreateDate', 'latitude', 'longitude'],
-      })) as Exif | null;
+      parsed = await this.storage.withLocalFile('journey', name, async abs =>
+        (await exifr.parse(abs, {
+          pick: ['DateTimeOriginal', 'CreateDate', 'latitude', 'longitude'],
+        })) as Exif | null,
+      );
     } catch {
-      // Not an image, a truncated upload, a video — none of it is an error here.
+      // A vanished object, an invalid key, not an image, a truncated upload,
+      // a video — none of it is an error here.
       return null;
     }
     if (!parsed) return null;

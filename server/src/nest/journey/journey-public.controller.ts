@@ -1,8 +1,8 @@
 import { Controller, Get, HttpException, Param, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import path from 'node:path';
-import fs from 'node:fs';
 import { JourneyService } from './journey.service';
+import { StorageService } from '../storage/storage.service';
 import { Public } from '../auth/public.decorator';
 
 /**
@@ -17,7 +17,10 @@ import { Public } from '../auth/public.decorator';
 @Public('share-token validated: the whole point is a link that works without an account')
 @Controller('api/public/journey')
 export class JourneyPublicController {
-  constructor(private readonly journey: JourneyService) {}
+  constructor(
+    private readonly journey: JourneyService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Get(':token')
   get(@Param('token') token: string) {
@@ -54,17 +57,18 @@ export class JourneyPublicController {
     const wantThumb = kind === 'thumbnail' ? 'thumbnail' : 'original';
 
     if (provider === 'local') {
-      // Local journey assets are flat filenames; use basename() and confine the
-      // resolved path to the journey upload directory.
-      const journeyDir = path.resolve(__dirname, '../../../uploads/journey');
-      const resolved = path.resolve(path.join(journeyDir, path.basename(assetId)));
-      if (!resolved.startsWith(journeyDir + path.sep) || !fs.existsSync(resolved)) {
+      // Local journey assets are flat filenames. basename() kept for shape;
+      // containment now lives in central storage key validation
+      // (storage-keys.ts), which subsumes the old journeyDir startsWith guard.
+      const name = path.basename(assetId);
+      if (!(await this.storage.exists('journey', name).catch(() => false))) {
         throw new HttpException({ error: 'Not found' }, 404);
       }
       res.set('Cache-Control', 'public, max-age=86400');
-      // Root-relative, see photo-resolver.service.ts — an absolute path 404s under
-      // the Nest ExpressAdapter. The guard above already confined `resolved`.
-      res.sendFile(path.basename(resolved), { root: path.dirname(resolved) });
+      // The storage layer serves it, whichever driver is configured. dev's fix
+      // for the absolute-path 404 under the Nest ExpressAdapter does not apply
+      // here any more: nothing on this path calls sendFile.
+      await this.storage.sendToResponse('journey', name, res);
       return;
     }
 

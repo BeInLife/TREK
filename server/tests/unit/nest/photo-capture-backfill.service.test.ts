@@ -11,6 +11,13 @@ import exifr from 'exifr';
 import { PhotoCaptureBackfillService } from '../../../src/nest/memories/photo-capture-backfill.service';
 import type { PhotoResolverService } from '../../../src/nest/memories/photo-resolver.service';
 import type { TrekPhotosRepository } from '../../../src/nest/photos/trek-photos.repository';
+import type { StorageService } from '../../../src/nest/storage/storage.service';
+
+// The storage layer's job here is only to hand the EXIF reader a real path;
+// materialization (local fast-path vs remote temp download) has its own tests.
+const storageStub = {
+  withLocalFile: vi.fn(async (_category: string, name: string, fn: (absPath: string) => Promise<unknown>) => fn(`/uploads/journey/${name}`)),
+} as unknown as StorageService;
 
 type Row = { id: number; provider?: string; file_path?: string | null; taken_at?: string | null; lat?: number | null; lng?: number | null };
 
@@ -24,7 +31,7 @@ function build(rows: Row[], info: Record<number, unknown>) {
     recordCaptureMetadata,
   } as unknown as TrekPhotosRepository;
   const resolver = { getPhotoInfo } as unknown as PhotoResolverService;
-  return { svc: new PhotoCaptureBackfillService(resolver, photos), recordCaptureMetadata, getPhotoInfo };
+  return { svc: new PhotoCaptureBackfillService(resolver, photos, storageStub), recordCaptureMetadata, getPhotoInfo };
 }
 
 describe('PhotoCaptureBackfillService', () => {
@@ -109,7 +116,7 @@ describe('PhotoCaptureBackfillService — local files', () => {
       recordCaptureMetadata,
     } as unknown as TrekPhotosRepository;
     const resolver = { getPhotoInfo } as unknown as PhotoResolverService;
-    return { svc: new PhotoCaptureBackfillService(resolver, photos), recordCaptureMetadata, getPhotoInfo };
+    return { svc: new PhotoCaptureBackfillService(resolver, photos, storageStub), recordCaptureMetadata, getPhotoInfo };
   }
 
   it('CAPTURE-007: reads a local file rather than asking a provider', async () => {
@@ -199,7 +206,7 @@ describe('PhotoCaptureBackfillService — local files', () => {
       resolve: () => { throw new Error('db gone'); },
       recordCaptureMetadata,
     } as unknown as TrekPhotosRepository;
-    const svc = new PhotoCaptureBackfillService({} as PhotoResolverService, photos);
+    const svc = new PhotoCaptureBackfillService({} as PhotoResolverService, photos, storageStub);
 
     await expect(svc.run([7], 1)).resolves.toBeUndefined();
     expect(recordCaptureMetadata).not.toHaveBeenCalled();

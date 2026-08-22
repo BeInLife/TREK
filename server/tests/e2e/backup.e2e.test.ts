@@ -23,6 +23,9 @@ const { db } = vi.hoisted(() => {
   tmp.exec(`CREATE TABLE audit_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     user_id INTEGER, action TEXT NOT NULL, resource TEXT, details TEXT, ip TEXT);`);
+  // StorageRegistryService (behind StorageModule, now in this module chain) reads
+  // this at onModuleInit.
+  tmp.exec('CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);');
   return { db: tmp };
 });
 
@@ -33,10 +36,10 @@ vi.mock('../../src/nest/audit/audit-log.logger', () => ({ LOG_LEVEL: 'error', lo
 
 const { backupSvc } = vi.hoisted(() => ({
   backupSvc: {
-    listBackups: vi.fn(), createBackup: vi.fn(), restoreFromZip: vi.fn(), parseAutoBackupBody: vi.fn(),
-    deleteBackup: vi.fn(), isValidBackupFilename: vi.fn(), backupFilePath: vi.fn(),
-    backupFileExists: vi.fn(), checkRateLimit: vi.fn(), getUploadTmpDir: () => '/tmp', BACKUP_RATE_WINDOW: 3600000,
-    MAX_BACKUP_UPLOAD_SIZE: 1024,
+    listBackups: vi.fn(), createBackup: vi.fn(), restoreFromZip: vi.fn(), restoreBackup: vi.fn(),
+    parseAutoBackupBody: vi.fn(), deleteBackup: vi.fn(), isValidBackupFilename: vi.fn(),
+    backupFileExists: vi.fn(), sendBackupToResponse: vi.fn(), checkRateLimit: vi.fn(),
+    BACKUP_RATE_WINDOW: 3600000, MAX_BACKUP_UPLOAD_SIZE: 1024,
   },
 }));
 vi.mock('../../src/nest/backup/backup.impl', () => backupSvc);

@@ -9,6 +9,7 @@ import { PhotoCaptureBackfillService } from './photo-capture-backfill.service';
 import { ThumbnailService } from './thumbnail.service';
 import { TrekPhotoCacheService } from './trek-photo-cache.service';
 import { TrekPhotoCacheJob } from './trek-photo-cache.job';
+import { JourneyThumbsJob } from './journey-thumbs.job';
 import { SchedulingModule } from '../scheduling/scheduling.module';
 import { UnifiedMemoriesController } from './unified.controller';
 import { ImmichMemoriesController } from './immich.controller';
@@ -22,6 +23,7 @@ import { PhotoProviderRegistry } from './photo-provider.registry';
 import { ImmichPhotoProvider } from './providers/immich.provider';
 import { SynologyPhotoProvider } from './providers/synology.provider';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { StorageModule } from '../storage/storage.module';
 
 /**
  * Memories (photo-providers) domain — mounted at /api/integrations/memories.
@@ -44,7 +46,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
  * adapters themselves so the set is readable in one place.
  */
 @Module({
-  imports: [NotificationsModule, AddonsModule, AuditModule, TrekPhotosModule, RealtimeModule, SchedulingModule],
+  imports: [NotificationsModule, AddonsModule, AuditModule, TrekPhotosModule, RealtimeModule, SchedulingModule, StorageModule],
   controllers: [UnifiedMemoriesController, ImmichMemoriesController, SynologyMemoriesController],
   providers: [
     MemoriesService,
@@ -57,6 +59,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     ThumbnailService,
     TrekPhotoCacheService,
     TrekPhotoCacheJob,
+    JourneyThumbsJob,
     ImmichPhotoProvider,
     SynologyPhotoProvider,
     PhotoProviderRegistry,

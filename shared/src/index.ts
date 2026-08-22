@@ -44,6 +44,7 @@ export * from './book/book.schema';
 export * from './book/journey-stats.schema';
 export * from './book/book-store.schema';
 export * from './share/share.schema';
+export * from './storage/storage.schema';
 export * from './settings/settings.schema';
 export * from './appearance/appearance.schema';
 export * from './backup/backup.schema';

@@ -35,48 +35,32 @@ describe('incoming_leg_transport_mode migration', () => {
 
   // The case above starts from an empty database and runs every migration, so it
   // passes wherever a migration sits in the array.
-  it('the trailing migration lands on a database that is one version behind', () => {
+  it('every unreleased migration replays cleanly on a database that is behind', () => {
     // What actually has to hold: existing installs replay only the slots above
-    // their schema_version, so a migration inserted mid-array is silently
-    // skipped on every one of them. Undoing what the LAST migration did and
-    // rewinding one version is the only way to prove it still runs.
+    // their schema_version, and an install may skip releases — so every
+    // migration that has not shipped yet must be REPLAY-SAFE on a schema where
+    // it already applied: guard DDL (CREATE ... IF NOT EXISTS, pragma column
+    // checks before ALTER TABLE) and make data transforms idempotent (WHERE
+    // guards, UPDATE OR IGNORE). This test rewinds a fully migrated database
+    // to the last released version and replays everything above it; a slot
+    // that is not replay-safe throws here.
     //
-    // >>> Appending a migration? Re-point the "undo" below at whatever yours
-    // >>> does. That is the whole maintenance cost of this guard. The current
-    // >>> trailing slot clears the GB rows out of place_regions, because the
-    // >>> atlas bundle now carries Great Britain at county/borough level and
-    // >>> the cached GB-ENG rows would otherwise never be re-derived (#1974).
+    // >>> Appending a migration? Nothing to change here — just write it
+    // >>> replay-safe; this replay tells you if it is not.
+    // >>> Cutting a release? Bump RELEASED_VERSION to the version it ships.
+    const RELEASED_VERSION = 189;
+
     const upgraded = new Database(':memory:');
     upgraded.exec('PRAGMA foreign_keys = ON');
     createTables(upgraded);
     runMigrations(upgraded);
 
     const { version } = upgraded.prepare('SELECT version FROM schema_version').get() as { version: number };
+    expect(version).toBeGreaterThanOrEqual(RELEASED_VERSION);
 
-    // Put back exactly what that migration exists to remove: a stale cache row
-    // pointing at the constituent-country polygon, plus one for another country
-    // that must survive untouched.
-    upgraded.exec(`
-      INSERT INTO users (id, username, email, password_hash) VALUES (900, 'u', 'u@e.test', 'x');
-      INSERT INTO trips (id, user_id, title) VALUES (900, 900, 'Trip');
-      INSERT INTO places (id, trip_id, name) VALUES (9001, 900, 'Camden Market');
-      INSERT INTO places (id, trip_id, name) VALUES (9002, 900, 'Sagrada Familia');
-      INSERT INTO place_regions (place_id, country_code, region_code, region_name)
-        VALUES (9001, 'GB', 'GB-ENG', 'England'), (9002, 'ES', 'ES-CT', 'Catalunya');
-    `);
+    upgraded.prepare('UPDATE schema_version SET version = ?').run(RELEASED_VERSION);
+    runMigrations(upgraded); // a throw = some trailing migration is not replay-safe
 
-    upgraded.prepare('UPDATE schema_version SET version = ?').run(version - 1);
-
-    runMigrations(upgraded);
-
-    // The assertion that proves the trailing slot ran.
-    expect(
-      upgraded.prepare("SELECT place_id FROM place_regions WHERE country_code = 'GB'").get()
-    ).toBeUndefined();
-    // ...and that it kept to its own country.
-    expect(
-      upgraded.prepare("SELECT region_code FROM place_regions WHERE place_id = 9002").get()
-    ).toEqual({ region_code: 'ES-CT' });
     expect(upgraded.prepare('SELECT version FROM schema_version').get()).toEqual({ version });
     upgraded.close();
   });

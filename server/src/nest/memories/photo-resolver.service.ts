@@ -1,16 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
-import path from 'path';
-import fs from 'fs';
 import type { TrekPhoto } from '../../types';
 import { decrypt_api_key } from '../common/crypto/apiKeyCrypto';
 import { TrekPhotosRepository } from '../photos/trek-photos.repository';
-import { UPLOADS_ROOT } from './uploads-root';
 import { ThumbnailService } from './thumbnail.service';
 import { TrekPhotoCacheService } from './trek-photo-cache.service';
 import { fail, success, type AssetInfo, type ServiceResult } from './memories.helpers';
 import { PhotoProviderRegistry } from './photo-provider.registry';
 import type { PhotoAssetRef } from './photo-provider';
+import { StorageService } from '../storage/storage.service';
 
 /**
  * Resolves a stored trek_photo to bytes or metadata by asking whichever provider
@@ -29,7 +27,15 @@ export class PhotoResolverService {
     private readonly thumbnails: ThumbnailService,
     private readonly cache: TrekPhotoCacheService,
     private readonly providers: PhotoProviderRegistry,
+    private readonly storage: StorageService,
   ) {}
+
+  /** photos.file_path / thumbnail_path are uploads-relative 'journey/…' by
+   * every writer; anything else reads as a local miss, matching the old
+   * existsSync(join(uploadsRoot, file_path)) === false path. */
+  private storageName(relPath: string): string | null {
+    return relPath.startsWith('journey/') ? relPath.slice('journey/'.length) : null;
+  }
 
   // ── Streaming ────────────────────────────────────────────────────────────
 
@@ -41,12 +47,12 @@ export class PhotoResolverService {
   ): Promise<void> {
     const key = this.cache.cacheKey(photo.provider!, photo.asset_id!, 'thumbnail', photo.owner_id!);
 
-    if (this.cache.serveFresh(res, key)) return;
+    if (await this.cache.serveFresh(res, key)) return;
 
     const existing = this.cache.getInFlight(key);
     if (existing) {
       const bytes = await existing;
-      if (bytes && this.cache.serveFresh(res, key)) return;
+      if (bytes && (await this.cache.serveFresh(res, key))) return;
       await fallback();
       return;
     }
@@ -59,7 +65,7 @@ export class PhotoResolverService {
     this.cache.setInFlight(key, promise);
 
     const bytes = await promise;
-    if (bytes && this.cache.serveFresh(res, key)) return;
+    if (bytes && (await this.cache.serveFresh(res, key))) return;
     await fallback();
   }
 
@@ -77,31 +83,24 @@ export class PhotoResolverService {
     }
 
     if (photo.file_path) {
-      const uploadsRoot = UPLOADS_ROOT;
-
       if (kind === 'thumbnail') {
         const isVideo = photo.media_type === 'video';
         let thumbRel = photo.thumbnail_path ?? null;
         // Only raster images get a lazily-generated Jimp thumbnail; Jimp can't decode
         // video, so a video relies on the poster captured at upload (#823).
         if (!thumbRel && !isVideo) {
-          const result = await this.thumbnails.ensureLocalThumbnail(uploadsRoot, photo.file_path);
+          const result = await this.thumbnails.ensureLocalThumbnail(photo.file_path);
           if (result) {
             thumbRel = result.thumbnailRelPath;
             this.photos.recordLocalThumbnail(photo.id, thumbRel, result.width, result.height);
           }
         }
         if (thumbRel) {
-          const thumbAbs = path.join(uploadsRoot, thumbRel);
-          if (fs.existsSync(thumbAbs)) {
+          const thumbName = this.storageName(thumbRel);
+          if (thumbName && (await this.storage.exists('journey', thumbName).catch(() => false))) {
             res.set('Cache-Control', 'public, max-age=86400, immutable');
             res.set('X-Content-Type-Options', 'nosniff');
-            // Explicit { root } + basename, not the absolute path: under the Nest
-            // ExpressAdapter, res.sendFile(absolutePath) resolves against the
-            // rewritten req.url and 404s spuriously even though the file is right
-            // there (same trap as files-download.controller.ts). The existsSync
-            // above already pins this inside the uploads tree.
-            res.sendFile(path.basename(thumbAbs), { root: path.dirname(thumbAbs) });
+            await this.storage.sendToResponse('journey', thumbName, res);
             return;
           }
         }
@@ -114,11 +113,11 @@ export class PhotoResolverService {
         // Images fall through to original if the thumbnail is unavailable.
       }
 
-      const localPath = path.join(uploadsRoot, photo.file_path);
-      if (fs.existsSync(localPath)) {
+      const name = this.storageName(photo.file_path);
+      if (name && (await this.storage.exists('journey', name).catch(() => false))) {
         res.set('Cache-Control', 'public, max-age=86400');
         res.set('X-Content-Type-Options', 'nosniff');
-        res.sendFile(path.basename(localPath), { root: path.dirname(localPath) });
+        await this.storage.sendToResponse('journey', name, res);
         return;
       }
     }

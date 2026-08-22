@@ -27,7 +27,8 @@ import { isUpdateConflict } from '../common/conflictResult';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { RequirePermission, TripAccessGuard } from '../permissions/trip-access.guard';
-import { PLACE_IMAGE_UPLOAD } from '../common/place-image-upload';
+import { PLACE_IMAGE_FILE_FILTER } from '../common/place-image-upload';
+import { StorageService } from '../storage/storage.service';
 import { placeImageUrl } from './place-image';
 import {
   PlaceBulkDeleteDto,
@@ -112,6 +113,7 @@ export class PlacesController {
   constructor(
     private readonly places: PlacesService,
     private readonly env: RuntimeEnvService,
+    private readonly storage: StorageService,
   ) {}
 
   private requireTrip(tripId: string, user: User) {
@@ -290,7 +292,7 @@ export class PlacesController {
 
   @Post('bulk-delete')
   @HttpCode(200) // Express answers bulk-delete with res.json (200), unlike the 201 imports.
-  bulkDelete(
+  async bulkDelete(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Body() body: PlaceBulkDeleteDto,
@@ -311,7 +313,7 @@ export class PlacesController {
     for (const id of scoped) this.places.onDeleted(id);
     // Read the linked expenses before the delete — afterwards the link is gone (#1298).
     const expenseIds = this.places.linkedExpenseIds(tripId, scoped);
-    const deleted = this.places.removeMany(tripId, ids);
+    const deleted = await this.places.removeMany(tripId, ids);
     for (const id of deleted) {
       this.places.broadcast(tripId, 'place:deleted', { placeId: id }, socketId);
     }
@@ -323,7 +325,7 @@ export class PlacesController {
 
   @Post('bulk-update')
   @HttpCode(200)
-  bulkUpdate(
+  async bulkUpdate(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Body() body: PlaceBulkUpdateDto,
@@ -340,7 +342,7 @@ export class PlacesController {
     if (!('category_id' in body)) {
       throw new HttpException({ error: 'Provide at least one field to update' }, 400);
     }
-    const updated = this.places.updateMany(tripId, ids, { category_id: body.category_id as number | null });
+    const updated = await this.places.updateMany(tripId, ids, { category_id: body.category_id as number | null });
     for (const place of updated) {
       this.places.broadcast(tripId, 'place:updated', { place }, socketId);
       this.places.onUpdated(place.id);
@@ -360,8 +362,8 @@ export class PlacesController {
 
   @Post(':id/image')
   @HttpCode(200)
-  @UseInterceptors(FileInterceptor('image', PLACE_IMAGE_UPLOAD))
-  uploadImage(
+  @UseInterceptors(FileInterceptor('image', { fileFilter: PLACE_IMAGE_FILE_FILTER }))
+  async uploadImage(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Param('id') id: string,
@@ -378,9 +380,12 @@ export class PlacesController {
     if (!file) {
       throw new HttpException({ error: 'No image uploaded' }, 400);
     }
+    // Commit the spooled upload to its final storage location (atomic
+    // same-volume rename) before the DB row references the final path.
+    await this.storage.put('places', file.filename, { tmpPath: file.path });
     // Reuse the existing image_url slot (the top-precedence thumbnail source); the
     // update path reclaims any previously uploaded file it replaces.
-    const result = this.places.update(tripId, id, { image_url: placeImageUrl(file.filename) } as never);
+    const result = await this.places.update(tripId, id, { image_url: placeImageUrl(file.filename) } as never);
     if (!result || isUpdateConflict(result)) {
       throw new HttpException({ error: 'Place not found' }, 404);
     }
@@ -437,7 +442,7 @@ export class PlacesController {
   }
 
   @Put(':id')
-  update(
+  async update(
     @CurrentUser() user: User,
     @Param('tripId') tripId: string,
     @Param('id') id: string,
@@ -450,7 +455,7 @@ export class PlacesController {
     validateRouteColor(body);
     validateUrlFields(body);
     this.requireEdit(trip, user);
-    const result = this.places.update(tripId, id, body as never, ifMatch);
+    const result = await this.places.update(tripId, id, body as never, ifMatch);
     if (!result) {
       throw new HttpException({ error: 'Place not found' }, 404);
     }
@@ -468,7 +473,7 @@ export class PlacesController {
   @Delete(':id')
   @UseGuards(TripAccessGuard)
   @RequirePermission('place_edit')
-  remove(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Headers('x-socket-id') socketId?: string) {
+  async remove(@CurrentUser() user: User, @Param('tripId') tripId: string, @Param('id') id: string, @Headers('x-socket-id') socketId?: string) {
     // Scope the id to the trip before the hook (see bulkDelete), then sync the
     // journey ahead of the actual delete.
     if (!this.places.get(tripId, id)) {
@@ -476,7 +481,7 @@ export class PlacesController {
     }
     this.places.onDeleted(Number(id));
     const expenseIds = this.places.linkedExpenseIds(tripId, [id]);
-    if (!this.places.remove(tripId, id)) {
+    if (!(await this.places.remove(tripId, id))) {
       throw new HttpException({ error: 'Place not found' }, 404);
     }
     this.places.broadcast(tripId, 'place:deleted', { placeId: Number(id) }, socketId);

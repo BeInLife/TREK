@@ -52,6 +52,12 @@ const it: NotificationLocale = {
       title: 'Nuova versione TREK disponibile',
       body: `TREK ${p.version} è ora disponibile. Visita il pannello di amministrazione per aggiornare.`,
     }),
+    replica_failure: (p) => ({
+      title: "Errore di replica dell'archiviazione",
+      body:
+        `Scrittura sulla replica non riuscita su '${p.backend}': ${p.op} di ${p.key} — ${p.error}.` +
+        (p.suppressed !== '0' ? ` Altri ${p.suppressed} errori sono stati soppressi dall'ultima notifica.` : ''),
+    }),
     synology_session_cleared: () => ({
       title: 'Sessione Synology rimossa',
       body: 'Il tuo account o URL Synology è cambiato. Sei stato disconnesso da Synology Photos.',

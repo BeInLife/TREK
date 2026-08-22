@@ -8,7 +8,6 @@
  */
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 import path from 'path';
-import fs from 'fs';
 
 // ── DB setup ──────────────────────────────────────────────────────────────────
 
@@ -76,7 +75,9 @@ import type { TripFile, User } from '../../../src/types';
 import { RealtimeService } from '../../../src/nest/realtime/realtime.service';
 import { EphemeralTokenService } from '../../../src/nest/auth/ephemeral-token.service';
 
-const svc = new FilesService(new DatabaseService(testDb), permissionsStub, new RealtimeService(), new EphemeralTokenService());
+const storageDelete = vi.fn();
+const storageStub = { delete: storageDelete } as unknown as import('../../../src/nest/storage/storage.service').StorageService;
+const svc = new FilesService(new DatabaseService(testDb), permissionsStub, new RealtimeService(), new EphemeralTokenService(), storageStub);
 
 beforeAll(() => {
   createTables(testDb);
@@ -153,39 +154,30 @@ describe('files.constants', () => {
     const serverRoot = path.resolve(__dirname, '../../..');
     expect(path.resolve(filesDir)).toBe(path.join(serverRoot, 'uploads', 'files'));
   });
-
-  it('FILE-SVC-005: resolveFilePath neutralizes traversal via basename and stays inside filesDir', () => {
-    const plain = svc.resolveFilePath('photo.jpg');
-    expect(plain.resolved).toBe(path.resolve(path.join(filesDir, 'photo.jpg')));
-    expect(plain.safe).toBe(true);
-
-    const sneaky = svc.resolveFilePath('../../../etc/passwd');
-    expect(sneaky.resolved).toBe(path.resolve(path.join(filesDir, 'passwd')));
-    expect(sneaky.safe).toBe(true);
-    expect(sneaky.resolved.startsWith(path.resolve(filesDir))).toBe(true);
-  });
 });
 
-// ── getAllowedExtensions ──────────────────────────────────────────────────────
+// ── allowed extensions (canonical owner: AllowedFileTypesService) ─────────────
+// FilesService.getAllowedExtensions was deleted in the storage slice-2
+// consolidation (it had no callers); the same four behaviors are pinned
+// against the single remaining query owner.
 
-describe('getAllowedExtensions', () => {
+describe('AllowedFileTypesService.get', () => {
   it('FILE-SVC-006: returns the app_settings value when set', () => {
     setAppSetting(testDb, 'allowed_file_types', 'pdf,txt');
-    expect(svc.getAllowedExtensions()).toBe('pdf,txt');
+    expect(new AllowedFileTypesService(new DatabaseService(testDb)).get()).toBe('pdf,txt');
   });
 
   it('FILE-SVC-007: returns the default when the row is absent', () => {
-    expect(svc.getAllowedExtensions()).toBe(DEFAULT_ALLOWED_EXTENSIONS);
+    expect(new AllowedFileTypesService(new DatabaseService(testDb)).get()).toBe(DEFAULT_ALLOWED_EXTENSIONS);
   });
 
   it('FILE-SVC-008: returns the default for an empty value (|| coercion, not ??)', () => {
     setAppSetting(testDb, 'allowed_file_types', '');
-    expect(svc.getAllowedExtensions()).toBe(DEFAULT_ALLOWED_EXTENSIONS);
+    expect(new AllowedFileTypesService(new DatabaseService(testDb)).get()).toBe(DEFAULT_ALLOWED_EXTENSIONS);
   });
 
   it('FILE-SVC-009: returns the default when the query throws (no app_settings table)', () => {
-    const bareSvc = new FilesService(new DatabaseService(bareDb), permissionsStub, new RealtimeService(), new EphemeralTokenService());
-    expect(bareSvc.getAllowedExtensions()).toBe(DEFAULT_ALLOWED_EXTENSIONS);
+    expect(new AllowedFileTypesService(new DatabaseService(bareDb)).get()).toBe(DEFAULT_ALLOWED_EXTENSIONS);
   });
 });
 
@@ -345,20 +337,20 @@ describe('toggleStarred / softDeleteFile / restoreFile', () => {
 // ── permanentDeleteFile / emptyTrash (unlink-first semantics) ─────────────────
 
 describe('permanentDeleteFile', () => {
-  it('FILE-SVC-022: removes the resolved path with force:true, then the DB row', async () => {
+  it('FILE-SVC-022: deletes the storage object (idempotent on missing), then the DB row', async () => {
     const { user, trip } = seedTrip();
     const file = makeFile(trip.id, user.id, { filename: 'on-disk.pdf' });
-    const rm = vi.spyOn(fs.promises, 'rm').mockResolvedValue(undefined);
+    storageDelete.mockResolvedValue(undefined);
     await svc.permanentDeleteFile(svc.getFileById(file.id, trip.id) as TripFile);
-    expect(rm).toHaveBeenCalledWith(svc.resolveFilePath('on-disk.pdf').resolved, { force: true });
+    expect(storageDelete).toHaveBeenCalledWith('files', 'on-disk.pdf');
     expect(svc.getFileById(file.id, trip.id)).toBeUndefined();
   });
 
-  it('FILE-SVC-023: an unlink failure logs [files], rethrows and keeps the DB row', async () => {
+  it('FILE-SVC-023: a delete failure logs [files], rethrows and keeps the DB row', async () => {
     const { user, trip } = seedTrip();
     const file = makeFile(trip.id, user.id, { filename: 'stuck.pdf' });
     const boom = new Error('EACCES');
-    vi.spyOn(fs.promises, 'rm').mockRejectedValue(boom);
+    storageDelete.mockRejectedValue(boom);
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(svc.permanentDeleteFile(svc.getFileById(file.id, trip.id) as TripFile)).rejects.toThrow('EACCES');
     expect(err).toHaveBeenCalledWith('[files] unlink failed for stuck.pdf, keeping DB row:', boom);
@@ -374,7 +366,7 @@ describe('emptyTrash', () => {
     const kept = makeFile(trip.id, user.id, { filename: 'kept.pdf' });
     svc.softDeleteFile(a.id);
     svc.softDeleteFile(b.id);
-    vi.spyOn(fs.promises, 'rm').mockResolvedValue(undefined);
+    storageDelete.mockResolvedValue(undefined);
 
     await expect(svc.emptyTrash(trip.id)).resolves.toBe(2);
     expect(svc.listFiles(trip.id, true)).toEqual([]);
@@ -388,8 +380,8 @@ describe('emptyTrash', () => {
     svc.softDeleteFile(good.id);
     svc.softDeleteFile(bad.id);
     const boom = new Error('EBUSY');
-    vi.spyOn(fs.promises, 'rm').mockImplementation((p) =>
-      String(p).includes('bad.pdf') ? Promise.reject(boom) : Promise.resolve()
+    storageDelete.mockImplementation((_category: string, name: string) =>
+      name.includes('bad.pdf') ? Promise.reject(boom) : Promise.resolve()
     );
     const err = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -399,11 +391,10 @@ describe('emptyTrash', () => {
     expect(svc.getDeletedFile(bad.id, trip.id)).toBeDefined();
   });
 
-  it('FILE-SVC-026: an empty trash resolves to 0 without touching the disk', async () => {
+  it('FILE-SVC-026: an empty trash resolves to 0 without touching storage', async () => {
     const { trip } = seedTrip();
-    const rm = vi.spyOn(fs.promises, 'rm');
     await expect(svc.emptyTrash(trip.id)).resolves.toBe(0);
-    expect(rm).not.toHaveBeenCalled();
+    expect(storageDelete).not.toHaveBeenCalled();
   });
 });
 

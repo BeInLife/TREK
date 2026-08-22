@@ -1,18 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { HttpException } from '@nestjs/common';
 import type { Response } from 'express';
-
-const { createReadStream } = vi.hoisted(() => ({ createReadStream: vi.fn() }));
-vi.mock('node:fs', () => ({ createReadStream }));
+import { PassThrough } from 'node:stream';
 
 import { MapsController } from '../../../src/nest/maps/maps.controller';
 import type { MapsService } from '../../../src/nest/maps/maps.service';
+import type { StorageService } from '../../../src/nest/storage/storage.service';
 import type { User } from '../../../src/types';
 
 const user = { id: 3 } as User;
 
+// The bytes route is the only storage consumer; everything else ignores it.
+const getStream = vi.fn();
+const storageStub = { getStream } as unknown as StorageService;
+
 function makeController(svc: Partial<MapsService>) {
-  return new MapsController(svc as MapsService);
+  return new MapsController(svc as MapsService, storageStub);
 }
 
 /** Run an async handler, expecting an HttpException; return its { status, body }. */
@@ -230,51 +233,73 @@ describe('MapsController (parity with the legacy /api/maps route)', () => {
   });
 
   describe('GET /place-photo/:placeId/bytes', () => {
+    // A real PassThrough (like storage.service.test.ts's makeRes) rather than
+    // a { on, pipe } stub: pipeline() needs authentic stream/eos semantics
+    // (close/error/finish wiring) that a bare mock can't satisfy.
     function makeRes() {
-      const res = {
+      const sink = new PassThrough();
+      const chunks: Buffer[] = [];
+      sink.on('data', (c: Buffer) => chunks.push(c));
+      // Capture the real PassThrough#end BEFORE overwriting the property
+      // below — res and sink are the same object (Object.assign mutates and
+      // returns its target), so referencing sink.end inside the wrapper
+      // would recurse into itself.
+      const realEnd = sink.end.bind(sink) as (...a: unknown[]) => unknown;
+      const res = Object.assign(sink, {
         statusCode: 200,
-        headersSent: false,
         status: vi.fn(function (this: unknown, c: number) { (res as { statusCode: number }).statusCode = c; return res; }),
         json: vi.fn(),
         set: vi.fn(),
         type: vi.fn(),
-        end: vi.fn(),
+        end: vi.fn((...args: unknown[]) => realEnd(...args)),
+        body: () => Buffer.concat(chunks).toString(),
+      });
+      return res as unknown as Response & {
+        status: ReturnType<typeof vi.fn>;
+        json: ReturnType<typeof vi.fn>;
+        set: ReturnType<typeof vi.fn>;
+        type: ReturnType<typeof vi.fn>;
+        end: ReturnType<typeof vi.fn>;
+        body: () => string;
       };
-      return res as unknown as Response & { status: ReturnType<typeof vi.fn>; json: ReturnType<typeof vi.fn>; set: ReturnType<typeof vi.fn>; type: ReturnType<typeof vi.fn>; end: ReturnType<typeof vi.fn> };
     }
 
-    beforeEach(() => createReadStream.mockReset());
+    // Braced body on purpose: mockReset() returns the mock, and a function
+    // returned from beforeEach is invoked as a teardown callback — which would
+    // call getStream() bare and turn a mockRejectedValue impl into an
+    // unhandled rejection.
+    beforeEach(() => {
+      getStream.mockReset();
+    });
 
     // Places persist this URL in image_url, so an evicted cache entry means one
     // request per place on a trip render. 404 for each of them is the ban vector
     // from #1727 — an uncached photo answers 204 with an empty body instead.
-    it('204 without a body when the photo is not cached', () => {
+    it('204 without a body when the photo is not cached', async () => {
       const res = makeRes();
-      makeController({ photoBytesPath: () => null }).placePhotoBytes('p1', res);
+      await makeController({ photoBytesKey: async () => null }).placePhotoBytes('p1', res);
       expect(res.status).toHaveBeenCalledWith(204);
       expect(res.end).toHaveBeenCalled();
       expect(res.json).not.toHaveBeenCalled();
-      expect(createReadStream).not.toHaveBeenCalled();
+      expect(getStream).not.toHaveBeenCalled();
     });
 
-    it('streams the cached file with image/jpeg + an immutable cache header on a hit', () => {
-      const stream = { on: vi.fn().mockReturnThis(), pipe: vi.fn() };
-      createReadStream.mockReturnValue(stream);
+    it('streams the cached bytes with image/jpeg + an immutable cache header on a hit', async () => {
+      const stream = new PassThrough();
+      stream.end('hello');
+      getStream.mockResolvedValue({ stream, stat: { key: 'photos/google/abc.jpg', size: 5, mtimeMs: 0 } });
       const res = makeRes();
-      makeController({ photoBytesPath: () => '/cache/p1.jpg' }).placePhotoBytes('p1', res);
+      await makeController({ photoBytesKey: async () => 'abc.jpg' }).placePhotoBytes('p1', res);
       expect(res.set).toHaveBeenCalledWith('Cache-Control', 'public, max-age=2592000, immutable');
       expect(res.type).toHaveBeenCalledWith('image/jpeg');
-      expect(createReadStream).toHaveBeenCalledWith('/cache/p1.jpg');
-      expect(stream.pipe).toHaveBeenCalledWith(res);
+      expect(getStream).toHaveBeenCalledWith('photos-google', 'abc.jpg');
+      expect(res.body()).toBe('hello');
     });
 
-    it('falls back to an empty 204 when the read stream errors', () => {
-      let onError: () => void = () => {};
-      const stream = { on: vi.fn((ev: string, cb: () => void) => { if (ev === 'error') onError = cb; return stream; }), pipe: vi.fn() };
-      createReadStream.mockReturnValue(stream);
+    it('falls back to an empty 204 when the stream cannot be opened (cache-delete race)', async () => {
+      getStream.mockRejectedValue(new Error('storage object not found'));
       const res = makeRes();
-      makeController({ photoBytesPath: () => '/cache/p1.jpg' }).placePhotoBytes('p1', res);
-      onError();
+      await makeController({ photoBytesKey: async () => 'abc.jpg' }).placePhotoBytes('p1', res);
       expect(res.status).toHaveBeenCalledWith(204);
       expect(res.end).toHaveBeenCalled();
       // The hit path already asked for a month of immutable caching — that header
@@ -283,14 +308,44 @@ describe('MapsController (parity with the legacy /api/maps route)', () => {
       expect(res.set).toHaveBeenLastCalledWith('Cache-Control', 'no-store');
     });
 
-    it('does not re-send a 204 when the stream errors after headers were flushed', () => {
-      let onError: () => void = () => {};
-      const stream = { on: vi.fn((ev: string, cb: () => void) => { if (ev === 'error') onError = cb; return stream; }), pipe: vi.fn() };
-      createReadStream.mockReturnValue(stream);
+    it('falls back to an empty 204 when the stream errors before headers were flushed', async () => {
+      const stream = new PassThrough();
+      getStream.mockResolvedValue({ stream, stat: { key: 'photos/google/abc.jpg', size: 5, mtimeMs: 0 } });
       const res = makeRes();
-      (res as { headersSent: boolean }).headersSent = true;
-      makeController({ photoBytesPath: () => '/cache/p1.jpg' }).placePhotoBytes('p1', res);
-      onError();
+      const pending = makeController({ photoBytesKey: async () => 'abc.jpg' }).placePhotoBytes('p1', res);
+      // Let pipeline() attach its listeners before erroring the source, so
+      // the event isn't missed to a scheduling race.
+      await new Promise((resolve) => setImmediate(resolve));
+      // No bytes reached res yet — pipeline rejects before any write.
+      stream.destroy(new Error('source boom'));
+      await pending;
+      expect(res.status).toHaveBeenCalledWith(204);
+      expect(res.end).toHaveBeenCalled();
+      expect(res.set).toHaveBeenLastCalledWith('Cache-Control', 'no-store');
+    });
+
+    it('swallows an abort-like error once headers are flushed (client walked away)', async () => {
+      const stream = new PassThrough();
+      getStream.mockResolvedValue({ stream, stat: { key: 'photos/google/abc.jpg', size: 5, mtimeMs: 0 } });
+      const res = makeRes();
+      (res as unknown as { headersSent: boolean }).headersSent = true;
+      const pending = makeController({ photoBytesKey: async () => 'abc.jpg' }).placePhotoBytes('p1', res);
+      await new Promise((resolve) => setImmediate(resolve));
+      stream.destroy(Object.assign(new Error('reset'), { code: 'ECONNRESET' }));
+      await expect(pending).resolves.toBeUndefined();
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.end).not.toHaveBeenCalled();
+    });
+
+    it('re-throws a real (non-abort) error once headers are flushed', async () => {
+      const stream = new PassThrough();
+      getStream.mockResolvedValue({ stream, stat: { key: 'photos/google/abc.jpg', size: 5, mtimeMs: 0 } });
+      const res = makeRes();
+      (res as unknown as { headersSent: boolean }).headersSent = true;
+      const pending = makeController({ photoBytesKey: async () => 'abc.jpg' }).placePhotoBytes('p1', res);
+      await new Promise((resolve) => setImmediate(resolve));
+      stream.destroy(Object.assign(new Error('disk read error'), { code: 'EIO' }));
+      await expect(pending).rejects.toThrow('disk read error');
       expect(res.status).not.toHaveBeenCalled();
       expect(res.end).not.toHaveBeenCalled();
     });

@@ -542,8 +542,8 @@ export class MapsService {
     return this.getPlacePhoto(userId, placeId, lat, lng, name) as Promise<MapsPlacePhotoResult>;
   }
 
-  photoBytesPath(placeId: string): string | null {
-    return this.photoCache.serveFilePath(placeId);
+  photoBytesKey(placeId: string): Promise<string | null> {
+    return this.photoCache.serveKey(placeId);
   }
 
   reverse(lat: string, lng: string, lang?: string): Promise<MapsReverseResult> {
@@ -1816,7 +1816,7 @@ export class MapsService {
     name?: string,
   ): Promise<{ photoUrl: string | null; attribution: string | null }> {
     // Disk cache hit — serve immediately, no Google call
-    const diskHit = this.photoCache.get(placeId);
+    const diskHit = await this.photoCache.get(placeId);
     if (diskHit) return { photoUrl: diskHit.photoUrl, attribution: diskHit.attribution };
 
     // "No photo for this place" is an empty result, not a missing resource: a trip
@@ -1842,7 +1842,7 @@ export class MapsService {
     // or timed out only for a few minutes.
     let providerFailed = false;
 
-    const fetchPromise = (async (): Promise<{ filePath: string; attribution: string | null } | null> => {
+    const fetchPromise = (async (): Promise<{ attribution: string | null } | null> => {
       await acquirePhotoFetchSlot();
       try {
         const apiKey = this.getMapsKey(userId);
@@ -1851,7 +1851,7 @@ export class MapsService {
         // (right-click) places and as a fallback when a Google place yields no photo,
         // so a place added via search still gets a marker image when Google returns
         // nothing. Returns null (without marking an error) so the caller decides.
-        const fetchWikimediaFallback = async (): Promise<{ filePath: string; attribution: string | null } | null> => {
+        const fetchWikimediaFallback = async (): Promise<{ attribution: string | null } | null> => {
           if (isNaN(lat) || isNaN(lng)) return null;
           try {
             const wiki = await this.fetchWikimediaPhoto(lat, lng, name);
@@ -1865,7 +1865,7 @@ export class MapsService {
             }
             const bytes = Buffer.from(await imgRes.arrayBuffer());
             const cached = await this.photoCache.put(placeId, bytes, wiki.attribution);
-            return { filePath: cached.filePath, attribution: cached.attribution };
+            return { attribution: cached.attribution };
           } catch {
             providerFailed = true;
             return null;
@@ -1876,7 +1876,7 @@ export class MapsService {
         // key, request rejected, no photos, or a failed media download — so the
         // caller can fall back to Wikimedia; the misses that were Google's fault
         // flag providerFailed on the way out.
-        const fetchGooglePhoto = async (): Promise<{ filePath: string; attribution: string | null } | null> => {
+        const fetchGooglePhoto = async (): Promise<{ attribution: string | null } | null> => {
           if (!apiKey) return null;
 
           // Fetch details to get the photo name
@@ -1940,7 +1940,7 @@ export class MapsService {
             console.error('Failed to persist photo URL to database:', dbErr);
           }
 
-          return { filePath: cached.filePath, attribution };
+          return { attribution };
         };
 
         // Prefer the Google photo (higher quality); if Google yields nothing, fall

@@ -52,6 +52,12 @@ const ja: NotificationLocale = {
       title: '新しいTREKバージョンが利用可能',
       body: `TREK ${p.version}が利用可能になりました。管理パネルからアップデートしてください。`,
     }),
+    replica_failure: (p) => ({
+      title: 'ストレージレプリカの障害',
+      body:
+        `レプリカ '${p.backend}' への書き込みに失敗しました：${p.op} / ${p.key} — ${p.error}。` +
+        (p.suppressed !== '0' ? `前回の通知以降、${p.suppressed}件の追加の失敗が抑制されました。` : ''),
+    }),
     synology_session_cleared: () => ({
       title: 'Synologyセッションがクリアされました',
       body: 'SynologyアカウントまたはURLが変更されました。Synology Photosからログアウトされました。',

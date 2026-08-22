@@ -1,6 +1,7 @@
 import archiver from 'archiver';
 import unzipper from 'unzipper';
 import path from 'path';
+import { pipeline } from 'node:stream/promises';
 import { readEnv } from '../../app-config';
 import fs from 'fs';
 import Database from 'better-sqlite3';
@@ -10,14 +11,15 @@ import { invalidatePermissionsCache } from '../permissions/permissions-cache';
 import { pluginsCodeRoot, pluginsDataRoot } from '../plugins/paths';
 import { stageExtractedPluginTrees, applyStagedRestoreNow } from '../plugins/plugin-backup';
 import { snapshotAllPluginDataDbs } from '../plugins/host/plugin-data.service';
+import type { Response } from 'express';
+import type { StorageService } from '../storage/storage.service';
+import { StorageInvalidKeyError } from '../storage/storage.types';
 
 // ---------------------------------------------------------------------------
 // Paths
 // ---------------------------------------------------------------------------
 
 const dataDir = path.join(__dirname, '../../../data');
-const backupsDir = path.join(dataDir, 'backups');
-const uploadsDir = path.join(__dirname, '../../../uploads');
 
 // Compressed upload cap for restore archives. Defaults to 500 MB, raisable via
 // BACKUP_UPLOAD_LIMIT_MB for instances whose backups (uploads/ included) grow
@@ -35,10 +37,6 @@ export const MAX_BACKUP_DECOMPRESSED_SIZE = backupEnv.maxDecompressedMb * 1024 *
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-export function ensureBackupsDir(): void {
-  if (!fs.existsSync(backupsDir)) fs.mkdirSync(backupsDir, { recursive: true });
-}
 
 export function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -80,12 +78,19 @@ export function isValidBackupFilename(filename: string): boolean {
   return /^(?:auto-)?backup-[\w-]+\.zip$/.test(filename);
 }
 
-export function backupFilePath(filename: string): string {
-  return path.join(backupsDir, filename);
+export function backupFileExists(storage: StorageService, filename: string): Promise<boolean> {
+  return storage.exists('backups', filename);
 }
 
-export function backupFileExists(filename: string): boolean {
-  return fs.existsSync(path.join(backupsDir, filename));
+/**
+ * The codebase's only res.download becomes the storage equivalent: root-relative
+ * sendFile via sendToResponse, with res.download's attachment header rebuilt by
+ * hand (filenames are regex-gated ASCII — no encoding cases).
+ */
+export function sendBackupToResponse(storage: StorageService, filename: string, res: Response): Promise<void> {
+  return storage.sendToResponse('backups', filename, res, {
+    disposition: `attachment; filename="${filename}"`,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -122,26 +127,31 @@ export interface BackupInfo {
   created_at: string;
 }
 
-export function listBackups(): BackupInfo[] {
-  ensureBackupsDir();
-  return fs.readdirSync(backupsDir)
-    .filter(f => f.endsWith('.zip'))
-    .map(filename => {
-      const filePath = path.join(backupsDir, filename);
-      const stat = fs.statSync(filePath);
-      return {
-        filename,
-        size: stat.size,
-        sizeText: formatSize(stat.size),
-        created_at: stat.mtime.toISOString(),
-      };
-    })
-    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+export async function listBackups(storage: StorageService): Promise<BackupInfo[]> {
+  const backups: BackupInfo[] = [];
+  for await (const obj of storage.list('backups')) {
+    // storage.list() recurses; the legacy readdir was single-level. Nested keys
+    // (a restore-* staging tree when data and uploads map to the same dir) and
+    // non-zip files must not surface.
+    if (obj.key.includes('/') || !obj.key.endsWith('.zip')) continue;
+    backups.push({
+      filename: obj.key,
+      size: obj.size,
+      sizeText: formatSize(obj.size),
+      created_at: new Date(obj.mtimeMs).toISOString(),
+    });
+  }
+  return backups.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 }
 
 // ---------------------------------------------------------------------------
 // Create backup
 // ---------------------------------------------------------------------------
+
+/** The categories a backup archives — everything else under uploads/ is a
+ *  re-derivable cache (photos-google, photos-trek) or not uploads at all
+ *  (backups). Restore's rehydration walks the same list. */
+export const BACKUP_UPLOAD_CATEGORIES = ['files', 'journey', 'covers', 'avatars', 'places', 'photos'] as const;
 
 /**
  * Writes a full backup zip and returns its BackupInfo.
@@ -151,27 +161,71 @@ export function listBackups(): BackupInfo[] {
  * only auto-backup-*.zip, and the admin panel badges them as automatic. Manual
  * backups keep the default.
  */
-export async function createBackup(prefix: 'backup' | 'auto-backup' = 'backup'): Promise<BackupInfo> {
-  ensureBackupsDir();
-
+export async function createBackup(storage: StorageService, prefix: 'backup' | 'auto-backup' = 'backup'): Promise<BackupInfo> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const filename = `${prefix}-${timestamp}.zip`;
-  const outputPath = path.join(backupsDir, filename);
-  // The scratch names carry the prefix too: a scheduled run and a manual one that
-  // start in the same second would otherwise share a snapshot path, and the first
-  // to finish would delete the other's staging copy mid-archive.
-  const pdataSnap = path.join(backupsDir, `.plugins-snap-${prefix}-${timestamp}`);
-  const dbSnap = path.join(backupsDir, `.travel-snap-${prefix}-${timestamp}.db`);
+  // All staging lives in the backups backend's own spool: same volume as the
+  // destination (the put commit stays an atomic rename) and crash leftovers are
+  // reaped by LocalDriver's boot spool-cleanup. The scratch names carry the
+  // prefix too: a scheduled run and a manual one that start in the same second
+  // would otherwise share a snapshot path, and the first to finish would delete
+  // the other's staging copy mid-archive.
+  const spoolDir = storage.spoolDirFor('backups');
+  const zipSpool = path.join(spoolDir, `zip-build-${prefix}-${timestamp}`);
+  const pdataSnap = path.join(spoolDir, `plugins-snap-${prefix}-${timestamp}`);
+  const dbSnap = path.join(spoolDir, `travel-snap-${prefix}-${timestamp}.db`);
+  // Per-backup staging for uploads with no local path (a remote/S3 primary, or
+  // a local path that vanished between listing and archiving — see
+  // getLocalPathOrNull). Same spool as the rest of the build, same cleanup.
+  const stagingDir = path.join(spoolDir, `staging-${prefix}-${timestamp}`);
 
   try {
     try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch (e) {}
 
+    // Enumerate the archived categories up front (the archiver reads entries
+    // lazily during finalize(), so the promise executor below must stay
+    // synchronous). Everything NOT in BACKUP_UPLOAD_CATEGORIES is excluded by
+    // construction: the re-derivable caches (photos-google in both
+    // TREK_PLACE_PHOTO_DIR modes, photos-trek) and backups itself are never
+    // enumerated, which is what makes the same-dir-misconfig guard (#1358)
+    // structural instead of pattern-based.
+    const uploadEntries: { absPath: string; name: string }[] = [];
+    for (const category of BACKUP_UPLOAD_CATEGORIES) {
+      for await (const obj of storage.list(category)) {
+        // In mode A the google/trek caches nest under the photos/ prefix — the
+        // category walk would sweep them back in without this skip.
+        if (category === 'photos' && (obj.key.startsWith('google/') || obj.key.startsWith('trek/'))) continue;
+        // Local path available (exists on disk right now — the fail-safe half
+        // of getLocalPathOrNull's contract) → push it directly: zero-copy, the
+        // default-install path. Otherwise (a remote/S3 primary, or a local
+        // path that vanished between the list() and here) stream the object
+        // into this backup's own staging dir so archiver has a real file to
+        // read lazily during finalize() — the temp file withLocalFile would
+        // have produced is gone by the time archiver gets to it.
+        const localPath = await storage.getLocalPathOrNull(category, obj.key);
+        if (localPath !== null) {
+          uploadEntries.push({ absPath: localPath, name: `uploads/${category}/${obj.key}` });
+          continue;
+        }
+        const stagedPath = path.join(stagingDir, category, obj.key);
+        fs.mkdirSync(path.dirname(stagedPath), { recursive: true });
+        const { stream } = await storage.getStream(category, obj.key);
+        await pipeline(stream, fs.createWriteStream(stagedPath));
+        uploadEntries.push({ absPath: stagedPath, name: `uploads/${category}/${obj.key}` });
+      }
+    }
+
     await new Promise<void>((resolve, reject) => {
-      const output = fs.createWriteStream(outputPath);
+      const output = fs.createWriteStream(zipSpool);
       const archive = archiver('zip', { zlib: { level: 9 } });
 
       output.on('close', resolve);
       archive.on('error', reject);
+      // archiver emits 'warning' (not 'error') for entries it couldn't
+      // stat/read — a stale staged path, a permission error — and by default
+      // just skips them, silently dropping bytes from the backup. Fail the
+      // backup instead: a dropped entry must never pass as a success.
+      archive.on('warning', reject);
 
       archive.pipe(output);
 
@@ -205,28 +259,7 @@ export async function createBackup(prefix: 'backup' | 'auto-backup' = 'backup'):
         archive.file(encKeyPath, { name: '.encryption_key' });
       }
 
-      if (fs.existsSync(uploadsDir)) {
-        // Exclude the place-photo and trek-memory caches: both are re-derivable
-        // (re-fetched on demand, keyed on stable ids) and would otherwise dominate
-        // backup size. Restores self-heal — the cache dirs are recreated at startup.
-        //
-        // Also exclude backups/ and restore-*/: these live under data/, not uploads/,
-        // but when an install maps data and uploads to the SAME directory (a
-        // misconfiguration, but a catastrophic one) the glob would otherwise sweep
-        // every prior backup zip into the new archive — each run embedding all
-        // previous runs, so size compounds without bound (see issue #1358). Ignoring
-        // them keeps the backup bounded regardless of how the volumes are mounted.
-        archive.glob(
-          '**/*',
-          {
-            cwd: uploadsDir,
-            ignore: ['photos/google/**', 'photos/trek/**', 'backups/**', 'restore-*/**'],
-            nodir: true,
-            dot: true,
-          },
-          { prefix: 'uploads' },
-        );
-      }
+      for (const entry of uploadEntries) archive.file(entry.absPath, { name: entry.name });
 
       // Plugin data — each plugin's own SQLite file and any blobs. This is the ONLY
       // copy of the user data a plugin holds, so it belongs in the backup. Checkpoint
@@ -262,23 +295,29 @@ export async function createBackup(prefix: 'backup' | 'auto-backup' = 'backup'):
       archive.finalize();
     });
 
-    const stat = fs.statSync(outputPath);
+    // The commit — and, under a mirror backend, the replica fan-out point.
+    await storage.put('backups', filename, { tmpPath: zipSpool });
+    const stat = await storage.stat('backups', filename);
+    if (!stat) throw new Error(`Backup vanished after commit: ${filename}`);
     return {
       filename,
       size: stat.size,
       sizeText: formatSize(stat.size),
-      created_at: stat.birthtime.toISOString(),
+      created_at: new Date(stat.mtimeMs).toISOString(),
     };
   } catch (err: unknown) {
     console.error('Backup error:', err);
-    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
     throw err;
   } finally {
-    // The snapshots were staging copies for the archiver only; drop them once streaming is
-    // done (the await above resolves on the output stream's 'close', so the archive is
-    // complete).
+    // put commits by rename, so on success the zip spool file is already gone;
+    // on failure these clean the half-built staging. The destination needs no
+    // unlink anymore — nothing lands there until put succeeds. (The await on
+    // the build promise resolves on the output stream's 'close', so the
+    // snapshots are no longer being read.)
+    fs.rmSync(zipSpool, { force: true });
     fs.rmSync(pdataSnap, { recursive: true, force: true });
     fs.rmSync(dbSnap, { force: true });
+    fs.rmSync(stagingDir, { recursive: true, force: true });
   }
 }
 
@@ -292,7 +331,51 @@ export interface RestoreResult {
   status?: number;
 }
 
-export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
+/** Restore a zip that already sits in the backups store, reading it through
+ *  the storage facade (primary-local in v1; a remote backend downloads to
+ *  tempDir via withLocalFile — the seam is in place, resumability is not). */
+export function restoreBackup(storage: StorageService, filename: string): Promise<RestoreResult> {
+  return storage.withLocalFile('backups', filename, (zipPath) => restoreFromZip(storage, zipPath));
+}
+
+const isBackupCategory = (dir: string): dir is (typeof BACKUP_UPLOAD_CATEGORIES)[number] =>
+  (BACKUP_UPLOAD_CATEGORIES as readonly string[]).includes(dir);
+
+/**
+ * Per-entry storage.put replaces the old wipe-and-cpSync (and with it the
+ * realpathSync symlinked-uploads workaround — the driver resolves its own
+ * root at init). Entries that cannot map to a storage key — an unknown
+ * top-level dir, or dot-segments from old `dot: true` archives — are skipped
+ * with a warning (2026-08-17 decision): new archives never contain them, and
+ * the category mapping stays structural in both directions.
+ */
+async function rehydrateUploads(storage: StorageService, extractedUploads: string): Promise<void> {
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const p = path.join(dir, e.name);
+      return e.isDirectory() ? walk(p) : e.isFile() ? [p] : [];
+    });
+  for (const absPath of walk(extractedUploads)) {
+    const rel = path.relative(extractedUploads, absPath).split(path.sep).join('/');
+    const slash = rel.indexOf('/');
+    const top = slash === -1 ? '' : rel.slice(0, slash);
+    if (slash === -1 || !isBackupCategory(top)) {
+      console.warn(`Restore: skipping upload entry outside a storage category: ${rel}`);
+      continue;
+    }
+    try {
+      await storage.put(top, rel.slice(slash + 1), { tmpPath: absPath });
+    } catch (err) {
+      if (err instanceof StorageInvalidKeyError) {
+        console.warn(`Restore: skipping upload entry with an invalid key: ${rel}`);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
+export async function restoreFromZip(storage: StorageService, zipPath: string): Promise<RestoreResult> {
   const extractDir = path.join(dataDir, `restore-${Date.now()}`);
   let reinitFailed: unknown = null;
   try {
@@ -404,41 +487,6 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
       if (fs.existsSync(extractedEncKey)) {
         fs.copyFileSync(extractedEncKey, path.join(dataDir, '.encryption_key'));
       }
-
-      const extractedUploads = path.join(extractDir, 'uploads');
-      if (fs.existsSync(extractedUploads)) {
-        for (const sub of fs.readdirSync(uploadsDir)) {
-          const subPath = path.join(uploadsDir, sub);
-          if (fs.statSync(subPath).isDirectory()) {
-            for (const file of fs.readdirSync(subPath)) {
-              try { fs.unlinkSync(path.join(subPath, file)); } catch (e) {}
-            }
-          }
-        }
-        // Copy into the real directory behind uploadsDir. In Docker, uploadsDir
-        // (/app/server/uploads) is a symlink to the mounted /app/uploads volume;
-        // cpSync(dereference:false) would otherwise try to overwrite the symlink
-        // node with a directory and throw ERR_FS_CP_DIR_TO_NON_DIR. realpathSync
-        // is a no-op when uploadsDir is a plain directory (dev/non-Docker).
-        fs.cpSync(extractedUploads, fs.realpathSync(uploadsDir), { recursive: true, force: true });
-      }
-
-      // Plugin trees can't be swapped while the runtime holds their DBs open, so stage
-      // them beside the live trees, then ask the runtime to quiesce its plugins and apply
-      // the swap NOW. If the runtime isn't up (plugins disabled / restore during boot),
-      // the staging waits for the boot reconcile — with nothing running, no data diverges.
-      // Best-effort: a staging error must not fail an otherwise-good core restore.
-      try {
-        stageExtractedPluginTrees(extractDir);
-        // Quiesce regardless of whether trees were staged: the restored travel.db carries
-        // a different `plugins` table, so any plugin still running with its pre-restore
-        // identity/grants is now a ghost — invisible in the restored UI, unstoppable short
-        // of a process restart. applyStagedRestoreNow closes those handles; the tree swap
-        // it also performs is a no-op when nothing was staged (e.g. an older archive).
-        await applyStagedRestoreNow();
-      } catch (e) {
-        console.error('Restore: staging plugin trees failed:', e);
-      }
     } finally {
       // Reopening the DB must always run (even if the copy above threw) so the
       // process is never left without a connection. Capture a reopen failure
@@ -456,6 +504,54 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
       // permission would decide against the wrong grants until the
       // next restart. Dropping the cache forces a fresh read.
       invalidatePermissionsCache();
+    }
+
+    if (!reinitFailed) {
+      // The registry reads storage.* app_settings through the DB handle that
+      // was just closed and reopened above — reload it now, AFTER reinitialize()
+      // and BEFORE any byte moves, so rehydrated uploads land where the RESTORED
+      // config says rather than the stale pre-restore one (audit #4). Skipped
+      // entirely when reopen failed: with no live DB handle the registry has
+      // nothing to read, and the restore is already reported as "restart
+      // required" below — rehydrating into a stale/guessed config would be worse.
+      storage.reloadConfig();
+
+      const extractedUploads = path.join(extractDir, 'uploads');
+      if (fs.existsSync(extractedUploads)) {
+        // Parity with the legacy wipe: it unlinked one level deep only (nested
+        // files — journey/thumbs, photos/google — survived until overwritten by
+        // the copy) and swallowed per-file errors.
+        for (const category of BACKUP_UPLOAD_CATEGORIES) {
+          for await (const obj of storage.list(category)) {
+            if (obj.key.includes('/')) continue;
+            await storage.delete(category, obj.key).catch(() => { /* best-effort, as the old unlink loop was */ });
+          }
+        }
+        await rehydrateUploads(storage, extractedUploads);
+      }
+    }
+
+    // Plugin trees can't be swapped while the runtime holds their DBs open, so stage
+    // them beside the live trees, then ask the runtime to quiesce its plugins and apply
+    // the swap NOW. If the runtime isn't up (plugins disabled / restore during boot),
+    // the staging waits for the boot reconcile — with nothing running, no data diverges.
+    // Best-effort: a staging error must not fail an otherwise-good core restore. Runs
+    // UNCONDITIONALLY, even when reinitFailed — unlike reload/rehydration this is pure
+    // filesystem staging with no DB dependency (plugin-backup.ts), so a failed reopen
+    // must not cost the archive's plugin data: extractDir is unlinked right below, and
+    // an un-staged tree there would be gone for good with no recovery path.
+    try {
+      stageExtractedPluginTrees(extractDir);
+      // Quiesce regardless of whether trees were staged: the restored travel.db carries
+      // a different `plugins` table, so any plugin still running with its pre-restore
+      // identity/grants is now a ghost — invisible in the restored UI, unstoppable short
+      // of a process restart. applyStagedRestoreNow closes those handles; the tree swap
+      // it also performs is a no-op when nothing was staged (e.g. an older archive). It
+      // degrades gracefully when the DB isn't reopened, same as any other best-effort
+      // failure here.
+      await applyStagedRestoreNow();
+    } catch (e) {
+      console.error('Restore: staging plugin trees failed:', e);
     }
 
     fs.rmSync(extractDir, { recursive: true, force: true });
@@ -482,15 +578,7 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
 // Delete backup
 // ---------------------------------------------------------------------------
 
-export function deleteBackup(filename: string): void {
-  const filePath = path.join(backupsDir, filename);
-  fs.unlinkSync(filePath);
+export function deleteBackup(storage: StorageService, filename: string): Promise<void> {
+  return storage.delete('backups', filename);
 }
 
-// ---------------------------------------------------------------------------
-// Upload config (multer dest)
-// ---------------------------------------------------------------------------
-
-export function getUploadTmpDir(): string {
-  return path.join(dataDir, 'tmp/');
-}

@@ -70,6 +70,7 @@ import { UnsplashService } from '../../src/nest/unsplash/unsplash.service';
 import { PlacePhotoCacheService } from '../../src/nest/place-photos/place-photo-cache.service';
 import { TrekPhotosRepository } from '../../src/nest/photos/trek-photos.repository';
 import { RuntimeEnvService } from '../../src/nest/app-config/runtime-env.service';
+import { makeStorageFixture } from './storage-fixture';
 
 /**
  * Hand-wired counterpart of the PluginsModule DI graph for no-Nest tests
@@ -82,6 +83,7 @@ import { RuntimeEnvService } from '../../src/nest/app-config/runtime-env.service
  * container would discover, handed to the host factory as a registry.
  */
 export function createPluginRpcHostFactory(dbs: DatabaseService): PluginRpcHostFactory {
+  const generalStorage = makeStorageFixture('').storage;
   const permissions = new PermissionsService(dbs);
   const exchangeRates = new ExchangeRatesService();
   const realtime = new RealtimeService();
@@ -90,16 +92,16 @@ export function createPluginRpcHostFactory(dbs: DatabaseService): PluginRpcHostF
   const queryHelpers = new QueryHelpersService(dbs);
   const todos = new TodoService(dbs, permissions, realtime);
   const packing = new PackingService(dbs, permissions, realtime, notificationsStub());
-  const files = new FilesService(dbs, permissions, realtime, new EphemeralTokenService());
+  const files = new FilesService(dbs, permissions, realtime, new EphemeralTokenService(), generalStorage);
   const reservations = new ReservationsService(dbs, permissions, budget, realtime, notificationsStub(), new ReservationsReadRepository(dbs));
-  const collab = new CollabService(dbs, permissions, realtime, notificationsStub());
+  const collab = new CollabService(dbs, permissions, realtime, notificationsStub(), generalStorage);
   const vacay = new VacayService(dbs, realtime, notificationsStub());
   const days = new DaysService(dbs, permissions, realtime, queryHelpers);
-  const photoCache = new PlacePhotoCacheService(dbs, new RuntimeEnvService());
-  const unsplash = new UnsplashService(dbs, new RuntimeEnvService());
+  const photoCache = new PlacePhotoCacheService(dbs, makeStorageFixture('photos/google/').storage);
+  const unsplash = new UnsplashService(dbs, new RuntimeEnvService(), generalStorage);
   const journey = new JourneyDomainService(dbs, realtime, new TrekPhotosRepository(dbs));
-  const places = new PlacesService(dbs, permissions, realtime, new MapsService(dbs, photoCache), queryHelpers, unsplash, photoCache, journey);
-  const collections = new CollectionsService(dbs, permissions, realtime, notificationsStub());
+  const places = new PlacesService(dbs, permissions, realtime, new MapsService(dbs, photoCache), queryHelpers, unsplash, photoCache, journey, generalStorage);
+  const collections = new CollectionsService(dbs, permissions, realtime, notificationsStub(), generalStorage);
   const atlas = new AtlasService(dbs);
   const dayNotes = new DayNotesService(dbs, permissions, realtime);
   const assignments = new AssignmentsService(dbs, permissions, realtime, queryHelpers, journey);
@@ -108,7 +110,7 @@ export function createPluginRpcHostFactory(dbs: DatabaseService): PluginRpcHostF
   const llmConfig = new LlmConfigResolver(new SettingsService(dbs), dbs, addons);
   const oauth = new PluginOAuthService(dbs);
   const accommodations = new AccommodationsService(dbs, permissions, realtime);
-  const trips = new TripsService(dbs, reservations, days, permissions, budget, vacay, realtime, unsplash);
+  const trips = new TripsService(dbs, reservations, days, permissions, budget, vacay, realtime, unsplash, generalStorage);
   const members = new TripMembersService(dbs, budget, new UserCleanupService(dbs, budget), permissions, realtime, notificationsStub());
   const guards = new PluginGuards(dbs, permissions, addons);
 
@@ -120,7 +122,7 @@ export function createPluginRpcHostFactory(dbs: DatabaseService): PluginRpcHostF
     new TodoRpc(todos, realtime, guards),
     new DayNotesRpc(dayNotes, realtime, guards),
     new PackingRpc(packing, realtime, guards),
-    new FilesRpc(files, realtime, dbs, guards),
+    new FilesRpc(files, realtime, dbs, guards, generalStorage),
     new PlacesRpc(places, journey, realtime, guards),
     new DaysRpc(days, realtime, guards),
     new AccommodationsRpc(accommodations, realtime, guards),

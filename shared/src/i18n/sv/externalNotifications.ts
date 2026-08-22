@@ -52,6 +52,12 @@ const en: NotificationLocale = {
       title: 'Ny TREK version tillgänglig',
       body: `TREK ${p.version} är nu tillgänglig. Gå till adminpanelen för att uppdatera.`,
     }),
+    replica_failure: (p) => ({
+      title: 'Fel i lagringsreplik',
+      body:
+        `Skrivning till replik '${p.backend}' misslyckades: ${p.op} för ${p.key} — ${p.error}.` +
+        (p.suppressed !== '0' ? ` ${p.suppressed} ytterligare fel har undertryckts sedan senaste aviseringen.` : ''),
+    }),
     synology_session_cleared: () => ({
       title: 'Synology session rensad',
       body: 'Ditt Synology-konto eller din webbadress har ändrats. Du har loggats ut från Synology Photos.',

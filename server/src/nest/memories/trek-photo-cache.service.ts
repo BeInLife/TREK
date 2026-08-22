@@ -1,13 +1,11 @@
-import path from 'node:path';
-import fs from 'node:fs';
-import fsPromises from 'node:fs/promises';
 import crypto from 'node:crypto';
+import { Readable } from 'node:stream';
 import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
 import { DatabaseService } from '../database/database.service';
-import { UPLOADS_ROOT } from './uploads-root';
+import { StorageService } from '../storage/storage.service';
+import { StorageNotFoundError } from '../storage/storage.types';
 
-const TREK_PHOTO_DIR = path.join(UPLOADS_ROOT, 'photos/trek');
 export const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 /**
@@ -23,28 +21,24 @@ export const CACHE_TTL = 60 * 60 * 1000; // 1 hour
  */
 const inFlight = new Map<string, Promise<Buffer | null>>();
 
-function ensureDir(): void {
-  if (!fs.existsSync(TREK_PHOTO_DIR)) {
-    fs.mkdirSync(TREK_PHOTO_DIR, { recursive: true });
-  }
+/** Storage name (category 'photos-trek') for a cache key. */
+function objectName(key: string): string {
+  return `${key}.bin`;
 }
 
-function cachedFilePath(key: string): string {
-  return path.join(TREK_PHOTO_DIR, `${key}.bin`);
-}
-
-/** Disk + metadata cache for provider thumbnails and originals. */
+/** Storage + metadata cache for provider thumbnails and originals. */
 @Injectable()
 export class TrekPhotoCacheService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly storage: StorageService,
+  ) {}
 
   cacheKey(provider: string, assetId: string, kind: string, ownerId: number): string {
     return crypto.createHash('sha1').update(`${provider}:${assetId}:${kind}:${ownerId}`).digest('hex');
   }
 
-
-
-  getFresh(key: string): { filePath: string; contentType: string } | null {
+  async getFresh(key: string): Promise<{ contentType: string } | null> {
     const row = this.db.get<{ content_type: string; fetched_at: number }>(
       'SELECT content_type, fetched_at FROM trek_photo_cache_meta WHERE cache_key = ?', key,
     );
@@ -56,22 +50,16 @@ export class TrekPhotoCacheService {
       return null;
     }
 
-    const fp = cachedFilePath(key);
-    if (!fs.existsSync(fp)) {
+    if (!(await this.storage.exists('photos-trek', objectName(key)))) {
       this.db.run('DELETE FROM trek_photo_cache_meta WHERE cache_key = ?', key);
       return null;
     }
 
-    return { filePath: fp, contentType: row.content_type };
+    return { contentType: row.content_type };
   }
 
   async put(key: string, bytes: Buffer, contentType: string): Promise<void> {
-    ensureDir();
-    const fp = cachedFilePath(key);
-    const tmp = fp + '.tmp';
-
-    await fsPromises.writeFile(tmp, bytes);
-    await fsPromises.rename(tmp, fp);
+    await this.storage.put('photos-trek', objectName(key), Readable.from(bytes));
 
     this.db.run(
       'INSERT OR REPLACE INTO trek_photo_cache_meta (cache_key, content_type, fetched_at) VALUES (?, ?, ?)',
@@ -79,15 +67,21 @@ export class TrekPhotoCacheService {
     );
   }
 
-  serveFresh(res: Response, key: string): boolean {
-    const entry = this.getFresh(key);
+  async serveFresh(res: Response, key: string): Promise<boolean> {
+    const entry = await this.getFresh(key);
     if (!entry) return false;
 
     res.set('Content-Type', entry.contentType);
     res.set('Cache-Control', 'public, max-age=3600');
-    // Root-relative, see photo-resolver.service.ts — an absolute path 404s under
-    // the Nest ExpressAdapter.
-    res.sendFile(path.basename(entry.filePath), { root: path.dirname(entry.filePath) });
+    try {
+      // send() keeps a pre-set Content-Type, so entry.contentType survives the
+      // .bin extension.
+      await this.storage.sendToResponse('photos-trek', objectName(key), res);
+    } catch (err) {
+      // getFresh→send delete race: fall back like a cache miss.
+      if (err instanceof StorageNotFoundError && !res.headersSent) return false;
+      throw err;
+    }
     return true;
   }
 
@@ -100,7 +94,7 @@ export class TrekPhotoCacheService {
     promise.finally(() => inFlight.delete(key));
   }
 
-  sweepExpired(): void {
+  async sweepExpired(): Promise<void> {
     const cutoff = Date.now() - CACHE_TTL * 2;
     const stale = this.db.all<{ cache_key: string }>(
       'SELECT cache_key FROM trek_photo_cache_meta WHERE fetched_at < ?', cutoff,
@@ -108,8 +102,21 @@ export class TrekPhotoCacheService {
 
     for (const row of stale) {
       this.db.run('DELETE FROM trek_photo_cache_meta WHERE cache_key = ?', row.cache_key);
-      const fp = cachedFilePath(row.cache_key);
-      if (fs.existsSync(fp)) fs.unlinkSync(fp);
+      await this.storage.delete('photos-trek', objectName(row.cache_key));
+    }
+
+    // Pass 2 (fix #4, spec rev 3.2): getFresh's expiry path deletes the meta
+    // row but never the object — reclaim row-less .bin objects past the same
+    // cutoff. The mtime guard spares an in-flight put (object lands before its
+    // row); nested keys are skipped because the old readdir-free sweep could
+    // never touch them either.
+    for await (const stat of this.storage.list('photos-trek')) {
+      if (stat.key.includes('/') || !stat.key.endsWith('.bin') || stat.mtimeMs >= cutoff) continue;
+      const key = stat.key.slice(0, -'.bin'.length);
+      const row = this.db.get('SELECT 1 FROM trek_photo_cache_meta WHERE cache_key = ?', key);
+      if (!row) {
+        await this.storage.delete('photos-trek', stat.key).catch(() => { /* race */ });
+      }
     }
   }
 }
