@@ -34,7 +34,7 @@ npm run test:unit --workspace=server               # tests/unit only
 npm run test:integration --workspace=server
 npm run test:ws --workspace=server                 # websocket tests
 npm run test:e2e                                   # server e2e (boots Nest against temp SQLite)
-npm run test:cov                                   # coverage, server + client
+npm run test:cov                                   # coverage (lcov), all four packages incl. shared + plugin-sdk
 cd client && npm run test                          # client vitest run
 cd client && npm run e2e                           # Playwright
 cd client && npm run lint:pages                    # enforce the Page pattern (see below)
