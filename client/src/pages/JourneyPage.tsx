@@ -1,4 +1,5 @@
 import PageShell from '../components/Layout/PageShell'
+import { localIsoDate } from '../utils/localDate'
 import { useTranslation, TransHtml } from '../i18n'
 import {
   Plus, Search, Sparkles, Calendar, MapPin,
@@ -271,9 +272,9 @@ function JourneyPageDesktop() {
               <div className="flex flex-col gap-2 max-h-[320px] overflow-y-auto">
                 {availableTrips.map(trip => {
                   const selected = selectedTripIds.has(trip.id)
-                  const status = trip.end_date && trip.end_date < new Date().toISOString().split('T')[0]
+                  const status = trip.end_date && trip.end_date < localIsoDate()
                     ? 'completed'
-                    : trip.start_date && trip.start_date <= new Date().toISOString().split('T')[0]
+                    : trip.start_date && trip.start_date <= localIsoDate()
                       ? 'active'
                       : 'upcoming'
                   const statusColors: Record<string, string> = {

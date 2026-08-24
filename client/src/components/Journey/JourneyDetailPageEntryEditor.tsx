@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react'
+import { localIsoDate } from '../../utils/localDate'
 import { X, Plus, Image, Minus, Check, MapPin, Locate, Camera } from 'lucide-react'
 import { normalizeImageFiles } from '../../utils/convertHeic'
 import { type ResilientResult, type UploadProgress } from '../../utils/uploadQueue'
@@ -33,7 +34,7 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
   const toast = useToast()
   const [title, setTitle] = useState(entry.title || '')
   const [story, setStory] = useState(entry.story || '')
-  const [entryDate, setEntryDate] = useState(entry.entry_date || new Date().toISOString().split('T')[0])
+  const [entryDate, setEntryDate] = useState(entry.entry_date || localIsoDate())
   const [entryTime, setEntryTime] = useState(entry.entry_time?.slice(0, 5) || '')
   const [locationName, setLocationName] = useState(entry.location_name || '')
   const [locationLat, setLocationLat] = useState<number | null>(entry.location_lat ?? null)
@@ -78,7 +79,7 @@ export function EntryEditor({ entry, journeyId, tripDates, galleryPhotos, trips,
   const isDirty = (
     title !== (entry.title || '') ||
     story !== (entry.story || '') ||
-    entryDate !== (entry.entry_date || new Date().toISOString().split('T')[0]) ||
+    entryDate !== (entry.entry_date || localIsoDate()) ||
     entryTime !== (entry.entry_time?.slice(0, 5) || '') ||
     locationName !== (entry.location_name || '') ||
     (locationLat ?? null) !== (entry.location_lat ?? null) ||

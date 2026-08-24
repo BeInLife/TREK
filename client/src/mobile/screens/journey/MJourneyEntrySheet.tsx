@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { localIsoDate } from '../../../utils/localDate'
 import { Camera, Plus, Image, Images, X, MapPin, Locate, Trash2, CheckCircle2, MinusCircle } from 'lucide-react'
 import MSheet from '../../components/MSheet'
 import MIconBtn from '../../components/MIconBtn'
@@ -57,7 +58,7 @@ export default function MJourneyEntrySheet({
 
   const [title, setTitle] = useState(entry.title || '')
   const [story, setStory] = useState(entry.story || '')
-  const [entryDate, setEntryDate] = useState(entry.entry_date || new Date().toISOString().split('T')[0])
+  const [entryDate, setEntryDate] = useState(entry.entry_date || localIsoDate())
   const [entryTime, setEntryTime] = useState(entry.entry_time?.slice(0, 5) || '')
   const [locationName, setLocationName] = useState(entry.location_name || '')
   const [locationLat, setLocationLat] = useState<number | null>(entry.location_lat ?? null)
@@ -177,7 +178,7 @@ export default function MJourneyEntrySheet({
   const isDirty =
     title !== (entry.title || '') ||
     story !== (entry.story || '') ||
-    entryDate !== (entry.entry_date || new Date().toISOString().split('T')[0]) ||
+    entryDate !== (entry.entry_date || localIsoDate()) ||
     entryTime !== (entry.entry_time?.slice(0, 5) || '') ||
     locationName !== (entry.location_name || '') ||
     mood !== (entry.mood || '') ||

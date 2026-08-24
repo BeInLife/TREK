@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { localIsoDate } from '../../utils/localDate'
 import { ArrowLeft, ChevronRight, Calendar } from 'lucide-react'
 import { useTranslation } from '../../i18n'
 
@@ -81,7 +82,7 @@ export function DatePicker({ value, onChange, tripDates }: {
                 const dateStr = `${viewMonth.year}-${pad(viewMonth.month + 1)}-${pad(day)}`
                 const isSelected = dateStr === value
                 const isTrip = tripDates?.has(dateStr)
-                const isToday = dateStr === new Date().toISOString().split('T')[0]
+                const isToday = dateStr === localIsoDate()
 
                 return (
                   <button

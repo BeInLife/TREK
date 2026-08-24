@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { localIsoDate } from '../../utils/localDate'
 import { useParams } from 'react-router'
 import apiClient from '../../api/client'
 import { useTripStore } from '../../store/tripStore'
@@ -480,7 +481,7 @@ export function ReservationModal({ isOpen, onClose, onSave, reservation, days, p
                   onChange={tm => {
                     const [d] = (form.reservation_time || '').split('T')
                     const selectedDay = days.find(dy => dy.id === selectedDayId)
-                    const date = d || selectedDay?.date || new Date().toISOString().split('T')[0]
+                    const date = d || selectedDay?.date || localIsoDate()
                     set('reservation_time', tm ? `${date}T${tm}` : date)
                   }}
                 />

@@ -1,4 +1,5 @@
 import { Calendar, ChevronLeft, ChevronRight, Keyboard } from 'lucide-react';
+import { localIsoDate } from '../../utils/localDate';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from '../../i18n';
@@ -688,7 +689,7 @@ export function CustomDateTimePicker({ value, onChange, placeholder, style = {} 
     onChange(d ? `${d}T${timePart || '12:00'}` : '');
   };
   const handleTimeChange = (t: string) => {
-    const d = datePart || new Date().toISOString().split('T')[0];
+    const d = datePart || localIsoDate();
     onChange(t ? `${d}T${t}` : d);
   };
 
