@@ -42,7 +42,7 @@ describe('TodoListPanel', () => {
   it('FE-COMP-TODO-002: raising addItemSignal opens the new task form', async () => {
     const { rerender } = render(<TodoListPanel tripId={1} items={[]} addItemSignal={0} />);
     rerender(<TodoListPanel tripId={1} items={[]} addItemSignal={1} />);
-    await screen.findByText('Create task');
+    expect(await screen.findByText('Create task')).toBeInTheDocument();
   });
 
   it('FE-COMP-TODO-003: sidebar filter buttons are rendered', () => {
@@ -125,7 +125,7 @@ describe('TodoListPanel', () => {
   it('FE-COMP-TODO-011: raising addItemSignal opens detail form with Create task button', async () => {
     const { rerender } = render(<TodoListPanel tripId={1} items={[]} addItemSignal={0} />);
     rerender(<TodoListPanel tripId={1} items={[]} addItemSignal={1} />);
-    await screen.findByText('Create task');
+    expect(await screen.findByText('Create task')).toBeInTheDocument();
   });
 
   it('FE-COMP-TODO-012: toggling item calls toggleTodoItem action', async () => {
@@ -158,7 +158,7 @@ describe('TodoListPanel', () => {
     render(<TodoListPanel tripId={1} items={items} />);
     await user.click(screen.getByText('Click Me'));
     // Detail pane should open showing the task title
-    await screen.findByText('Task');
+    expect(await screen.findByText('Task')).toBeInTheDocument();
   });
 
   it('FE-COMP-TODO-014: category filter appears in sidebar for items with categories', () => {

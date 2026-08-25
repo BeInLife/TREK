@@ -112,7 +112,7 @@ describe('TripFormModal', () => {
       await user.click(submitBtn.closest('button') || submitBtn);
     }
     // Error: "Title is required"
-    await screen.findByText('Title is required');
+    expect(await screen.findByText('Title is required')).toBeInTheDocument();
   });
 
   it('FE-COMP-TRIPFORM-010: typing title and submitting calls onSave', async () => {
@@ -229,7 +229,7 @@ describe('TripFormModal', () => {
       )
     );
     render(<TripFormModal {...defaultProps} trip={null} />);
-    await screen.findByText('Travel buddies');
+    expect(await screen.findByText('Travel buddies')).toBeInTheDocument();
   });
 
   it('FE-COMP-TRIPFORM-024: selecting a member adds a chip', async () => {
@@ -305,7 +305,7 @@ describe('TripFormModal', () => {
     const submitBtns = screen.getAllByText('Create New Trip');
     const submitBtn = submitBtns.find(el => el.closest('button'))!;
     await user.click(submitBtn.closest('button')!);
-    await screen.findByText('Server error');
+    expect(await screen.findByText('Server error')).toBeInTheDocument();
   });
 
   it('FE-COMP-TRIPFORM-028: loading spinner shown while submitting', async () => {
@@ -720,7 +720,7 @@ describe('TripFormModal', () => {
     await user.type(screen.getByPlaceholderText('Search destination photos'), 'nowhere');
     await user.click(screen.getByRole('button', { name: /Search Unsplash/i }));
 
-    await screen.findByText('No images found');
+    expect(await screen.findByText('No images found')).toBeInTheDocument();
   });
 
   it('FE-COMP-TRIPFORM-054: a failing search shows the server error', async () => {
@@ -735,7 +735,7 @@ describe('TripFormModal', () => {
     await user.type(screen.getByPlaceholderText('Search destination photos'), 'alps');
     await user.click(screen.getByRole('button', { name: /Search Unsplash/i }));
 
-    await screen.findByText('Unsplash key missing');
+    expect(await screen.findByText('Unsplash key missing')).toBeInTheDocument();
   });
 
   it('FE-COMP-TRIPFORM-055: a photo without a photographer falls back in the label and drops the credit', async () => {
@@ -1104,7 +1104,7 @@ describe('TripFormModal', () => {
     await user.type(screen.getByPlaceholderText(/Summer in Japan/i), 'Broken');
     await submitNewTrip(user);
 
-    await screen.findByText('Failed to save');
+    expect(await screen.findByText('Failed to save')).toBeInTheDocument();
   });
 
   it('FE-COMP-TRIPFORM-077: a save error from the date-shift step is shown on that step', async () => {

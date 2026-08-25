@@ -250,7 +250,7 @@ describe('PackingTemplateManager', () => {
     await user.click(screen.getByText('Add category'));
     const catInput = screen.getByPlaceholderText('Category name (e.g. Clothing)');
     await user.type(catInput, 'Electronics{Enter}');
-    await screen.findByText('Electronics');
+    expect(await screen.findByText('Electronics')).toBeInTheDocument();
   });
 
   it('FE-ADMIN-PKG-012: adding an item to a category', async () => {
@@ -280,7 +280,7 @@ describe('PackingTemplateManager', () => {
     await user.type(itemInput, 'Sandals');
     // Submit via Enter key (the input's onKeyDown handler triggers handleAddItem)
     await user.type(itemInput, '{Enter}');
-    await screen.findByText('Sandals');
+    expect(await screen.findByText('Sandals')).toBeInTheDocument();
   });
 
   it('FE-ADMIN-PKG-013: renaming a category inline updates its name', async () => {
@@ -312,7 +312,7 @@ describe('PackingTemplateManager', () => {
     const catInput = screen.getByDisplayValue('Clothing');
     await user.clear(catInput);
     await user.type(catInput, 'Shoes{Enter}');
-    await screen.findByText('Shoes');
+    expect(await screen.findByText('Shoes')).toBeInTheDocument();
   });
 
   it('FE-ADMIN-PKG-014: deleting a category removes it and its items', async () => {
@@ -379,7 +379,7 @@ describe('PackingTemplateManager', () => {
     const input = screen.getByDisplayValue('T-shirt');
     await user.clear(input);
     await user.type(input, 'Tank Top{Enter}');
-    await screen.findByText('Tank Top');
+    expect(await screen.findByText('Tank Top')).toBeInTheDocument();
   });
 
   it('FE-ADMIN-PKG-016: deleting an item removes it from the list', async () => {

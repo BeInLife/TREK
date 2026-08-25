@@ -171,7 +171,7 @@ describe('PackingListPanel', () => {
     const user = userEvent.setup();
     render(<PackingListPanel tripId={1} items={[]} />);
     await user.click(screen.getByText('Add list'));
-    await screen.findByPlaceholderText('List name (e.g. Clothing)');
+    expect(await screen.findByPlaceholderText('List name (e.g. Clothing)')).toBeInTheDocument();
   });
 
   it('FE-COMP-PACKING-016: delete item button exists and triggers API call', async () => {
@@ -392,7 +392,7 @@ describe('PackingListPanel', () => {
     render(<PackingListPanel tripId={1} items={[]} />);
 
     // "Apply template" button appears when templates are available
-    await screen.findByText('Apply template');
+    expect(await screen.findByText('Apply template')).toBeInTheDocument();
   });
 
   it('FE-COMP-PACKING-031: "Uncheck All" bulk action calls PUT to uncheck checked items', async () => {
