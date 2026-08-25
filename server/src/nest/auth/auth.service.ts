@@ -25,7 +25,7 @@ import { splitManagedKeys } from '../common/managed';
 import { emitUserDeleted } from '../../plugin-user-lifecycle';
 import { verifyJwtAndLoadUser } from './jwt-verify';
 import { User } from '../../types';
-import { DEMO_EMAIL_PRIMARY, isDemoEmail } from '../common/demo';
+import { DEMO_EMAIL_PRIMARY, DEMO_PASS, isDemoEmail } from '../common/demo';
 import { avatarUrl } from '../common/avatarUrl';
 import { TripMembershipService } from '../trip-membership/trip-membership.service';
 import { WebauthnConfigService } from './webauthn-config.service';
@@ -303,7 +303,7 @@ export class AuthService {
       managed: readEnv().managed.enabled,
       demo_mode: isDemo,
       demo_email: isDemo ? DEMO_EMAIL_PRIMARY : undefined,
-      demo_password: isDemo ? 'demo12345' : undefined,
+      demo_password: isDemo ? DEMO_PASS : undefined,
       timezone: readEnv().app.tz || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       notification_channel: notifChannel,
       notification_channels: activeChannels,
