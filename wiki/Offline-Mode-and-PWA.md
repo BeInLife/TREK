@@ -29,8 +29,9 @@ TREK uses Workbox service-worker caching plus an IndexedDB database (Dexie) for 
 | Content | Cache name | Strategy | Duration | Max entries |
 |---------|------------|----------|----------|-------------|
 | CartoDB / OpenStreetMap map tiles | `map-tiles` | CacheFirst | 30 days | 12 288 |
-| Mapbox GL style, glyphs, sprites and vector tiles | `mapbox-tiles` | StaleWhileRevalidate | 30 days | 3 000 |
-| OpenFreeMap MapLibre style and tiles | `openfreemap-tiles` | StaleWhileRevalidate | 30 days | 3 000 |
+| Mapbox GL and OpenFreeMap style documents | `gl-map-styles` | NetworkFirst (5 s timeout) | 30 days | 20 |
+| Mapbox GL glyphs, sprites and vector tiles | `mapbox-tiles` | StaleWhileRevalidate | 30 days | 3 000 |
+| OpenFreeMap MapLibre glyphs, sprites and vector tiles | `openfreemap-tiles` | StaleWhileRevalidate | 30 days | 3 000 |
 | Cover images and avatars (`/uploads/covers`, `/uploads/avatars`) | `user-uploads` | CacheFirst | 7 days | 300 |
 | App shell and every page of the app (HTML / JS / CSS) | precache | Precached | Until next deploy | — |
 
@@ -43,8 +44,8 @@ TREK uses Workbox service-worker caching plus an IndexedDB database (Dexie) for 
 On login, after each trip-list refresh, and on WebSocket reconnect, TREK runs a background sync that writes full trip bundles into IndexedDB:
 
 - Trips, days, places, packing items, to-dos, budget items, reservations, accommodations, trip members, tags, and categories.
-- Non-photo file attachments (PDFs, documents, etc.) are downloaded and stored as blobs in IndexedDB.
-- Map tiles are pre-fetched into the service-worker `map-tiles` cache for zoom levels 10–16 across each trip's bounding box (capped at ~50 MB of tiles per sync).
+- File attachments that are neither photos nor videos (PDFs, documents, etc.) are downloaded and stored as blobs in IndexedDB. Videos are deliberately skipped — a single clip can be hundreds of megabytes and would evict the trip's real documents.
+- Map tiles are pre-fetched into the service-worker `map-tiles` cache for zoom levels 10–16 across each trip's bounding box, stopping at the zoom level that would push the total past 12 288 tiles (roughly 180 MB).
 
 **Sync scope and eviction**
 
@@ -82,7 +83,7 @@ The stats panel shows cached trips, pending changes, conflicts and failed change
 - A change you made offline that **deletes** an item wins over a concurrent server edit of that same item ("delete wins"); only edit-vs-edit conflicts are surfaced for resolution.
 - The conflict token has one-second resolution, so two edits to the same field within the same second can't be told apart and fall back to last-write-wins (only relevant to sub-second races; normal offline windows are unaffected).
 - New trips created while offline are queued and synced when connectivity is restored.
-- Photo uploads require connectivity; non-photo file attachments are pre-cached automatically during sync.
+- Photo uploads require connectivity. Photo and video attachments are not pre-cached; every other file attachment is pre-cached automatically during sync.
 - Real-time collaboration features require an active WebSocket connection.
 - Mapbox GL / vector tiles are not pre-downloaded; raster (Leaflet) tiles are. With map-tile storage off, individually viewed tiles may still be cached opportunistically by the service worker.
 

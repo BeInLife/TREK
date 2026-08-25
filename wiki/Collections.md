@@ -14,7 +14,7 @@ A place you save to a trip only exists inside that trip. Collections is the oppo
 
 When the admin has enabled the addon, a **Collections** entry appears in the main navigation (and a bottom-tab on mobile). Opening it shows your lists on the left, the active list's places in the middle, and a map on the right.
 
-The dashboard also gains a **Collections widget** that surfaces your lists as compact badges. Each user can hide that widget from their own dashboard under [Display Settings](Display-Settings) without affecting anyone else.
+The dashboard also gains a **Collections widget** that surfaces your lists as compact badges. Each user can hide that widget from their own dashboard under **Dashboard widgets** on the Appearance tab (see [Appearance-Settings](Appearance-Settings)) without affecting anyone else.
 
 ## Lists
 

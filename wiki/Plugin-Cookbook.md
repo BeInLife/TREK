@@ -47,7 +47,8 @@ Both are membership-checked against the current user — same gate as `ctx.trips
 const place = await ctx.places.create(tripId, { name: 'Teamlab', lat: 35.62, lng: 139.78 })
 const day   = await ctx.days.create(tripId, { date: '2027-04-02', notes: 'Odaiba' })
 await ctx.itinerary.assign(tripId, day.id, place.id, 'buy tickets first')
-// days.create accepts { date?, notes?, position? }; set a day title later with ctx.days.update(tripId, day.id, { title: 'Odaiba' }).
+// days.create reads { date?, notes? } and always appends at the end — a position is honoured on the REST route only, not on the plugin path.
+// Set a day title later with ctx.days.update(tripId, day.id, { title: 'Odaiba' }).
 ```
 
 Updates and deletes mirror the REST app exactly (`ctx.places.update/delete`,
@@ -257,8 +258,8 @@ whole point: you can be handed someone's push token without being handed their t
 Targeting a **self-hosted** Gotify? Your manifest can't name the user's hostname, so add
 `"operatorEgress": true` and let the admin add the real host after install
 (Admin → Plugins → Allowed hosts). See
-[Plugin-Development → Operator-supplied egress hosts](Plugin-Development.md#operator-supplied-egress-hosts-operatoregress),
-plus [Notification channels](Plugin-Development.md#notification-channels) for the event list, the
+[Plugin-Development → Operator-supplied egress hosts](Plugin-Development#operator-supplied-egress-hosts-operatoregress),
+plus [Notification channels](Plugin-Development#notification-channels) for the event list, the
 "configured" rule, and the `TREK_PLUGIN_ALLOW_PRIVATE_EGRESS` flag you need if the service runs
 on your own LAN.
 
@@ -377,7 +378,7 @@ module.exports = {
 }
 ```
 
-Both jobs and scheduled tasks run with **no acting user** (trip reads are refused; only your own db + declared egress). `ctx.scheduler.set` is an upsert by name and survives restarts. Caps: ≤100 tasks/plugin, ≤128-char name, ≤8 KB payload, recurring interval ≥60s, ≤1 year out.
+Both jobs and scheduled tasks run with **no acting user** (trip reads are refused; only your own db + declared egress). `at`, `in` and `every` upsert by name — scheduling the same name again replaces the pending task — and survive restarts. Caps: ≤100 tasks/plugin, ≤128-char name, ≤8 KB payload, recurring interval ≥60s, ≤1 year out.
 
 ---
 
@@ -387,7 +388,7 @@ Seven declarative hooks let a plugin push data into TREK's own screens — the h
 
 ```js
 hooks: {
-  // hook:table-contributor — cells/buttons on a row. view ∈ reservations|places|day|costs|packing|files
+  // hook:table-contributor — cells/buttons on a row. view ∈ reservations|transports|places|day|costs|packing|files|todos
   tableContributor: { async getContributions(view, tripId, ctx) {
     return [{ kind: 'column', entityId: 42, id: 'crowd', label: 'Crowd', value: 'Quiet', tone: 'success' }]
   } },
@@ -612,11 +613,11 @@ await ctx.accommodations.create(tripId, { place_id, start_day_id, end_day_id, ch
 await ctx.packing.create(tripId, { name: 'Passport', visibility: 'personal' })
 await ctx.todos.create(tripId, { name: 'Buy JR pass', due_date: '2027-04-01' })
 // Costs (budget) — needs 'budget_edit' + the Costs addon
-await ctx.costs.create(tripId, { title: 'Hotel', amount: 120, currency: 'EUR' })
+await ctx.costs.create(tripId, { name: 'Hotel', total_price: 120, currency: 'EUR' })
 // Collab notes/polls/chat — needs 'collab_edit' + the Collab addon
 await ctx.collab.createNote(tripId, { title: 'Meeting point' })
 // Day notes — needs 'day_edit'
-await ctx.daynotes.create(tripId, dayId, { content: 'Rainy — swap plans' })
+await ctx.daynotes.create(tripId, dayId, { text: 'Rainy — swap plans' })
 // Tags (the acting user's own)
 const tag = await ctx.tags.create({ name: 'foodie', color: '#4F46E5' })
 ```

@@ -124,14 +124,17 @@ TREK sends an SSE keep-alive comment every 25 seconds (`MCP_SSE_KEEPALIVE`) prec
 
 ## HTTPS Environment Variables
 
-Four variables control how TREK behaves behind a proxy. They work as a group:
+Five variables control how TREK behaves behind a proxy. They work as a group:
 
 | Variable | Purpose | Default |
 |---|---|---|
 | `FORCE_HTTPS` | When `true`: 301-redirects HTTP→HTTPS (except `/api/health`), sends HSTS (`max-age=31536000`), adds CSP `upgrade-insecure-requests`, forces cookie `secure` flag | `false` |
+| `HSTS_INCLUDE_SUBDOMAINS` | When `true`: adds the `includeSubDomains` directive to the HSTS header, extending HTTPS enforcement to all subdomains. Only effective while HSTS is active. Leave `false` if you run other services on sibling subdomains over plain HTTP. | `false` |
 | `TRUST_PROXY` | Number of trusted proxy hops. Lets Express read the real client IP from `X-Forwarded-For`. Automatically set to `1` in production even if not explicitly configured. | `1` (production), off (development) |
-| `COOKIE_SECURE` | Controls the `secure` flag on `trek_session`. Auto-derived as `true` when `NODE_ENV=production` or `FORCE_HTTPS=true`. Set to `false` explicitly to allow cookies over plain HTTP (e.g. LAN testing without TLS). | auto |
+| `COOKIE_SECURE` | Controls the `secure` flag on `trek_session`. Auto-derived as `true` when `NODE_ENV=production`, when `FORCE_HTTPS=true`, or when the request itself arrived over TLS — Express sets `req.secure` once your proxy sends `X-Forwarded-Proto: https` and `TRUST_PROXY` is configured. Set to `false` explicitly to allow cookies over plain HTTP (e.g. LAN testing without TLS). | auto |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins (e.g. `https://trek.example.com`). In production without this set, all cross-origin requests are blocked. In development without this set, all origins are allowed. | blocked in prod, open in dev |
+
+> **Note on HSTS:** The `max-age=31536000` header goes out whenever `FORCE_HTTPS=true` **or** `NODE_ENV=production`, and `NODE_ENV=production` is the default in the Docker image, the compose file and the Helm chart — so a standard install sends HSTS even with `FORCE_HTTPS` unset. Browsers ignore the header on a plain-HTTP response, so an instance you only ever reach over HTTP is unaffected. Once a browser has seen it over HTTPS, though, it refuses plain HTTP to that hostname for a year, so don't plan on falling back to `http://` for a hostname you have already served over HTTPS.
 
 > **Note on `FORCE_HTTPS` and proxy headers:** The HTTPS redirect reads `X-Forwarded-Proto` directly from the incoming headers — it does not depend on Express's `trust proxy` setting. If you set `FORCE_HTTPS=true` and your reverse proxy correctly sends `X-Forwarded-Proto: https`, the redirect will work regardless of `TRUST_PROXY`. However, you still need `TRUST_PROXY` set so Express resolves the correct client IP from `X-Forwarded-For`.
 

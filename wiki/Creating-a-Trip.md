@@ -4,7 +4,7 @@
 
 ## Opening the Dialog
 
-Click the **New Trip** button in the dashboard toolbar (or the **Create First Trip** button on the empty state) to open the Create Trip dialog.
+On desktop, click the floating **New Trip** button in the bottom-right corner of the dashboard, or the dashed **New Trip** tile at the end of the trip grid, to open the Create New Trip dialog. On mobile the floating button is replaced by the **+** in the centre of the bottom tab bar, and an empty dashboard also offers a **Create First Trip** button.
 
 You can also open it directly via a deep link: navigate to `/dashboard?create=1`. This is the URL used by system notices that prompt you to create a trip.
 
@@ -28,11 +28,11 @@ You cannot set only one date and leave the other blank via normal interaction �
 
 ### Currency
 
-The trip's currency — its **accounting base**. Every expense in the Costs tab is converted into it, and every balance and settle-up suggestion is calculated in it. Defaults to **EUR**; 165 currencies are available.
+The trip's currency — its **accounting base**. Every expense in the Costs tab is converted into it, and every balance and settle-up suggestion is calculated in it. The dialog pre-fills your own display currency (Settings → General → *Display currency*); if you left that on **Trip currency**, it falls back to **EUR**. An administrator can preset the instance-wide value under Admin → **User Defaults**, which new users inherit until they pick their own. 165 currencies are available.
 
 Pick the currency you will actually settle up in. It is not a cosmetic label, but it is not a one-way door either: you can change it later from the same dialog (with the `trip_edit` permission), and TREK re-bases the existing expenses so no money moves — see [Currencies → Changing the trip currency](Currencies#changing-the-trip-currency).
 
-> This is **not** the same as the display currency in Settings → General, which only changes what *you* read. See [Currencies](Currencies).
+> This is **not** the same as the display currency in Settings → General, which changes what *you* read on trips that already exist. See [Currencies](Currencies).
 
 ### Cover Image
 
@@ -69,7 +69,7 @@ Add initial trip members from the members selector. On a **new** trip, selected 
 
 ## Saving
 
-Click **Create Trip**. The trip is saved and you are taken to the [Trip-Planner-Overview](Trip-Planner-Overview) for the new trip.
+Click **Create New Trip**. The trip is saved, the dialog closes and a *"Trip created successfully!"* toast confirms it — you stay on the dashboard. The new trip is sorted into the trip list by its dates; click its card (or the Spotlight card, if it is the trip that earns that spot) to open the [Trip-Planner-Overview](Trip-Planner-Overview).
 
 ## Related Pages
 

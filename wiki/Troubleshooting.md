@@ -105,7 +105,7 @@ If you are accessing TREK directly on `http://<host>:3000` with no proxy, remove
 
 ## Locked out of MFA / lost authenticator
 
-**Fix:** If you still have access to your account, use one of the 10 backup codes generated during MFA setup to complete login. After signing in, go to **Settings > Security** to disable or reconfigure MFA.
+**Fix:** If you still have access to your account, use one of the 10 backup codes generated during MFA setup to complete login. After signing in, go to **Settings > Account** to disable or reconfigure MFA.
 
 If you no longer have access to backup codes and cannot log in, an admin must disable MFA for your account directly in the database, or use the `reset-admin.js` script to regain access to an admin account. There is no per-user MFA reset in the Admin Panel UI — the Admin Panel only controls the global "require MFA for all users" policy. See [Admin: Users and Invites](Admin-Users-and-Invites).
 
@@ -123,13 +123,23 @@ If you no longer have access to backup codes and cannot log in, an admin must di
 
 **Cause:** Your reverse proxy has a default body size limit (commonly 1 MB or 10 MB) that is smaller than the backup ZIP. Backup archives include the full uploads directory and can be large.
 
-**Fix:** Raise the body size limit in your proxy config. TREK's own backup upload cap is 500 MB. For nginx:
+**Fix:** Raise the body size limit in your proxy config. TREK's own cap on the uploaded (compressed) archive is 500 MB by default. For nginx:
 
 ```nginx
 client_max_body_size 500m;
 ```
 
 Add this to the `location /` block (or the specific backup route). See [Reverse Proxy](Reverse-Proxy) and [Backups](Backups).
+
+If the archive is genuinely larger than that, raise TREK's own caps too. There are two, and they are independent: one on the compressed upload, one on the total **decompressed** size of the archive (the zip-bomb guard). An archive that gets past the upload limit can still be refused part-way through extraction with `Backup exceeds the maximum decompressed size.`
+
+```yaml
+environment:
+  - BACKUP_UPLOAD_LIMIT_MB=2000       # compressed upload cap (default: 500)
+  - BACKUP_MAX_DECOMPRESSED_MB=20480  # decompressed cap (default: 5120, i.e. 5 GB)
+```
+
+Keep the proxy's `client_max_body_size` at or above `BACKUP_UPLOAD_LIMIT_MB`. Non-positive or invalid values for either variable abort startup.
 
 ---
 
@@ -192,7 +202,7 @@ See [Encryption Key Rotation](Encryption-Key-Rotation) for how to retrieve or ro
 
 ## OIDC login returns "APP_URL is not configured"
 
-**Cause:** When OIDC is enabled, TREK needs to know its own public URL to build the redirect URI. It resolves this from (1) `APP_URL` env var, (2) the first entry in `ALLOWED_ORIGINS`, (3) `http://localhost:<PORT>` as a last resort. If none of these are set and the request is not coming from localhost, TREK returns a 500 error.
+**Cause:** When OIDC is enabled, TREK needs to know its own public URL to build the redirect URI. It resolves this from (1) `APP_URL` env var, (2) the first entry in `ALLOWED_ORIGINS`, (3) `http://localhost:<PORT>` as a last resort. Step (3) always produces a value, so the message in the heading is a guard that never actually fires. What you get instead, with `APP_URL` and `ALLOWED_ORIGINS` both unset, is a redirect URI of `http://localhost:<PORT>/api/auth/oidc/callback` — and the provider rejects it as an unregistered `redirect_uri`.
 
 **Fix:** Set `APP_URL` to the public URL of your instance:
 
@@ -205,7 +215,7 @@ environment:
 
 ## OIDC login fails with issuer mismatch
 
-**Cause:** TREK validates that the `issuer` field in the provider's discovery document exactly matches the configured `OIDC_ISSUER`. A trailing-slash difference (e.g. `https://auth.example.com` vs `https://auth.example.com/`) is enough to fail.
+**Cause:** TREK validates that the `issuer` field in the provider's discovery document matches the configured `OIDC_ISSUER`. Trailing slashes are stripped from both sides before the comparison, so `https://auth.example.com` and `https://auth.example.com/` are the same value here — the difference is somewhere else: a realm path the provider adds, an internal hostname configured where the provider advertises the public one, or `http://` against `https://`.
 
 **Fix:** Check the exact issuer value your provider advertises and match it:
 
@@ -215,18 +225,23 @@ curl -s https://<your-oidc-issuer>/.well-known/openid-configuration | jq .issuer
 
 Set `OIDC_ISSUER` to that exact string.
 
+> **Note:** The mismatch is only fatal while no custom discovery URL is set. With `OIDC_DISCOVERY_URL` configured — which is how Authentik realm paths are usually wired up — TREK treats the discovery document's issuer as the canonical one, logs `[OIDC] Discovery doc issuer … differs from configured OIDC_ISSUER …` and continues.
+
 ---
 
 ## OIDC login fails when provider is on a private/internal network
 
-**Cause:** TREK's SSRF guard blocks outbound requests to private IP ranges by default. If your OIDC provider (e.g. Keycloak, Authentik) is running on an internal address, the discovery document fetch will be blocked with: `Requests to private/internal network addresses are not allowed.`
+**Cause:** Not the SSRF guard, despite what it looks like. All four OIDC calls — discovery, token, userinfo, JWKS — go through the admin-configured fetch path, which deliberately **allows** loopback and private/LAN targets: a Keycloak or Authentik on `192.168.x` or `10.x` is a supported setup and needs no extra variable. `ALLOW_INTERNAL_NETWORK` belongs to the guard on *user*-supplied URLs and changes nothing about OIDC. The only addresses that path refuses are link-local and cloud-metadata ones (`169.254.0.0/16`, `fe80::/10`), which fail with `Requests to link-local / cloud-metadata addresses are not allowed`.
 
-**Fix:**
+**Fix:** Look for the reasons an internal provider actually fails. A failed discovery fetch answers `500 { "error": "OIDC login failed" }` and logs the real message as `[OIDC] Login error: …`, so start there:
 
-```yaml
-environment:
-  - ALLOW_INTERNAL_NETWORK=true
+```bash
+docker logs <container> 2>&1 | grep "OIDC"
 ```
+
+- **The container cannot reach the issuer.** Test from inside it, not from your desktop — the container has its own DNS and its own network: `docker exec <container> wget -qO- https://<issuer>/.well-known/openid-configuration`. A `Could not resolve hostname` in the log is this.
+- **The issuer is not HTTPS.** In production TREK refuses a plain-HTTP issuer up front with `400 { "error": "OIDC issuer must use HTTPS in production" }`, before any request goes out.
+- **The provider's certificate is not trusted by the container.** A self-signed certificate on an internal Keycloak fails the TLS handshake; issue it from a CA the container trusts.
 
 ---
 
@@ -262,7 +277,7 @@ environment:
   - ALLOWED_ORIGINS=https://trek.example.com,https://other.example.com
 ```
 
-If `ALLOWED_ORIGINS` is not set, TREK allows all origins (development default). See [Environment Variables](Environment-Variables).
+If `ALLOWED_ORIGINS` is not set, the default is **same-origin only** — cross-origin browser requests are rejected — because every shipped deployment path (Dockerfile, `docker-compose.yml`, the Helm chart) runs with `NODE_ENV=production`. Allowing any origin is the development default, and only applies outside production. See [Environment Variables](Environment-Variables).
 
 ---
 
@@ -278,7 +293,7 @@ If `ALLOWED_ORIGINS` is not set, TREK allows all origins (development default). 
 **Fix:**
 
 - Code `4001`: Log out and log back in. If it persists, check that your reverse proxy is not stripping the `token` query parameter from the WebSocket upgrade request.
-- Code `4403`: The user must enable MFA in **Settings > Security**, or an admin can disable the global MFA requirement in **Admin > Settings**.
+- Code `4403`: The user must enable MFA in **Settings > Account**, or an admin can disable the global MFA requirement in **Admin > Settings**.
 
 ---
 

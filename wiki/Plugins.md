@@ -29,8 +29,9 @@ An `integration` plugin can add a whole new **notification channel** — Gotify,
 Telegram, anything that takes a message — alongside TREK's built-in email, webhook and
 ntfy.
 
-Once you install and enable such a plugin, switch its channel on in
-**Admin → Notifications**. It then appears as a new column in every user's
+Once you install and activate such a plugin, its channel is live — there is no separate
+switch for it in **Admin → Notifications**, which only turns the built-in email, webhook
+and ntfy channels on. It appears right away as a new column in every user's
 **Settings → Notifications** matrix, and each user supplies their own credentials on the
 plugin's own settings page and picks per-event what they want pushed — exactly like a
 built-in channel.
@@ -95,9 +96,10 @@ code:
 
 - It has **no** access to `JWT_SECRET`, the database connection, or any TREK
   secret — those are simply not reachable by its process.
-- It **cannot** open `trek.db`, write files, spawn child processes, use worker
-  threads, or load native addons. Its own data lives in a separate SQLite file it
-  reaches only through TREK.
+- It **cannot** open TREK's own database (`server/data/travel.db`, or
+  `/app/data/travel.db` in the container), write files, spawn child processes, use
+  worker threads, or load native addons. Its own data lives in a separate SQLite file
+  it reaches only through TREK.
 - It talks to TREK exclusively over an internal RPC channel, and TREK only
   answers the capabilities the plugin's manifest **declares and you approve**.
   An ungranted call is refused, not merely ignored.
@@ -123,9 +125,11 @@ A single panel with a segmented **Installed / Discover** switch at the top left,
 plus a toolbar:
 
 - **Search** — filters the current list by name/description (and author, in Discover).
-- **Type** filter — All / Widget / Integration / Page.
+- **Type** filter — All types / Widget / Integration / Page / Trip page.
 - **Status** filter (Installed view only) — All / Active / Off / Update available / Error.
-- **Sort** — Name / Recently updated / Updates first.
+- **Sort** — Name / Recently updated, plus **Updates first** in Installed and **Most
+  downloads** in Discover. The view-specific option falls back to Name when you switch
+  views.
 - **Upload** — sideload a plugin from a `.zip`/`.tar.gz` (see [Installing](#installing-a-plugin)).
 - **Rescan** — rediscovers the on-disk plugins directory **and** force-pulls the
   remote registry, bypassing the 30-minute server cache and GitHub's CDN so a
@@ -222,7 +226,9 @@ The **⋯** menu on each row:
 - **Allowed hosts** — add the hosts a plugin may reach, for a plugin that talks to a
   service only *you* can name. See [Allowed hosts](#allowed-hosts) below.
 - **Source repository** — opens the plugin's GitHub repo (registry installs only).
-- **Delete** — uninstalls: removes the code and lets you keep or delete its data.
+- **Report an issue** — opens that repo's issue tracker (registry installs only).
+- **Delete** — uninstalls, after a confirmation: it stops the plugin, removes its code,
+  **and deletes all of its data**. This cannot be undone.
 
 ## Allowed hosts
 

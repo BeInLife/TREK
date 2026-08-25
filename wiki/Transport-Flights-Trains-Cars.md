@@ -12,6 +12,8 @@ Open the **Transports** tab in the trip planner and click **Add**, or open the p
 
 The **Add transport** dialog has two modes: **Manual transport** (the classic form) and **Automated transport** — a public-transit route search powered by [Transitous](https://transitous.org/), free open data with no API key or paid provider. The **transit button** (tram icon) on each day header opens the dialog straight in the Automated mode. (The rename pencil this button replaced moved next to the day name in the day detail panel.)
 
+You can also start the search from a single leg: click the travel-time connector between two stops in the day plan and pick **Public transit** from the menu. The search opens with that leg's start and end already filled in and the departure time taken from the stop you are leaving.
+
 The mode switch only appears when the trip has a **start date and an end date** — a transit search needs real dates to depart against. On a trip without dates the dialog opens directly on the manual form; add dates in the trip settings to get the Automated mode back.
 
 - Pick **from** and **to** (stop/station search; the day's own places and hotels appear as quick picks), a **depart/arrive** time, and filter by mode: train, subway, tram, bus, ferry, cable car.
@@ -54,7 +56,7 @@ Once you select an airport, the **timezone** for that airport appears next to th
 
 Departure and arrival fields use the **generic location picker** — search by place name or enter a free-text location. Results come from the maps search service.
 
-If you use **car rentals** instead of your own Car, the departure field is labelled **Pickup date/time** and the arrival field is labelled **Return date/time**.
+For the **Car** type the date fields are relabelled to match a rental: the departure side reads **Pickup** and **Pickup time**, the arrival side **Return** and **Return time**. There is no separate car-rental type — a rental and your own car are both logged as Car.
 
 ## Flight-specific fields
 
@@ -77,11 +79,11 @@ Trains created before this feature keep working: their existing train number/pla
 
 Transport records with both endpoints set appear as lines on the trip map:
 
-- **Flights** and **cruises** render as geodesic great-circle curves that follow the curvature of the Earth.
+- **Flights**, **cruises** and **ferries** render as geodesic great-circle curves that follow the curvature of the Earth.
 - **Cars**, **buses**, **taxis** and **bicycles** follow **real roads**, routed on demand via a public OSRM router (driving for car/bus/taxi, cycling for bicycle). A straight line shows while the route loads, and is kept if routing fails or the trip is over ~2000 km.
 - **Trains** render as a straight polyline; a **multi-leg train** draws its full station chain (from → stop → to).
 
-Confirmed bookings are drawn as solid lines; pending bookings use a dashed line. Endpoint markers are shown at each location. For flights, a midpoint label appears along the arc showing the route codes (e.g. ZRH → JFK) and flight duration and distance when enough screen space is available.
+Confirmed bookings are drawn as solid lines; pending bookings use a dashed line. Each endpoint gets a pill-shaped marker with the transport icon. Turn on **Booking route labels** (Settings → General → Travel & map) to print the airport code or station name in the pill as well; the label appears once the two endpoints are far enough apart on screen.
 
 See [Map-Features](Map-Features) for details on how these overlays work.
 
