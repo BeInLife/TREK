@@ -54,6 +54,13 @@ on:
       - '.github/workflows/sonarqube.yml'
   workflow_dispatch:
 
+# A newer push to the same branch/PR supersedes the running one — cancel it
+# rather than spending the coverage fan-out on a stale commit. Safe here
+# because the Sonar scan job runs last and only the latest commit matters.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   plugin-facts:
     name: Plugin Permission Facts
