@@ -1,8 +1,9 @@
 /**
  * The one place idempotency keys are minted.
  *
- * Both producers — the offline queue's mutation id and the axios interceptor's
- * per-request key — end up in the same `X-Idempotency-Key` header, which the
+ * Every producer — the offline queue's mutation id, the axios interceptor's
+ * per-request key and the upload queue's per-file key — ends up in the same
+ * `X-Idempotency-Key` header, which the
  * server caches on (key, user_id, method, path). Two writes that share a key
  * therefore collapse into one: the second gets the first one's cached response
  * instead of being applied, and the user loses an edit with no error anywhere.
