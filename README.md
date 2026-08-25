@@ -365,37 +365,6 @@ Caddy handles TLS and WebSockets automatically.
 Every variable, its default and what it does: see
 [Environment Variables](https://github.com/liketrek/TREK/wiki/Environment-Variables).
 
-> [!NOTE]
-> Variables are validated at startup (fail-fast). An unset or blank variable
-> always falls back to its default, but a variable set to a malformed value
-> (e.g. `PORT=abc`, `SESSION_DURATION=bogus`, `DEMO_MODE=maybe`) aborts boot
-> with a report listing every offending variable. Boolean switches accept
-> `true`/`false`, `1`/`0`, `on`/`off` and `yes`/`no` (any casing).
-
-### Recovery and restore
-
-To reset storage configuration to the built-in defaults (or to re-import a
-seed file): stop the server, run
-`sqlite3 data/travel.db "DELETE FROM app_settings WHERE key LIKE 'storage.%';"`,
-and start it again.
-
-Backups include the storage configuration (it lives in the database). If your
-only backup sits on S3 and the credentials for it sit inside that backup:
-start a fresh instance, enter the S3 credentials in **Admin → Storage** (or
-mount a seed file), then restore the backup from the Backup panel.
-
-<br />
-
-## Data & Backups
-
-- **Database** — SQLite, stored in `./data/travel.db`
-- **Uploads** — stored in `./uploads/` by default; every content category can be reassigned to another backend in **Admin → Storage**
-- **Logs** — `./data/logs/trek.log` (auto-rotated)
-- **Backups** — create and restore via Admin Panel
-- **Auto-Backups** — configurable schedule and retention in Admin Panel
-
-<br />
-
 ## Data sources
 
 The Atlas map's country and sub-national (province/county) boundaries come from
