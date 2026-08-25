@@ -1,5 +1,6 @@
 import {
   KNOWN_METHODS,
+  METHOD_PERMISSION,
   type KnownMethod,
   type RpcError,
   type RpcRequest,
@@ -119,7 +120,7 @@ export class PluginRpcHost {
         req.id,
         known ? 'PERMISSION_DENIED' : 'UNKNOWN_METHOD',
         known
-          ? `${req.method} requires a permission "${this.pluginId}" was not granted`
+          ? `${req.method} requires the "${(METHOD_PERMISSION as Record<string, string>)[req.method]}" permission, which was not granted to plugin "${this.pluginId}"`
           : `unknown method ${req.method}`,
       );
     }

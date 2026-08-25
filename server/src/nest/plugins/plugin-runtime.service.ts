@@ -1,4 +1,4 @@
-import { Injectable, type OnModuleInit, type OnModuleDestroy } from '@nestjs/common';
+import { Injectable, type OnApplicationBootstrap, type OnModuleDestroy } from '@nestjs/common';
 import semver from 'semver';
 import { DatabaseService } from '../database/database.service';
 import { pluginsEnabled } from './kill-switch';
@@ -121,7 +121,7 @@ export class PluginDependencyError extends Error {
  */
 
 @Injectable()
-export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
+export class PluginRuntimeService implements OnApplicationBootstrap, OnModuleDestroy {
   // The rpc-host factory is bound to `this` as the inter-plugin router, so a
   // plugin's ctx.plugins.call / ctx.events.emit resolve through callPlugin/
   // emitPluginEvent below (which own the dependency-edge authorization). The
@@ -182,7 +182,15 @@ export class PluginRuntimeService implements OnModuleInit, OnModuleDestroy {
     return this.dbs.connection;
   }
 
-  onModuleInit(): void {
+  // onApplicationBootstrap, NOT onModuleInit: boot activation builds each plugin's
+  // rpc host synchronously, and the host snapshots PluginRpcRegistryService at
+  // construction (bindInto). Same-module onModuleInit hooks fire in providers-array
+  // declaration order, where this service precedes the registry — so booting from
+  // onModuleInit bound every host to a still-empty registry and every enabled
+  // plugin's first RPC after a restart came back PERMISSION_DENIED (pinned by
+  // tests/integration/plugins/boot-registry-order.test.ts). onApplicationBootstrap
+  // is guaranteed to run after EVERY module's onModuleInit, registry scan included.
+  onApplicationBootstrap(): void {
     if (!pluginsEnabled()) return;
     // If a restore staged plugin trees, swap them into place NOW — before we open any
     // plugin DB below. This is where a restored backup's plugin data/code actually
