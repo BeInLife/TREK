@@ -371,7 +371,7 @@ describe('BudgetPanel', () => {
             { user_id: 2, username: 'bob', balance: 10, avatar_url: null },
           ],
           flows: [
-            { from: { username: 'alice', avatar_url: null }, to: { username: 'bob', avatar_url: null }, amount: 10 },
+            { from: { user_id: 1, username: 'alice', avatar_url: null }, to: { user_id: 2, username: 'bob', avatar_url: null }, amount: 10 },
           ],
         })
       )
@@ -465,7 +465,7 @@ describe('BudgetPanel', () => {
             { user_id: 1, username: 'alice', avatar_url: '/uploads/avatars/alice.jpg', balance: -30 },
             { user_id: 2, username: 'bob', avatar_url: null, balance: 30 },
           ],
-          flows: [{ from: { username: 'alice', avatar_url: '/uploads/avatars/alice.jpg' }, to: { username: 'bob', avatar_url: null }, amount: 30 }]
+          flows: [{ from: { user_id: 1, username: 'alice', avatar_url: '/uploads/avatars/alice.jpg' }, to: { user_id: 2, username: 'bob', avatar_url: null }, amount: 30 }]
         })
       ),
       http.get('/api/trips/1/budget/per-person', () => HttpResponse.json({ summary: [] })),

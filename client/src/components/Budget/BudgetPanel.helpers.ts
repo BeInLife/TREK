@@ -75,7 +75,8 @@ export function splitColorFor(userId: number, order: number) {
 }
 
 export function colorForUserId(userId: number) {
-  return SPLIT_COLORS[((userId | 0) - 1 + SPLIT_COLORS.length * 1000) % SPLIT_COLORS.length]
+  const id = Number.isFinite(userId) ? Math.trunc(userId) : 0
+  return SPLIT_COLORS[(id - 1 + SPLIT_COLORS.length * 1000) % SPLIT_COLORS.length]
 }
 
 /**
