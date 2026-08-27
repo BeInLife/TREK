@@ -1634,6 +1634,45 @@ describe('useTripPlanner — booking import review', () => {
     expect(result.current.reservationPrefill?._sourceFiles).toEqual([file])
   })
 
+  // #2076 — an item whose type neither form can express used to land in the booking
+  // form, which offers six chips and not one transport among them, so the only
+  // honest pick left was 'other'. The tab the import started from breaks the tie.
+  it('FE-TP-HOOK-112: an unreadable item opens the transport form when the import began there', async () => {
+    seedTrip()
+    const { result } = await renderPlanner()
+    const odd = { type: 'shuttle-voucher', title: 'Airport transfer' }
+
+    act(() => { result.current.setBookingImportKind('transports') })
+    act(() => { result.current.startImportReview([odd] as never) })
+
+    expect(result.current.showTransportModal).toBe(true)
+    expect(result.current.showReservationModal).toBe(false)
+  })
+
+  it('FE-TP-HOOK-113: the same item opens the booking form when the import began there', async () => {
+    seedTrip()
+    const { result } = await renderPlanner()
+    const odd = { type: 'shuttle-voucher', title: 'Airport transfer' }
+
+    act(() => { result.current.setBookingImportKind('bookings') })
+    act(() => { result.current.startImportReview([odd] as never) })
+
+    expect(result.current.showReservationModal).toBe(true)
+    expect(result.current.showTransportModal).toBe(false)
+  })
+
+  // A recognised type always wins over the tab: one PDF routinely holds both.
+  it('FE-TP-HOOK-114: a hotel imported from the transports tab still opens the booking form', async () => {
+    seedTrip()
+    const { result } = await renderPlanner()
+
+    act(() => { result.current.setBookingImportKind('transports') })
+    act(() => { result.current.startImportReview([hotelItem] as never) })
+
+    expect(result.current.showReservationModal).toBe(true)
+    expect(result.current.showTransportModal).toBe(false)
+  })
+
   it('FE-TP-HOOK-090: advancing moves on to the transport item and then finishes the session', async () => {
     seedTrip()
     vi.mocked(accommodationsApi.list).mockResolvedValue({ accommodations: [{ id: 2 }] })

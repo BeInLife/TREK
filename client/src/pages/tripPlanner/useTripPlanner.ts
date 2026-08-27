@@ -9,7 +9,7 @@ import { Map, Ticket, PackageCheck, Wallet, FolderOpen, Users, Train } from 'luc
 import { resolvePluginIcon } from '../../components/shared/PluginIcon'
 import { useTranslation, translateApiError } from '../../i18n'
 import { addonsApi, accommodationsApi, authApi, tripsApi, assignmentsApi, healthApi, airtrailApi, mapsApi, placesApi } from '../../api/client'
-import { parsedItemToDraft, isTransportItem, type BookingReviewDraft } from '../../components/Planner/parsedItemToDraft'
+import { parsedItemToDraft, isTransportItem, isUnplaceableItem, type BookingReviewDraft } from '../../components/Planner/parsedItemToDraft'
 import type { BookingImportPreviewItem } from '@trek/shared'
 import { accommodationRepo } from '../../repo/accommodationRepo'
 import { offlineDb, getImportFiles, deleteImportFiles } from '../../db/offlineDb'
@@ -228,6 +228,8 @@ export function useTripPlanner() {
   const [showReservationModal, setShowReservationModal] = useState<boolean>(false)
   const [editingReservation, setEditingReservation] = useState<Reservation | null>(null)
   const [showBookingImport, setShowBookingImport] = useState<boolean>(false)
+  // Which tab opened the importer. Only ever a tie-breaker — see openImportItem.
+  const [bookingImportKind, setBookingImportKind] = useState<'transports' | 'bookings'>('bookings')
   const [bookingImportAvailable, setBookingImportAvailable] = useState<boolean>(false)
   const { available: airTrailAvailable } = useAirtrailConnection()
   const [showAirTrailImport, setShowAirTrailImport] = useState<boolean>(false)
@@ -919,13 +921,19 @@ export function useTripPlanner() {
   }
 
   // Open the right edit modal for a parsed item, pre-filled, in create mode.
+  //
+  // A type neither form can express belongs to whichever tab the user started from.
+  // Handing an unreadable transport document to the booking form is what left them
+  // with six chips, none of them a transport, and 'other' as the only honest pick
+  // (#2076). A type either form DOES know always wins over the tab — one PDF
+  // routinely holds a flight and a hotel.
   const openImportItem = (item: BookingImportPreviewItem) => {
     const draft = parsedItemToDraft(item)
     // Attach the file this item was parsed from so it lands in the booking's Files on save.
     const srcName = item.source?.fileName
     const srcFile = srcName ? importSourceFilesRef.current.find(f => f.name === srcName) : undefined
     if (srcFile) draft._sourceFiles = [srcFile]
-    if (isTransportItem(item)) {
+    if (isTransportItem(item) || (isUnplaceableItem(item) && bookingImportKind === 'transports')) {
       setShowReservationModal(false); setEditingReservation(null); setReservationPrefill(null)
       setEditingTransport(null); setTransportModalDayId(null)
       setTransportPrefill(draft); setShowTransportModal(true)
@@ -1041,7 +1049,7 @@ export function useTripPlanner() {
     placeFormDayId, setPlaceFormDayId, reservationModalDayId, setReservationModalDayId,
     showTripForm, setShowTripForm, showMembersModal, setShowMembersModal,
     showReservationModal, setShowReservationModal, editingReservation, setEditingReservation,
-    showBookingImport, setShowBookingImport, bookingImportAvailable,
+    showBookingImport, setShowBookingImport, bookingImportKind, setBookingImportKind, bookingImportAvailable,
     airTrailAvailable, showAirTrailImport, setShowAirTrailImport,
     bookingForAssignmentId, setBookingForAssignmentId,
     showTransportModal, setShowTransportModal, editingTransport, setEditingTransport,

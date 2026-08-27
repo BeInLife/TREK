@@ -44,6 +44,17 @@ export function parsedItemToDraft(item: BookingImportPreviewItem): BookingReview
 
 /** Transport types route to the TransportModal; everything else to the ReservationModal. */
 const TRANSPORT_TYPES = new Set(['flight', 'train', 'bus', 'car', 'taxi', 'bicycle', 'cruise', 'ferry', 'transit', 'transport_other'])
+/** The types the booking form can express — its own chip list. */
+const BOOKING_TYPES = new Set(['hotel', 'restaurant', 'event', 'tour', 'activity', 'parking', 'other'])
+
 export function isTransportItem(item: BookingImportPreviewItem): boolean {
   return TRANSPORT_TYPES.has(item.type)
+}
+
+/**
+ * Neither form can express this type, so neither is obviously right. The tab the
+ * user started the import from breaks the tie (#2076).
+ */
+export function isUnplaceableItem(item: BookingImportPreviewItem): boolean {
+  return !TRANSPORT_TYPES.has(item.type) && !BOOKING_TYPES.has(item.type)
 }

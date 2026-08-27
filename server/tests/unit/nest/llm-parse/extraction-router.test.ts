@@ -165,4 +165,52 @@ describe('routeExtraction', () => {
     expect(res.warnings[0]).toContain('AI parsing failed');
     expect(res.warnings[0]).toContain('connection refused');
   });
+
+  // #2076 — the lodging keywords used to be tested second and included
+  // "check-in"/"check-out", which is printed on nearly every ticket there is, so a
+  // ferry or train document came back a hotel and the user was handed a booking
+  // form with no transport type on it.
+  it('reads a ferry ticket that mentions check-in as a ferry, not a hotel', async () => {
+    extractEnforced.mockResolvedValue({ name: 'Puttgarden - Roedby' });
+    await routeExtraction('Faehre Puttgarden nach Roedby. Check-in bis 30 Minuten vor Abfahrt.', CTX);
+    expect(mapToKi.mock.calls[0][0][0].type).toBe('ferry');
+  });
+
+  it('reads a train ticket that mentions check-in as a train', async () => {
+    extractEnforced.mockResolvedValue({ name: 'Hamburg - Berlin' });
+    await routeExtraction('Deutsche Bahn. Gleis 7. Online check-in moeglich.', CTX);
+    expect(mapToKi.mock.calls[0][0][0].type).toBe('train');
+  });
+
+  // A rental voucher says who rented it. "Pick-up"/"drop-off" alone is printed on
+  // ferry, bus and airport-transfer documents too.
+  it('does not read a bus voucher with a pick-up time as a rental car', async () => {
+    extractEnforced.mockResolvedValue({ name: 'Shuttle' });
+    await routeExtraction('Flixbus Ticket. Pick-up 08:30 am Terminal 2.', CTX);
+    expect(mapToKi.mock.calls[0][0][0].type).toBe('bus');
+  });
+
+  // A pre-cruise hotel night names a cruise terminal; it is still a hotel.
+  it('keeps a hotel booking that merely names a terminal a hotel', async () => {
+    extractEnforced.mockResolvedValue({ name: 'Harbour Hotel' });
+    await routeExtraction('Hotel Harbour, 1 Uebernachtung vor der Abfahrt am Terminal.', CTX);
+    expect(mapToKi.mock.calls[0][0][0].type).toBe('hotel');
+  });
+
+  // German rail numbers match the two-letters-plus-digits airline test exactly, and
+  // the flight path forces type 'flight' on everything it returns.
+  it('does not send a German rail ticket down the flight path', async () => {
+    extractEnforced.mockResolvedValue({ name: 'Hamburg - Berlin' });
+    await routeExtraction('Deutsche Bahn IC 2023, Hamburg Hbf nach Berlin Hbf, Gleis 7.', CTX);
+    const flats = mapToKi.mock.calls[0][0];
+    expect(flats).toHaveLength(1);
+    expect(flats[0].type).toBe('train');
+  });
+
+  it('still sends a real flight itinerary down the flight path', async () => {
+    extractEnforced.mockResolvedValue({ flights: [{ vehicle_number: 'LH400', from_code: 'FRA', to_code: 'JFK' }] });
+    await routeExtraction('Lufthansa LH 400 FRA-JFK, Gate A12.', CTX);
+    expect(mapToKi.mock.calls[0][0][0].type).toBe('flight');
+  });
+
 });

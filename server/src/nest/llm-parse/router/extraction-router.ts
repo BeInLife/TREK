@@ -44,16 +44,31 @@ const TYPE_HINT: Record<FlatType, string> = {
   event: 'event/attraction. name = the event/ticket, address = the venue, start_time/end_time = full ISO, price/currency = ticket price.',
 };
 
-/** Keyword → reservation type, so an obvious document skips the costlier union/strong path. */
+/**
+ * Keyword → reservation type, so an obvious document skips the costlier union/strong path.
+ *
+ * Order is the whole rule: the first pattern that matches wins. Lodging used to be
+ * tested second, on a group that included "check-in"/"check-out" — words printed on
+ * nearly every ferry, train and bus ticket there is — so a ferry ticket came back as
+ * a hotel and the user was handed a booking form with no transport type on it
+ * (#2076). Transport is tested first now, and the lodging pattern asks for a word
+ * that actually names lodging.
+ *
+ * "pick-up"/"drop-off" are gone from the rental pattern for the same reason: they
+ * appear on ferry, bus and airport-transfer vouchers. A rental names its rental.
+ */
 const TYPE_KEYWORDS: [FlatType, RegExp][] = [
-  ['car', /\b(sixt|europcar|hertz|avis|enterprise|mietwagen|rental\s*car|autovermietung|anmietung|r(?:ü|ue)ckgabe|pick-?up|drop-?off)\b/i],
-  ['hotel', /\b(hotel|check-?in|check-?out|(?:ü|ue)bernachtung|zimmer|room\s*night|lodging|airbnb|b&b|hostel|pension)\b/i],
   ['train', /\b(deutsche\s*bahn|bahn|train|railway|\bice\b|\bzug\b|gleis|sncf|trenitalia|renfe)\b/i],
   ['bus', /\b(flixbus|\bbus\b|coach|omnibus)\b/i],
-  ['ferry', /\b(f(?:ä|ae)hre|ferry|cruise|kreuzfahrt)\b/i],
+  ['ferry', /\b(f(?:ä|ae)hre|ferry|cruise|kreuzfahrt|einschiffung)\b/i],
+  ['car', /\b(sixt|europcar|hertz|avis|enterprise|mietwagen|rental\s*car|autovermietung|anmietung)\b/i],
+  ['hotel', /\b(hotel|(?:ü|ue)bernachtung|zimmer|room\s*night|lodging|airbnb|b&b|hostel|pension)\b/i],
   ['restaurant', /\b(restaurant|\btisch\b|table\s*for|men(?:ü|u)|gedeck)\b/i],
   ['event', /\b(ticket|concert|konzert|veranstaltung|eintritt|admission)\b/i],
 ];
+
+/** The transport half of the table, for the flight gate below. */
+const TRANSPORT_FLAT_TYPES = new Set<FlatType>(['train', 'bus', 'ferry', 'car']);
 
 function detectType(text: string): FlatType | null {
   for (const [type, re] of TYPE_KEYWORDS) if (re.test(text)) return type;
@@ -236,7 +251,15 @@ export async function routeExtraction(text: string, ctx: RouterContext): Promise
   // Schicht 1 — exactly one model call.
   let flats: FlatLike[];
   try {
-    flats = detectFlightNumbers(text).length > 0 ? await extractFlights(text, ctx) : [await extractSingle(text, ctx)];
+    // The flight path forces type 'flight' on everything it returns, so it must not
+    // claim a document that already names another kind of transport: a German rail
+    // ticket carries numbers like "IC 2023" or "RE 4711", which the two-letters-plus-
+    // digits test cannot tell from an airline code, and the ticket came back a flight
+    // without detectType ever running (#2076).
+    const named = detectType(text);
+    const looksLikeFlight = detectFlightNumbers(text).length > 0
+      && !(named && TRANSPORT_FLAT_TYPES.has(named));
+    flats = looksLikeFlight ? await extractFlights(text, ctx) : [await extractSingle(text, ctx)];
   } catch (err) {
     return { kiItems: [], warnings: [`AI parsing failed — ${err instanceof Error ? err.message : String(err)}`] };
   }

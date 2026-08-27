@@ -252,7 +252,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
     prefillCoords, setPrefillCoords, editingAssignmentId, setEditingAssignmentId,
     showTripForm, setShowTripForm, showMembersModal, setShowMembersModal,
     showReservationModal, setShowReservationModal, editingReservation, setEditingReservation,
-    showBookingImport, setShowBookingImport, bookingImportAvailable,
+    showBookingImport, setShowBookingImport, setBookingImportKind, bookingImportAvailable,
     airTrailAvailable, showAirTrailImport, setShowAirTrailImport,
     bookingForAssignmentId, setBookingForAssignmentId,
     showTransportModal, setShowTransportModal, editingTransport, setEditingTransport,
@@ -732,7 +732,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
                 assignments={assignments}
                 files={files}
                 onAdd={() => { setEditingTransport(null); setTransitPrefill(null); setTransportModalAutomated(false); setShowTransportModal(true) }}
-                onImport={() => setShowBookingImport(true)}
+                onImport={() => { setBookingImportKind('transports'); setShowBookingImport(true) }}
                 bookingImportAvailable={bookingImportAvailable}
                 onAirTrailImport={() => setShowAirTrailImport(true)}
                 airTrailAvailable={airTrailAvailable}
@@ -758,7 +758,7 @@ function TripPlannerPageDesktop(): React.ReactElement | null {
                 assignments={assignments}
                 files={files}
                 onAdd={() => { setEditingReservation(null); setShowReservationModal(true) }}
-                onImport={() => setShowBookingImport(true)}
+                onImport={() => { setBookingImportKind('bookings'); setShowBookingImport(true) }}
                 bookingImportAvailable={bookingImportAvailable}
                 onEdit={(r) => { setEditingReservation(r); setShowReservationModal(true) }}
                 onDelete={handleDeleteReservation}
