@@ -220,21 +220,28 @@ const localIsoDate = (d: Date): string =>
 /**
  * The "UP NEXT" pick: on today's day the first timed stop that hasn't started
  * yet (with a real countdown); otherwise the first timed stop of the day, or
- * simply the first stop. Null when the day has no places.
+ * simply the first stop.
+ *
+ * Null when the day has no places, when the day is already behind us, and once
+ * today's timed plan has run out — a card headed "UP NEXT" that points at this
+ * morning's first stop, or at a day from last week, is not a plan, it is noise.
  */
 export function findUpNext(day: Day | undefined, dayAssignments: Assignment[], now: Date): UpNext | null {
   if (dayAssignments.length === 0) return null
   const sorted = [...dayAssignments].sort((a, b) => a.order_index - b.order_index)
   const timeOf = (a: Assignment) => parseTimeToMinutes(a.place?.place_time)
-  const isToday = !!day?.date && day.date.slice(0, 10) === localIsoDate(now)
-  if (isToday) {
-    const nowMinutes = now.getHours() * 60 + now.getMinutes()
-    const upcoming = sorted
-      .filter(a => { const m = timeOf(a); return m != null && m >= nowMinutes })
-      .sort((a, b) => (timeOf(a) ?? 0) - (timeOf(b) ?? 0))
-    if (upcoming.length > 0) return { assignment: upcoming[0], minutesUntil: (timeOf(upcoming[0]) ?? 0) - nowMinutes }
-  }
+  const dayDate = day?.date?.slice(0, 10)
+  const today = localIsoDate(now)
+  if (dayDate && dayDate < today) return null
   const timed = sorted.filter(a => timeOf(a) != null).sort((a, b) => (timeOf(a) ?? 0) - (timeOf(b) ?? 0))
+  if (dayDate === today) {
+    const nowMinutes = now.getHours() * 60 + now.getMinutes()
+    const upcoming = timed.find(a => (timeOf(a) ?? 0) >= nowMinutes)
+    if (upcoming) return { assignment: upcoming, minutesUntil: (timeOf(upcoming) ?? 0) - nowMinutes }
+    // Every timed stop of today has started — a day whose plan carries no times
+    // at all still shows its first stop, there is nothing stale about that.
+    if (timed.length > 0) return null
+  }
   return { assignment: timed[0] ?? sorted[0], minutesUntil: null }
 }
 

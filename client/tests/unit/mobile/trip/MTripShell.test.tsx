@@ -64,16 +64,17 @@ function renderShell(overrides: Partial<TripPlanner> = {}) {
     TRIP_TABS,
     ...overrides,
   } as Partial<TripPlanner>)
-  const view = render(
+  const Shell = () => (
     <MTripShell
       PlanTimeline={slot('plan-timeline')}
       MapArea={slot('map-area')}
       PlacesBrowser={slot('places-browser')}
       TabPanel={TabSlot}
       Sheets={slot('sheets')}
-    />,
+    />
   )
-  return { ...view, planner: mocks.planner }
+  const view = render(<Shell />)
+  return { ...view, planner: mocks.planner, rerenderShell: () => view.rerender(<Shell />) }
 }
 
 const spy = (planner: TripPlanner, name: keyof TripPlanner) =>
@@ -120,9 +121,29 @@ describe('MTripShell', () => {
     expect(planner.tripActions.setSelectedDay).toHaveBeenCalledWith(11)
   })
 
-  it('FE-MOB-SHELL-006: leaves an existing day selection alone', () => {
-    const { planner } = renderShell()
+  it('FE-MOB-SHELL-006: leaves an existing day selection alone, and a later deselect too', () => {
+    const { planner, rerenderShell } = renderShell()
     expect(planner.tripActions.setSelectedDay).not.toHaveBeenCalled()
+
+    // Clearing the day is the user's doing; seeding it again here would be the
+    // shell fighting them for it.
+    planner.selectedDayId = null
+    rerenderShell()
+    expect(planner.tripActions.setSelectedDay).not.toHaveBeenCalled()
+  })
+
+  it('FE-MOB-SHELL-006b: seeds the next dated day when today falls in a gap', () => {
+    const now = new Date()
+    const iso = (offset: number) => {
+      const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+    const days = [
+      { id: 11, day_number: 1, date: iso(-2) },
+      { id: 12, day_number: 2, date: iso(2) },
+    ] as unknown as Day[]
+    const { planner } = renderShell({ days, selectedDayId: null } as Partial<TripPlanner>)
+    expect(planner.tripActions.setSelectedDay).toHaveBeenCalledWith(12)
   })
 
   it('FE-MOB-SHELL-007: does not seed a day before the days arrive', () => {

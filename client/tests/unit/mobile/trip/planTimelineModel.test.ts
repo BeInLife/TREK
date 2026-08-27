@@ -11,7 +11,7 @@ import type {
   Accommodation, Assignment, Day, DayNote, Reservation, RouteSegment, TranslationFn,
 } from '../../../../src/types'
 
-// FE-MOB-PTLM-001 to FE-MOB-PTLM-043
+// FE-MOB-PTLM-001 to FE-MOB-PTLM-044
 
 const DAYS = [
   { id: 1, trip_id: 1, day_number: 1, date: '2026-05-01', title: null },
@@ -345,10 +345,12 @@ describe('planTimelineModel — findUpNext', () => {
     expect(up?.minutesUntil).toBe(45)
   })
 
-  it('FE-MOB-PTLM-033: falls back to the first timed stop once the day is over', () => {
-    const up = findUpNext(DAY2, [early, noon, late], new Date(2026, 4, 2, 23, 30))
-    expect(up?.assignment.id).toBe(11)
-    expect(up?.minutesUntil).toBeNull()
+  it('FE-MOB-PTLM-033: shows nothing once the timed plan for today has run out', () => {
+    expect(findUpNext(DAY2, [early, noon, late], new Date(2026, 4, 2, 23, 30))).toBeNull()
+  })
+
+  it('FE-MOB-PTLM-044: shows nothing for a day that is already behind us', () => {
+    expect(findUpNext(DAY2, [late, noon, early], new Date(2026, 4, 3, 8, 0))).toBeNull()
   })
 
   it('FE-MOB-PTLM-034: never counts down on a day that is not today', () => {
