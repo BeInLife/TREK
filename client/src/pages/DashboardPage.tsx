@@ -12,12 +12,12 @@ import MobileTopBar from '../components/Layout/MobileTopBar'
 import { useDashboard } from './dashboard/useDashboard'
 import {
   type DashboardTrip, type HeroBundle, type TravelStats, type UpcomingReservation,
-  MS_PER_DAY, daysUntil, getTripStatus,
+  MS_PER_DAY, daysUntil, getTripStatus, upcomingKey,
 } from './dashboard/dashboardModel'
 import {
   Plus, Edit2, Trash2, Archive, ArchiveRestore, Copy, ArrowRight, MapPin,
   Plane, Hotel, Utensils, Clock, RefreshCw, ArrowRightLeft, Calendar,
-  LayoutGrid, List, Ticket, X, CalendarPlus, ParkingSquare,
+  LayoutGrid, List, Ticket, X, CalendarPlus, ParkingSquare, LogIn, LogOut,
 } from 'lucide-react'
 import { IcsSubscribeModal } from '../components/Planner/IcsSubscribeModal'
 import CollectionsWidget from '../components/Dashboard/CollectionsWidget'
@@ -91,8 +91,15 @@ function initials(name: string | null | undefined): string {
 
 const RES_ICON: Record<string, React.ReactElement> = {
   flight: <Plane size={16} />, hotel: <Hotel size={16} />, restaurant: <Utensils size={16} />, parking: <ParkingSquare size={16} />,
+  // A stay's two moments (#1934) — the arrow says which way you are going, on
+  // the same green the hotel tile already uses.
+  checkin: <LogIn size={16} />, checkout: <LogOut size={16} />,
 }
-const RES_TYPE_CLASS: Record<string, string> = { flight: 'flight', hotel: 'hotel', restaurant: 'food' }
+const RES_TYPE_CLASS: Record<string, string> = {
+  flight: 'flight', hotel: 'hotel', restaurant: 'food', checkin: 'hotel', checkout: 'hotel',
+}
+/** The label a stay's moment carries in place of a location. */
+const MOMENT_LABEL: Record<string, string> = { checkin: 'day.checkIn', checkout: 'day.checkOut' }
 
 export default function DashboardPage(): React.ReactElement {
   // ViewportRoute in App.tsx picks the branch now, so the phone screen is a
@@ -804,16 +811,20 @@ function UpcomingTool({ items, locale, onOpen }: {
             const dateStr = datePart ? splitDate(datePart, locale) : null
             const timeStr = parsed.time ? formatTime(parsed.time, locale, timeFormat) : null
             const typeClass = RES_TYPE_CLASS[r.type] || 'other'
+            const moment = MOMENT_LABEL[r.type]
             return (
-              <div className="upc-item" key={r.id} onClick={() => onOpen(r.trip_id)}
+              <div className="upc-item" key={upcomingKey(r)} onClick={() => onOpen(r.trip_id)}
                 role="button" tabIndex={0}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(r.trip_id) } }}>
                 <div className="upc-date"><div className="d mono">{dateStr?.d ?? '–'}</div><div className="m">{dateStr?.m ?? ''}</div></div>
                 <div className="upc-info">
-                  <div className="t">{r.title}</div>
+                  <div className="t">
+                    {r.title}
+                    {r.status === 'pending' && <span className="upc-pending">{t('reservations.pending')}</span>}
+                  </div>
                   <div className="s">
                     {timeStr && <><Clock size={11} /> {timeStr} · </>}
-                    {r.location || r.place_name || r.trip_title}
+                    {moment ? t(moment) : (r.location || r.place_name || r.trip_title)}
                   </div>
                 </div>
                 <div className={`upc-type ${typeClass}`}>{RES_ICON[r.type] || <Ticket size={16} />}</div>

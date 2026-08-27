@@ -180,6 +180,32 @@ describe('DashboardPage (desktop)', () => {
     expect(screen.getByText('Hotel Ibis')).toBeInTheDocument();
   });
 
+  // #1934 — a stay covers a range and stays out of a list of what happens next,
+  // but arriving and leaving are moments, and they carry the same id.
+  it('FE-PAGE-DESKDASH-027: a stay renders as two moments and an unconfirmed booking says so', async () => {
+    seedStore(useSettingsStore, { settings: buildSettings({ time_format: '24h' }) });
+    server.use(http.get('/api/reservations/upcoming', () => HttpResponse.json({
+      reservations: [
+        { id: 7, trip_id: 101, title: 'The Plaza', type: 'checkin', status: 'confirmed', reservation_time: '2026-09-18T15:00', day_date: '2026-09-18' },
+        { id: 3, trip_id: 101, title: 'Broadway Show', type: 'activity', status: 'pending', reservation_time: '2026-09-18T20:00', location: 'Richard Rodgers' },
+        { id: 7, trip_id: 101, title: 'The Plaza', type: 'checkout', status: 'confirmed', reservation_time: '2026-09-22T11:00', day_date: '2026-09-22' },
+      ],
+    })));
+    const { container } = render(<DashboardPage />);
+
+    // Both moments render despite sharing id 7 — the list key carries the type.
+    expect(await screen.findAllByText('The Plaza')).toHaveLength(2);
+    // The label shares its line with the time, so match the row, not a bare node.
+    expect(screen.getByText(/Check-in/)).toBeInTheDocument();
+    expect(screen.getByText(/Check-out/)).toBeInTheDocument();
+    expect(container.querySelectorAll('.upc-item')).toHaveLength(3);
+
+    // Only the unconfirmed one is marked.
+    const pending = container.querySelectorAll('.upc-pending');
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toHaveTextContent('Pending');
+  });
+
   it('FE-PAGE-DESKDASH-009: the currency tool converts and swaps the pair', async () => {
     seedStore(useSettingsStore, { settings: buildSettings({ dashboard_fx_from: 'EUR', dashboard_fx_to: 'USD' }) });
     const { container } = render(<DashboardPage />);
