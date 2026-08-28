@@ -322,7 +322,7 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.db:write:vacay':
     "Toggle vacation days and company holidays on the acting user's active plan (needs the Vacay addon)",
   'admin.plugins.perm.db:write:journal':
-    'Create, edit and delete journal entries on journeys the acting user can edit (needs the Journey addon)',
+    'Create, edit and delete journal entries, and attach photos to them, on journeys the acting user can edit (needs the Journey addon)',
   'admin.plugins.perm.db:write:collections':
     "Create and edit collections and save places to them, with the acting user's collection role (needs the Collections addon)",
   'admin.plugins.perm.db:write:files':

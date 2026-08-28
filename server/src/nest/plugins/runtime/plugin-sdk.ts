@@ -203,6 +203,15 @@ export interface PluginContext {
     getEntries(journeyId: number): Promise<unknown[]>;
     /** Create an entry on a journey the acting user can edit. Needs 'db:write:journal'. */
     createEntry(journeyId: number, input: { entry_date: string; [k: string]: unknown }): Promise<unknown>;
+    /**
+     * Attach a photo to an entry, bytes included. Needs 'db:write:journal'.
+     *
+     * For an importer that holds an export archive: it has bytes, not a gallery
+     * photo to point at and not a provider asset. 'name' supplies the extension
+     * only, the stored filename is the host's. Images only, no SVG, 10MB decoded,
+     * and the operator's allowed-file-types setting applies.
+     */
+    addEntryPhoto(entryId: number, input: { name: string; content_base64: string; caption?: string }): Promise<unknown>;
     /** Update an entry (owner/contributor-gated). Needs 'db:write:journal'. */
     updateEntry(entryId: number, input: Record<string, unknown>): Promise<unknown>;
     /** Delete an entry (owner/contributor-gated). Needs 'db:write:journal'. */
@@ -836,6 +845,7 @@ export function createPluginContext(
       listMine: () => t.rpc('journal.listMine', { _inv: invocationId }) as Promise<unknown[]>,
       getEntries: (journeyId) => t.rpc('journal.getEntries', { journeyId, _inv: invocationId }) as Promise<unknown[]>,
       createEntry: (journeyId, input) => t.rpc('journal.createEntry', { journeyId, input, _inv: invocationId }),
+      addEntryPhoto: (entryId, input) => t.rpc('journal.addEntryPhoto', { entryId, input, _inv: invocationId }),
       updateEntry: (entryId, input) => t.rpc('journal.updateEntry', { entryId, input, _inv: invocationId }),
       deleteEntry: (entryId) => t.rpc('journal.deleteEntry', { entryId, _inv: invocationId }) as Promise<{ deleted: boolean }>,
       createJourney: (input) => t.rpc('journal.createJourney', { input, _inv: invocationId }),

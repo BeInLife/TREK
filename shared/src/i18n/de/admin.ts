@@ -271,7 +271,7 @@ const admin: TranslationStrings = {
   'admin.plugins.perm.db:write:vacay':
     'Urlaubstage und Betriebsferien im aktiven Plan des handelnden Nutzers umschalten (benötigt das Vacay-Addon)',
   'admin.plugins.perm.db:write:journal':
-    'Tagebucheinträge in Reisetagebüchern anlegen, bearbeiten und löschen, die der handelnde Nutzer bearbeiten kann (benötigt das Journey-Addon)',
+    'Tagebucheinträge in Reisetagebüchern anlegen, bearbeiten, löschen und mit Fotos versehen, die der handelnde Nutzer bearbeiten kann (benötigt das Journey-Addon)',
   'admin.plugins.perm.db:write:collections':
     'Sammlungen anlegen und bearbeiten und Orte darin speichern, mit der Sammlungsrolle des handelnden Nutzers (benötigt das Collections-Addon)',
   'admin.plugins.perm.db:write:files':
